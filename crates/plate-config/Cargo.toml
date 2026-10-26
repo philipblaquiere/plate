@@ -1,0 +1,25 @@
+[package]
+name = "plate-config"
+description = "Evaluates plate configuration files (Nickel) into plain data with editor-ready diagnostics"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+plate-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+# Only the evaluator: the REPL, markdown and doc features are terminal-oriented.
+nickel-lang-core = { version = "0.19", default-features = false }
+
+[features]
+default = ["format"]
+# The official Nickel formatter (topiary). It compiles C code (tree-sitter), so it is left out
+# of the WebAssembly build.
+format = ["nickel-lang-core/format"]
+
+[dev-dependencies]
+jsonschema = { version = "0.58.6", default-features = false }
+regex = "1"
+serde_json.workspace = true

@@ -1,0 +1,28 @@
+[package]
+name = "plate-server"
+description = "HTTP API + static host for the plate editor, and the `plate` CLI"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "plate"
+path = "src/main.rs"
+
+[dependencies]
+plate-core.workspace = true
+plate-config = { workspace = true, features = ["format"] }
+plate-export.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+axum = "0.8"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+tower-http = { version = "0.7", features = ["fs", "trace"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

@@ -1,0 +1,1312 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://plate.local/schema/plate.schema.json",
+  "title": "Plate configuration",
+  "description": "A floor plate: the file the drawing is made from. A file with a `start` is a plate; one without is a plan to import, shown on its own in a preview slot.",
+  "$comment": "This file is the single definition of the configuration format: the engine compiles it to Nickel contracts, and the editor reads it for hover docs, completions and the reference panel.",
+  "x-docs": [
+    "writing",
+    "imports-and-cascading"
+  ],
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "start"
+  ],
+  "properties": {
+    "name": {
+      "description": "Name of the floor plate. Shown in the drawing's title block and written into exports.",
+      "type": "string",
+      "default": "Untitled plate",
+      "examples": [
+        "Typical floor"
+      ]
+    },
+    "system": {
+      "description": "How lengths are shown: metres, or feet and inches. Also sets the default `units` and the export paper scale (1:100, or 1/8\" = 1'-0\").",
+      "enum": [
+        "metric",
+        "imperial"
+      ],
+      "default": "metric",
+      "x-enumDescriptions": {
+        "metric": "Lengths in metres, areas in m², printed at 1:100.",
+        "imperial": "Lengths in feet and inches, areas in ft², printed at 1/8\" = 1'-0\"."
+      },
+      "x-docs": "lengths-and-units"
+    },
+    "units": {
+      "description": "Unit of plain numbers such as the 30 in `[30, 0]`. Defaults to `'m` for metric and `'ft` for imperial. Lengths written as strings carry their own unit.",
+      "enum": [
+        "mm",
+        "cm",
+        "m",
+        "in",
+        "ft"
+      ],
+      "x-enumDescriptions": {
+        "mm": "Millimetres.",
+        "cm": "Centimetres.",
+        "m": "Metres (default for metric).",
+        "in": "Inches.",
+        "ft": "Feet (default for imperial)."
+      },
+      "x-docs": "lengths-and-units"
+    },
+    "start": {
+      "description": "The geometry the solver starts from, chosen by `mode`: a closed `'boundary` that everything stays inside, or a `'spine` the solver works around. A spine with a single point is a free origin.",
+      "$ref": "#/$defs/Start"
+    },
+    "seed": {
+      "description": "Seed for the solver. The same file and seed always give the same layout; change it to see another solution.",
+      "type": "integer",
+      "minimum": 0,
+      "default": 1,
+      "x-docs": "rules-and-goals"
+    },
+    "grid": {
+      "description": "Grid the solver snaps spaces to. Defaults to 0.25 m (metric) or 9\" (imperial), and finer in a plan with small fixtures (down to 100 mm or 4\"). Smaller is finer but slower.",
+      "$ref": "#/$defs/Length",
+      "x-docs": "lengths-and-units"
+    },
+    "engine": {
+      "$ref": "#/$defs/Engine"
+    },
+    "spaces": {
+      "$ref": "#/$defs/Spaces"
+    },
+    "rules": {
+      "$ref": "#/$defs/Rules"
+    },
+    "goals": {
+      "$ref": "#/$defs/Goals"
+    }
+  },
+  "$defs": {
+    "Start": {
+      "description": "The geometry the solver starts from, chosen by `mode`.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/BoundaryStart"
+        },
+        {
+          "$ref": "#/$defs/SpineStart"
+        }
+      ],
+      "x-examples": [
+        "start = {\n  mode = 'boundary,\n  points = [[0, 0], [42, 0], [42, 30], [0, 30]],\n},",
+        "start = {\n  mode = 'spine,\n  points = [[0, 0], [36, 0], [52, 14]],\n},",
+        "# Free: a spine with a single point, the origin.\nstart = { mode = 'spine, points = [[0, 0]] },"
+      ]
+    },
+    "BoundaryStart": {
+      "description": "A closed boundary. Everything the solver places stays inside it.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "points"
+      ],
+      "properties": {
+        "mode": {
+          "description": "How the solver uses the starting geometry.",
+          "const": "boundary"
+        },
+        "points": {
+          "description": "Corners of the boundary, in order, as [x, y]. The last connects back to the first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Point"
+          },
+          "minItems": 3,
+          "errorMessage": "a boundary needs at least 3 points, each written [x, y]"
+        },
+        "ports": {
+          "description": "Port roles of the boundary's edges, in order: the first is the edge from point 1 to point 2. Edges not listed are `'facade`.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/EdgeRoles"
+          },
+          "x-docs": "ports",
+          "x-examples": [
+            "# One role per edge: point 1 to 2, 2 to 3, …\nports = ['facade, 'blank, 'facade, ['party, 'wet]],"
+          ]
+        }
+      }
+    },
+    "SpineStart": {
+      "description": "A spine: a line the solver works around. With a single point it is a free origin.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "mode",
+        "points"
+      ],
+      "properties": {
+        "mode": {
+          "description": "How the solver uses the starting geometry.",
+          "const": "spine"
+        },
+        "points": {
+          "description": "Points along the spine, in order, as [x, y]. A single point is a free origin.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Point"
+          },
+          "minItems": 1,
+          "errorMessage": "a spine needs at least 1 point, each written [x, y]"
+        }
+      }
+    },
+    "Point": {
+      "description": "A point, written [x, y]. Each coordinate is a length: a number in `units`, or a string such as \"98'-6\" or \"9.5 m\".",
+      "type": "array",
+      "prefixItems": [
+        {
+          "$ref": "#/$defs/Length"
+        },
+        {
+          "$ref": "#/$defs/Length"
+        }
+      ],
+      "items": false,
+      "minItems": 2,
+      "maxItems": 2,
+      "errorMessage": "expected a point: [x, y]",
+      "x-docs": "lengths-and-units"
+    },
+    "Length": {
+      "description": "A length: a number in `units`, or a string with its own unit, such as \"98'-6\", \"12 ft 6 in\", \"9.5 m\" or \"950 mm\".",
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string",
+          "pattern": "^\\s*[-−]?\\s*(?:(?:\\d+(?:\\.\\d+)?|\\.\\d+)\\s*(?:mm|cm|m)|(?:\\d+(?:\\.\\d+)?|\\.\\d+)\\s*(?:'|′|’|ft|feet|foot)(?:\\s*-?\\s*(?:\\d+\\s+\\d+/\\d+|\\d+/\\d+|\\d+(?:\\.\\d+)?|\\.\\d+)(?:\\s*(?:\"|″|”|''|inches|inch|in))?)?|(?:\\d+\\s+\\d+/\\d+|\\d+/\\d+|\\d+(?:\\.\\d+)?|\\.\\d+)\\s*(?:\"|″|”|''|inches|inch|in)|(?:\\d+\\s+\\d+/\\d+|\\d+/\\d+|\\d+(?:\\.\\d+)?|\\.\\d+))\\s*$"
+        }
+      ],
+      "errorMessage": "expected a length: a number, or a string such as \"98'-6\", \"12 ft 6 in\", \"9.5 m\" or \"950 mm\"",
+      "x-docs": "lengths-and-units",
+      "x-examples": [
+        "[\"98'-6\", 0],         # feet and inches\n[\"98 ft 6 1/2 in\", 0],\n[\"9.5 m\", \"950 mm\"],  # units can be mixed"
+      ]
+    },
+    "EdgeRoles": {
+      "description": "The role of one edge: a port role such as `'facade` or `'blank`, or several, such as `['party, 'wet]`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Port"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Port"
+          }
+        }
+      ],
+      "errorMessage": "expected a port role such as 'facade, or a list of them",
+      "x-docs": "ports"
+    },
+    "Port": {
+      "description": "A port role: what an edge of a space's boundary is for. Dotted roles refine a core one: `'facade.storefront` is a kind of `'facade`.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+      "errorMessage": "expected a port role such as 'entrance, 'facade or 'wet",
+      "x-enumDescriptions": {
+        "entrance": "Primary way in, from the parent's circulation. A door goes here.",
+        "service": "Back-of-house or secondary access.",
+        "egress": "Required exit route.",
+        "link": "Optional connection to a sibling, like connecting hotel rooms.",
+        "facade": "Exterior wall. Windows allowed.",
+        "blank": "Exterior wall that can't have openings (lot line, fire wall).",
+        "outdoor": "Opens onto a balcony, terrace or courtyard.",
+        "party": "Wall shared with a sibling unit. No openings.",
+        "partition": "Ordinary interior wall to another space.",
+        "wet": "Plumbing wall: put bathrooms and kitchens against it.",
+        "shaft": "Vertical shaft or riser.",
+        "core": "Wall against the building core (lifts, stairs).",
+        "bearing": "Load-bearing wall.",
+        "column": "Fixed column position.",
+        "up": "Where a stair or lift arrives from below.",
+        "down": "Where a stair or lift goes down.",
+        "door": "Where a door opens into the space, given by the parent: just the door, not the whole wall. Fixtures keep its swing clear.",
+        "window": "Where a window is, given by the parent: just the window, not the whole wall. Keep things off it with `plate.apart \"bed\" 'window`."
+      },
+      "x-docs": "ports"
+    },
+    "Engine": {
+      "description": "How this plan's spaces are placed. `'grid` packs them inside the boundary; `'spine_stack` lines them up along a corridor. Defaults to `'grid`, or `'spine_stack` when the plate starts from a spine.",
+      "enum": [
+        "grid",
+        "spine_stack"
+      ],
+      "x-enumDescriptions": {
+        "grid": "Pack rectangles on a grid inside the slot, maximising the goals.",
+        "spine_stack": "A corridor along the spine (or the slot's long axis) with spaces stacked on both sides, like a hotel floor."
+      },
+      "x-docs": "plans-and-ports"
+    },
+    "Plan": {
+      "description": "A plan: spaces, the rules between them and the goals to maximise. Put a plan in a space (`plan = …`) and it is solved inside that space, as many levels deep as you like. A file that is a plan is shown on its own, in its `preview` slot.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "engine": {
+          "$ref": "#/$defs/Engine"
+        },
+        "grid": {
+          "description": "Grid the solver snaps spaces to. Defaults to the parent's.",
+          "$ref": "#/$defs/Length"
+        },
+        "needs": {
+          "$ref": "#/$defs/Needs"
+        },
+        "spaces": {
+          "$ref": "#/$defs/Spaces"
+        },
+        "rules": {
+          "$ref": "#/$defs/Rules"
+        },
+        "goals": {
+          "$ref": "#/$defs/Goals"
+        },
+        "preview": {
+          "$ref": "#/$defs/Preview"
+        }
+      },
+      "x-docs": [
+        "plans-and-ports",
+        "previews",
+        "imports-and-cascading"
+      ],
+      "x-examples": [
+        "{\n  needs = { width = { min = 3.4, max = 4.5 }, ports = { entrance = 'required, facade = 'required } },\n  spaces = {\n    entry = { kind = 'circulation, area.min = 3 },\n    bath = { area.min = 4 },\n    sleep = { area.min = 14 },\n  },\n  rules = [\n    plate.door \"entry\" 'entrance,\n    plate.window \"sleep\",\n  ],\n}"
+      ]
+    },
+    "Spaces": {
+      "description": "The spaces to place, by name. The name is how rules refer to a space; repeated spaces are numbered `room_1`, `room_2`, … by position.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Space"
+      },
+      "x-examples": [
+        "spaces = {\n  living = { area.min = 24 },\n  hall = { kind = 'circulation, area = { min = 6, max = 12 }, side.min = 1.2 },\n  bedroom = { count = 2, area = { min = 11, max = 16 }, side.min = 2.8 },\n},"
+      ]
+    },
+    "Space": {
+      "description": "A space: a room, a corridor, a void, a stair, or a fixture (a bed, a counter, a pool…). Sizes are ranges; the solver picks the rest.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "description": "What sort of space this is.",
+          "enum": [
+            "room",
+            "zone",
+            "circulation",
+            "void",
+            "vertical",
+            "fixture"
+          ],
+          "default": "room",
+          "x-enumDescriptions": {
+            "room": "A room or unit.",
+            "zone": "An area with no walls of its own: the desks of an open-plan office, the dining end of an open living room. It's placed like a room and can have a plan, but its edges that face open floor (a fill space or another zone) are 'open, not walls: fixtures don't back onto them.",
+            "circulation": "A corridor or hall people move through.",
+            "void": "A hole, courtyard or light well.",
+            "vertical": "A stair, lift or shaft.",
+            "fixture": "Something that takes up floor and holds nothing else: a bed, a counter, an island, a pool, a parking stall. It has a front, can keep clear floor around it (`clearance`), and can't have a plan."
+          }
+        },
+        "label": {
+          "description": "Display name, e.g. \"Master bedroom\". Defaults to the space's name.",
+          "type": "string"
+        },
+        "count": {
+          "description": "How many: a whole number, or `{ min, max }` to let the solver decide.",
+          "$ref": "#/$defs/Count",
+          "default": 1,
+          "x-examples": [
+            "count = 3,",
+            "count.min = 1,  # as many as fit"
+          ]
+        },
+        "fill": {
+          "description": "Takes the floor the other spaces leave, whatever its shape: a hall that reaches every room, an open-plan floor around meeting rooms, a garden around a house. Its sizes still count (`area`, and `side.min` as its narrowest width), and rules can name it (`plate.door \"bedroom\" \"hall\"`). At most one per plan, and it can't be pinned with `at`. It can have a `plan`, solved in its real shape.",
+          "type": "boolean",
+          "default": false,
+          "x-docs": "filling-the-floor",
+          "x-examples": [
+            "hall = { kind = 'circulation, fill = true, area = { min = 8, max = 16 }, side.min = 1.2 },",
+            "garden = { fill = true, symbol = 'lawn },"
+          ]
+        },
+        "at": {
+          "description": "Fixes the space in place: the corner nearest the origin (its lower left), or one corner per instance. In a plate, in the plate's coordinates; in a plan, from the lower-left corner of its slot with the entrance along the bottom (as its preview shows it). Needs an exact `width` (along x) and `depth` (along y). For what's already there: a core, a stair, columns.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Point"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/Point"
+              },
+              "minItems": 1
+            }
+          ],
+          "errorMessage": "expected a corner [x, y], or a list of them",
+          "x-docs": "filling-the-floor",
+          "x-examples": [
+            "core = { kind = 'vertical, width = 12, depth = 9, at = [15, 16] },",
+            "column = { kind = 'fixture, width = 0.6, depth = 0.6, at = [[8, 8], [16, 8], [24, 8]] },"
+          ]
+        },
+        "walls": {
+          "description": "Port roles this space's walls give the spaces next to it. A bathroom with `walls = 'wet` makes a 'wet edge in the kitchen beside it, so a plan there can put the sink against it (`against = 'wet`).",
+          "$ref": "#/$defs/EdgeRoles",
+          "x-docs": "ports",
+          "x-examples": [
+            "walls = 'wet,",
+            "walls = ['wet, 'shaft],"
+          ]
+        },
+        "area": {
+          "description": "Floor area, in square `units`: a number (exact) or `{ min, max }`.",
+          "$ref": "#/$defs/AreaRange",
+          "x-examples": [
+            "area = { min = 9, max = 14 },",
+            "area.min = 24,"
+          ]
+        },
+        "side": {
+          "description": "Length of every side: `{ min, max }`.",
+          "$ref": "#/$defs/LengthRange"
+        },
+        "width": {
+          "description": "Width: along the corridor or entrance; for a fixture, along its front. A length (exact) or `{ min, max }`.",
+          "$ref": "#/$defs/LengthRange"
+        },
+        "depth": {
+          "description": "Depth: away from the corridor or entrance; for a fixture, from its front to its back. A length (exact) or `{ min, max }`.",
+          "$ref": "#/$defs/LengthRange"
+        },
+        "aspect": {
+          "description": "Longest side divided by the shortest, at most.",
+          "type": "number",
+          "minimum": 1
+        },
+        "plan": {
+          "description": "A plan solved inside this space once it is placed. Not for fixtures: a fixture is the last level.",
+          "$ref": "#/$defs/Plan",
+          "x-docs": "plans-and-ports"
+        },
+        "clearance": {
+          "description": "Fixtures only: clear floor kept on its sides, where nothing else may stand. One length all round, or `{ front, back, left, right }` (left and right as seen standing at the front, facing it). Clearances of different fixtures may overlap: they share the walkway.",
+          "$ref": "#/$defs/Clearance",
+          "x-docs": "fixtures",
+          "x-examples": [
+            "clearance = 0.9,  # all round",
+            "clearance = { front = 1, left = 0.6, right = 0.6 },"
+          ]
+        },
+        "against": {
+          "description": "Fixtures only: its back goes against an edge of the space it's in. `'wall` for any edge, or a port role such as `'wet` or `'facade` for that kind of edge.",
+          "$ref": "#/$defs/Port",
+          "x-docs": "fixtures",
+          "x-examples": [
+            "against = 'wall,",
+            "against = 'wet,  # a vanity on the plumbing wall"
+          ]
+        },
+        "row": {
+          "description": "Fixtures only: place the instances side by side in one straight run, fronts in line, like a bench of desks, a row of seats or a run of parking bays. Needs an exact `count`.",
+          "type": "boolean",
+          "default": false,
+          "x-docs": "fixtures",
+          "x-examples": [
+            "desk = { kind = 'fixture, count = 3, row = true, width = 1.6, depth = 0.8, clearance.front = 1, symbol = 'desk },"
+          ]
+        },
+        "symbol": {
+          "description": "A drawing to show it with, from the symbol catalog: a bed, a car, a pool… It's drawn from the front (a fixture's front, or the side a room is entered from) and fitted to the space. It only changes the drawing, never the solution.",
+          "$ref": "#/$defs/Symbol",
+          "x-docs": "symbols",
+          "x-examples": [
+            "symbol = 'bed_queen,",
+            "symbol = 'car,"
+          ]
+        },
+        "typical": {
+          "description": "Repeated spaces with the same shape and ports share one solution of their plan (a typical). Set false to solve each one separately.",
+          "type": "boolean",
+          "default": true,
+          "x-docs": "typicals"
+        },
+        "mirror": {
+          "description": "Typical copies may be mirrored to fit. Set false to only rotate them.",
+          "type": "boolean",
+          "default": true,
+          "x-docs": "typicals"
+        }
+      },
+      "x-examples": [
+        "bedroom = { count = 2, area = { min = 11, max = 16 }, side.min = 2.8 },",
+        "stair = { kind = 'vertical, count = 2, width = 3.6, depth = 7.5 },",
+        "bed = { kind = 'fixture, width = 1.6, depth = 2.1, against = 'wall, clearance = { front = 0.9, left = 0.6, right = 0.6 }, symbol = 'bed_queen },"
+      ],
+      "x-docs": "fixtures"
+    },
+    "Clearance": {
+      "description": "Clear floor around a fixture: a length on every side, or `{ front, back, left, right }` with a length for each side that needs one (the others get none).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Length"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "front": {
+              "description": "In front of it: where you stand to use it.",
+              "$ref": "#/$defs/Length"
+            },
+            "back": {
+              "description": "Behind it.",
+              "$ref": "#/$defs/Length"
+            },
+            "left": {
+              "description": "On its left, seen from the front.",
+              "$ref": "#/$defs/Length"
+            },
+            "right": {
+              "description": "On its right, seen from the front.",
+              "$ref": "#/$defs/Length"
+            }
+          }
+        }
+      ],
+      "errorMessage": "expected a length, or { front, back, left, right } with lengths",
+      "x-docs": "fixtures"
+    },
+    "Symbol": {
+      "description": "A drawing from the symbol catalog (`schema/symbols.json`). Indoors and out: furniture, kitchens and bathrooms, vehicles, gardens, pools and courts.",
+      "enum": [
+        "bed_single",
+        "bed_double",
+        "bed_queen",
+        "bed_king",
+        "bunk_bed",
+        "crib",
+        "nightstand",
+        "dresser",
+        "wardrobe",
+        "sofa",
+        "loveseat",
+        "armchair",
+        "corner_sofa",
+        "coffee_table",
+        "side_table",
+        "tv_unit",
+        "bookshelf",
+        "rug",
+        "piano",
+        "fireplace",
+        "house_plant",
+        "dining_table_4",
+        "dining_table_6",
+        "dining_table_8",
+        "round_table",
+        "chair",
+        "bar_stool",
+        "counter",
+        "kitchen_sink",
+        "double_sink",
+        "stove",
+        "fridge",
+        "dishwasher",
+        "kitchen_island",
+        "toilet",
+        "basin",
+        "double_vanity",
+        "bathtub",
+        "shower",
+        "urinal",
+        "washer",
+        "dryer",
+        "water_heater",
+        "heat_pump",
+        "desk",
+        "office_chair",
+        "conference_table",
+        "filing_cabinet",
+        "stair",
+        "lift",
+        "car",
+        "pickup_truck",
+        "motorcycle",
+        "bicycle",
+        "boat",
+        "parking_space",
+        "ev_charger",
+        "patio",
+        "deck",
+        "pool",
+        "hot_tub",
+        "basketball_hoop",
+        "basketball_court",
+        "tennis_court",
+        "trampoline",
+        "swing_set",
+        "sandbox",
+        "picnic_table",
+        "bbq",
+        "parasol",
+        "sun_lounger",
+        "fire_pit",
+        "bench",
+        "fountain",
+        "bins",
+        "shed",
+        "tree",
+        "shrub",
+        "flower_bed",
+        "garden_bed",
+        "lawn"
+      ],
+      "x-enumDescriptions": {
+        "bed_single": "Single bed (bedroom), 990 × 1910 mm",
+        "bed_double": "Double bed (bedroom), 1370 × 1910 mm",
+        "bed_queen": "Queen bed (bedroom), 1530 × 2030 mm",
+        "bed_king": "King bed (bedroom), 1930 × 2030 mm",
+        "bunk_bed": "Bunk bed (bedroom), 990 × 1910 mm",
+        "crib": "Crib (bedroom), 700 × 1300 mm",
+        "nightstand": "Nightstand (bedroom), 500 × 450 mm",
+        "dresser": "Dresser (bedroom), 1500 × 500 mm",
+        "wardrobe": "Wardrobe (bedroom), 1200 × 600 mm",
+        "sofa": "Sofa (living), 2100 × 900 mm",
+        "loveseat": "Loveseat (living), 1500 × 900 mm",
+        "armchair": "Armchair (living), 850 × 850 mm",
+        "corner_sofa": "Corner sofa (living), 2600 × 2000 mm",
+        "coffee_table": "Coffee table (living), 1200 × 600 mm",
+        "side_table": "Side table (living), 500 × 500 mm",
+        "tv_unit": "TV and stand (living), 1800 × 450 mm",
+        "bookshelf": "Bookshelf (living), 900 × 350 mm",
+        "rug": "Rug (living), 2400 × 1700 mm",
+        "piano": "Upright piano (living), 1500 × 600 mm",
+        "fireplace": "Fireplace (living), 1500 × 500 mm",
+        "house_plant": "House plant (living), 600 × 600 mm",
+        "dining_table_4": "Dining table, 4 seats (dining), 1200 × 1400 mm",
+        "dining_table_6": "Dining table, 6 seats (dining), 2400 × 1500 mm",
+        "dining_table_8": "Dining table, 8 seats (dining), 3000 × 1600 mm",
+        "round_table": "Round table, 4 seats (dining), 1500 × 1500 mm",
+        "chair": "Chair (dining), 450 × 500 mm",
+        "bar_stool": "Bar stool (dining), 400 × 400 mm",
+        "counter": "Counter (kitchen), 2400 × 600 mm",
+        "kitchen_sink": "Kitchen sink (kitchen), 800 × 600 mm",
+        "double_sink": "Double kitchen sink (kitchen), 1200 × 600 mm",
+        "stove": "Stove (kitchen), 760 × 650 mm",
+        "fridge": "Fridge (kitchen), 900 × 750 mm",
+        "dishwasher": "Dishwasher (kitchen), 600 × 600 mm",
+        "kitchen_island": "Kitchen island (kitchen), 2400 × 1000 mm",
+        "toilet": "Toilet (bathroom), 400 × 700 mm",
+        "basin": "Basin (bathroom), 600 × 450 mm",
+        "double_vanity": "Double vanity (bathroom), 1500 × 550 mm",
+        "bathtub": "Bathtub (bathroom), 1700 × 750 mm",
+        "shower": "Shower (bathroom), 900 × 900 mm",
+        "urinal": "Urinal (bathroom), 450 × 350 mm",
+        "washer": "Washer (laundry), 600 × 650 mm",
+        "dryer": "Dryer (laundry), 600 × 650 mm",
+        "water_heater": "Water heater (utility), 550 × 550 mm",
+        "heat_pump": "Heat pump (utility), 900 × 400 mm",
+        "desk": "Desk (office), 1400 × 700 mm",
+        "office_chair": "Office chair (office), 650 × 650 mm",
+        "conference_table": "Meeting table (office), 3800 × 2000 mm",
+        "filing_cabinet": "Filing cabinet (office), 900 × 450 mm",
+        "stair": "Stair (circulation), 1000 × 3000 mm",
+        "lift": "Lift (circulation), 1600 × 1600 mm",
+        "car": "Car (vehicles), 1850 × 4700 mm",
+        "pickup_truck": "Pickup truck (vehicles), 2000 × 5800 mm",
+        "motorcycle": "Motorcycle (vehicles), 800 × 2150 mm",
+        "bicycle": "Bicycle (vehicles), 600 × 1750 mm",
+        "boat": "Sailboat (vehicles), 3400 × 10000 mm",
+        "parking_space": "Parking space (vehicles), 2600 × 5500 mm",
+        "ev_charger": "EV charger (vehicles), 600 × 300 mm",
+        "patio": "Patio (outdoor), 3000 × 3000 mm",
+        "deck": "Deck (outdoor), 3600 × 3000 mm",
+        "pool": "Swimming pool (outdoor), 4000 × 8000 mm",
+        "hot_tub": "Hot tub (outdoor), 2200 × 2200 mm",
+        "basketball_hoop": "Basketball hoop (outdoor), 1800 × 1200 mm",
+        "basketball_court": "Basketball half court (outdoor), 15000 × 14000 mm",
+        "tennis_court": "Tennis court (outdoor), 10970 × 23770 mm",
+        "trampoline": "Trampoline (outdoor), 3600 × 3600 mm",
+        "swing_set": "Swing set (outdoor), 3600 × 1800 mm",
+        "sandbox": "Sandbox (outdoor), 1800 × 1800 mm",
+        "picnic_table": "Picnic table (outdoor), 1800 × 1600 mm",
+        "bbq": "Barbecue (outdoor), 1300 × 600 mm",
+        "parasol": "Parasol (outdoor), 2700 × 2700 mm",
+        "sun_lounger": "Sun lounger (outdoor), 700 × 1950 mm",
+        "fire_pit": "Fire pit (outdoor), 1200 × 1200 mm",
+        "bench": "Bench (outdoor), 1600 × 500 mm",
+        "fountain": "Fountain (outdoor), 2000 × 2000 mm",
+        "bins": "Bins (outdoor), 1500 × 800 mm",
+        "shed": "Shed (outdoor), 2400 × 1800 mm",
+        "tree": "Tree (planting), 5000 × 5000 mm",
+        "shrub": "Shrub (planting), 1200 × 1200 mm",
+        "flower_bed": "Flower bed (planting), 2400 × 800 mm",
+        "garden_bed": "Vegetable bed (planting), 2400 × 1200 mm",
+        "lawn": "Lawn (planting), 5000 × 5000 mm"
+      },
+      "errorMessage": "expected a symbol from the catalog, such as 'bed_queen, 'sofa or 'car",
+      "x-docs": "symbols"
+    },
+    "Count": {
+      "description": "How many: a whole number, or `{ min, max }` to let the solver decide.",
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "max": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        }
+      ],
+      "errorMessage": "expected a count: a whole number, or { min, max }"
+    },
+    "LengthRange": {
+      "description": "A length (exact) or a range `{ min, max }`.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Length"
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": {
+              "$ref": "#/$defs/Length"
+            },
+            "max": {
+              "$ref": "#/$defs/Length"
+            }
+          }
+        }
+      ],
+      "errorMessage": "expected a length, or { min, max } with lengths"
+    },
+    "AreaRange": {
+      "description": "An area (exact) or a range `{ min, max }`, in square `units`.",
+      "anyOf": [
+        {
+          "type": "number",
+          "minimum": 0
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "min": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max": {
+              "type": "number",
+              "minimum": 0
+            }
+          }
+        }
+      ],
+      "errorMessage": "expected an area, or { min, max }"
+    },
+    "Needs": {
+      "description": "What this plan needs from the space it is placed in. The parent sizes the space to fit, and the plan rejects a space that doesn't.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "width": {
+          "description": "Width of the space, along its entrance.",
+          "$ref": "#/$defs/LengthRange"
+        },
+        "depth": {
+          "description": "Depth of the space, away from its entrance.",
+          "$ref": "#/$defs/LengthRange"
+        },
+        "area": {
+          "description": "Area of the space.",
+          "$ref": "#/$defs/AreaRange"
+        },
+        "ports": {
+          "description": "Port roles the space must have, may have, or must not have, e.g. `{ entrance = 'required, blank = 'forbidden }`.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/PortNeed"
+          }
+        }
+      },
+      "x-docs": [
+        "plans-and-ports",
+        "ports"
+      ],
+      "x-examples": [
+        "needs = {\n  width = { min = 3.4, max = 4.5 },\n  depth.min = 7,\n  ports = { entrance = 'required, facade = 'required, blank = 'forbidden },\n},"
+      ]
+    },
+    "PortNeed": {
+      "description": "Whether a port role must be present.",
+      "enum": [
+        "required",
+        "optional",
+        "forbidden"
+      ],
+      "x-enumDescriptions": {
+        "required": "The space must have this port.",
+        "optional": "Used if present.",
+        "forbidden": "The space must not have this port."
+      }
+    },
+    "Preview": {
+      "description": "How the plan is shown when its file is opened on its own: the slot it is solved in, as a plate would solve it in a space of that size with those ports. One slot, or a list of named ones to switch between. Ignored when the plan is used in a space.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PreviewCase"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/PreviewCase"
+          },
+          "minItems": 1
+        }
+      ],
+      "errorMessage": "expected a preview slot { width, depth, ports }, or a list of them",
+      "x-docs": "previews",
+      "x-examples": [
+        "preview = { width = 3.8, depth = 8.2 },",
+        "preview = [\n  { name = \"standard\", width = 3.8, depth = 8.2 },\n  { name = \"corner\", width = 4.2, depth = 8.2, ports.left = 'facade },\n],"
+      ]
+    },
+    "PreviewCase": {
+      "description": "A rectangular slot to preview the plan in, entrance along the bottom by default. Sizes left out are picked from `needs`.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "description": "What this slot is, shown in the preview's menu, e.g. \"corner\".",
+          "type": "string"
+        },
+        "width": {
+          "description": "Width of the slot, along its bottom edge. Picked from `needs.width` when left out.",
+          "$ref": "#/$defs/Length"
+        },
+        "depth": {
+          "description": "Depth of the slot, away from its bottom edge. Picked from `needs.depth` when left out.",
+          "$ref": "#/$defs/Length"
+        },
+        "ports": {
+          "$ref": "#/$defs/SidePorts"
+        },
+        "system": {
+          "description": "How lengths are shown, and the default `units`, while previewing. A plate using the plan decides this for itself.",
+          "enum": [
+            "metric",
+            "imperial"
+          ],
+          "x-docs": "lengths-and-units"
+        },
+        "units": {
+          "description": "Unit of plain numbers while previewing. Defaults from `system`. A plate using the plan decides this for itself.",
+          "enum": [
+            "mm",
+            "cm",
+            "m",
+            "in",
+            "ft"
+          ],
+          "x-docs": "lengths-and-units"
+        },
+        "seed": {
+          "description": "Seed for the preview's solution. A plate using the plan solves it with its own seed.",
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "x-docs": "previews",
+      "x-examples": [
+        "{ name = \"narrow\", width = 3.4, depth = 7 },"
+      ]
+    },
+    "SidePorts": {
+      "description": "Port roles of the slot's four sides. Sides left out are those of a typical room on a corridor: `'entrance` at the bottom, `'facade` at the top, `'party` on the right and `['party, 'wet]` on the left.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "bottom": {
+          "description": "The bottom side. Default `'entrance`.",
+          "$ref": "#/$defs/EdgeRoles"
+        },
+        "right": {
+          "description": "The right side. Default `'party`.",
+          "$ref": "#/$defs/EdgeRoles"
+        },
+        "top": {
+          "description": "The top side. Default `'facade`.",
+          "$ref": "#/$defs/EdgeRoles"
+        },
+        "left": {
+          "description": "The left side. Default `['party, 'wet]`.",
+          "$ref": "#/$defs/EdgeRoles"
+        }
+      },
+      "x-docs": "ports",
+      "x-examples": [
+        "ports = { left = 'facade, top = ['facade, 'outdoor] },"
+      ]
+    },
+    "Goals": {
+      "description": "What makes one solution better than another once every required rule holds. Each goal has a weight; 0 turns it off.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "utilization": {
+          "description": "Cover as much of the available floor as possible.",
+          "type": "number",
+          "minimum": 0,
+          "default": 1
+        },
+        "compactness": {
+          "description": "Prefer square-ish spaces over long thin ones.",
+          "type": "number",
+          "minimum": 0,
+          "default": 0.3
+        }
+      },
+      "x-docs": "rules-and-goals",
+      "x-examples": [
+        "goals = { utilization = 1, compactness = 0.3 },"
+      ]
+    },
+    "Rules": {
+      "description": "Rules between spaces. Write them with the `plate` helpers, e.g. `plate.door \"bedroom\" \"hall\"`. A rule is required unless it has a `weight` (see `plate.prefer`).",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/RuleItem"
+      },
+      "x-docs": "rules-and-goals",
+      "x-examples": [
+        "rules = [\n  plate.touches \"kitchen\" \"living\",\n  plate.door \"bedroom\" \"hall\",\n  plate.window \"bedroom\",\n  plate.prefer (plate.window \"kitchen\"),\n],"
+      ]
+    },
+    "RuleItem": {
+      "description": "A rule, or a list of rules (helpers such as `plate.between` return several).",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Rule"
+        },
+        {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Rule"
+          }
+        }
+      ]
+    },
+    "Selector": {
+      "description": "Which spaces: a name (`\"kitchen\"`), a space type (`\"bedroom\"` matches every bedroom), a pattern (`\"bed*\"`), or a list of these.",
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      ],
+      "errorMessage": "expected a space name such as \"kitchen\", or a list of names",
+      "x-docs": "rules-and-goals",
+      "x-examples": [
+        "plate.door \"bedroom\" \"hall\"        # every bedroom\nplate.window \"bed*\"                # a pattern\nplate.apart [\"bath\", \"wc\"] \"kitchen\" # a list"
+      ]
+    },
+    "Rule": {
+      "description": "A rule between spaces.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/RuleTouch"
+        },
+        {
+          "$ref": "#/$defs/RuleApart"
+        },
+        {
+          "$ref": "#/$defs/RuleDoor"
+        },
+        {
+          "$ref": "#/$defs/RuleWindow"
+        },
+        {
+          "$ref": "#/$defs/RuleNear"
+        },
+        {
+          "$ref": "#/$defs/RuleFaces"
+        },
+        {
+          "$ref": "#/$defs/RuleReach"
+        },
+        {
+          "$ref": "#/$defs/RuleAlong"
+        },
+        {
+          "$ref": "#/$defs/RuleUnique"
+        },
+        {
+          "$ref": "#/$defs/RuleInstance"
+        }
+      ]
+    },
+    "RuleTouch": {
+      "description": "Each `a` shares a wall with a `b` (or with a port of the parent space).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "touch"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "b": {
+          "description": "The other side; any one of them will do.",
+          "$ref": "#/$defs/Selector"
+        },
+        "port": {
+          "description": "A port of the space this plan is placed in, instead of a space.",
+          "$ref": "#/$defs/Port"
+        },
+        "each": {
+          "description": "With `port`: meet every separate stretch of that port, not just one. A plan between two wings, say, reaches the 'link on both sides: `plate.touches \"gallery\" 'link & { each = true }`.",
+          "type": "boolean",
+          "default": false
+        },
+        "length": {
+          "description": "Shortest shared wall. Defaults to 1 m (3 ft), or 0.3 m (1 ft) when `a` is a fixture.",
+          "$ref": "#/$defs/Length"
+        },
+        "weight": {
+          "description": "Makes the rule a preference: how much it matters compared with the goals. Leave out for a required rule.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "RuleApart": {
+      "description": "No `a` touches a `b` (or a port of the parent space, such as `'window`): no shared wall, and at least `distance` between them when given.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "apart"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "b": {
+          "description": "The spaces to keep away from; every one of them.",
+          "$ref": "#/$defs/Selector"
+        },
+        "port": {
+          "description": "A port of the space this plan is placed in, instead of a space: `'window` keeps clear of its windows, `'door` of its doors, `'facade` of its outside walls.",
+          "$ref": "#/$defs/Port"
+        },
+        "distance": {
+          "description": "Smallest gap to keep, between the closest points. Leave out to only forbid touching.",
+          "$ref": "#/$defs/Length"
+        },
+        "wall": {
+          "description": "With a port: keep off the whole wall the port is on, not just the port itself. `plate.apart \"bed\" 'window & { wall = true }` keeps the bed off any wall with a window.",
+          "type": "boolean",
+          "default": false
+        },
+        "weight": {
+          "description": "Makes the rule a preference: how much it matters compared with the goals. Leave out for a required rule.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "RuleDoor": {
+      "description": "Each `a` has a door to a `b` (or to a port of the parent space, such as `'entrance`).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "door"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "b": {
+          "description": "The other side; any one of them will do.",
+          "$ref": "#/$defs/Selector"
+        },
+        "port": {
+          "description": "A port of the space this plan is placed in, instead of a space.",
+          "$ref": "#/$defs/Port"
+        },
+        "each": {
+          "description": "With `port`: meet every separate stretch of that port, not just one. A plan between two wings, say, reaches the 'link on both sides: `plate.touches \"gallery\" 'link & { each = true }`.",
+          "type": "boolean",
+          "default": false
+        },
+        "width": {
+          "description": "Door width. Defaults to 0.9 m (3 ft).",
+          "$ref": "#/$defs/Length"
+        },
+        "weight": {
+          "description": "Makes the rule a preference: how much it matters compared with the goals. Leave out for a required rule.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "RuleWindow": {
+      "description": "Each `a` has a window on a port of the parent space, `'facade` unless given.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "window"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "port": {
+          "description": "A port of the space this plan is placed in, instead of a space.",
+          "$ref": "#/$defs/Port"
+        },
+        "width": {
+          "description": "Window width. Defaults to 1.2 m (4 ft).",
+          "$ref": "#/$defs/Length"
+        },
+        "weight": {
+          "description": "Makes the rule a preference: how much it matters compared with the goals. Leave out for a required rule.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "RuleNear": {
+      "description": "Each `a` is within `distance` of a `b` (between their closest walls).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a",
+        "b",
+        "distance"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "near"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "b": {
+          "description": "The other side; any one of them will do.",
+          "$ref": "#/$defs/Selector"
+        },
+        "distance": {
+          "description": "Largest gap.",
+          "$ref": "#/$defs/Length"
+        },
+        "weight": {
+          "description": "Makes the rule a preference: how much it matters compared with the goals. Leave out for a required rule.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "RuleFaces": {
+      "description": "Each `a` (a fixture) faces a `b`: the `b` is in front of it and across from its front. A sofa facing the TV, a desk facing the window side, chairs facing a table.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a",
+        "b"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "faces"
+        },
+        "a": {
+          "description": "The fixtures the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "b": {
+          "description": "What they face; any one of them will do.",
+          "$ref": "#/$defs/Selector"
+        },
+        "weight": {
+          "description": "Makes the rule a preference: how much it matters compared with the goals. Leave out for a required rule.",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "x-docs": "fixtures"
+    },
+    "RuleReach": {
+      "description": "Going through doors from `a` to `b` always passes through `via`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a",
+        "b",
+        "via"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "reach"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "b": {
+          "description": "The other side; any one of them will do.",
+          "$ref": "#/$defs/Selector"
+        },
+        "via": {
+          "description": "The space in between, such as a hall.",
+          "$ref": "#/$defs/Selector"
+        },
+        "weight": {
+          "description": "Makes the rule a preference: how much it matters compared with the goals. Leave out for a required rule.",
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "RuleAlong": {
+      "description": "`a` spaces line up along the corridor `b` (spine_stack engine).",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a",
+        "b"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "along"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "b": {
+          "description": "The corridor.",
+          "$ref": "#/$defs/Selector"
+        },
+        "sides": {
+          "description": "Which sides of the corridor to use.",
+          "enum": [
+            "both",
+            "left",
+            "right"
+          ],
+          "default": "both"
+        }
+      },
+      "x-docs": "plans-and-ports"
+    },
+    "RuleUnique": {
+      "description": "These instances are solved on their own instead of sharing their typical.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "unique"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        }
+      },
+      "x-docs": "typicals"
+    },
+    "RuleInstance": {
+      "description": "Give particular instances a different plan.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a",
+        "plan"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "instance"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "plan": {
+          "description": "The plan for these instances.",
+          "$ref": "#/$defs/Plan"
+        }
+      },
+      "x-docs": "typicals"
+    }
+  }
+}

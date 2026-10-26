@@ -1,0 +1,36 @@
+[workspace]
+resolver = "2"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.89"
+
+[workspace.dependencies]
+plate-core = { path = "crates/plate-core" }
+plate-config = { path = "crates/plate-config", default-features = false }
+plate-export = { path = "crates/plate-export" }
+
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+# Optimise dependencies (Nickel's evaluator) even in debug builds: live preview stays fast
+# while our own crates still compile quickly.
+[profile.dev.package."*"]
+opt-level = 2
+
+# The solver too: the tests solve every example, and an unoptimised annealer is ~20x slower.
+[profile.dev.package.plate-core]
+opt-level = 3
+
+# The browser build of the configuration evaluator (crates/plate-wasm): small and fast.
+[profile.wasm]
+inherits = "release"
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

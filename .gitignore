@@ -1,0 +1,10 @@
+/target
+node_modules/
+web/dist/
+*.dxf
+!examples/**/*.dxf
+.DS_Store
+web/src/engine/generated/
+
+# The editor's file browser folder (plate serve --workspace)
+/workspace/

@@ -1,0 +1,1322 @@
+{
+  "$comment": "Symbols that can be drawn in a space (`symbol` in plate.schema.json, whose enum must list exactly these names). Coordinates are millimetres in the symbol's own frame: x from the left end of its front to the right (seen standing at the front, facing it), y from the front (0) to the back (size[1]). `fit`: 'stretch' fills the space; 'contain' keeps the proportions, centred. Shapes: rect [x, y, w, h] (with r for round corners), line and poly [x0, y0, x1, y1, …] (poly is closed), circle [cx, cy, r], ellipse [cx, cy, rx, ry], arc [cx, cy, r, from, to] in degrees counter-clockwise from +x. `tone` fills a closed shape: water, plant, sand or dark.",
+  "symbols": {
+    "bed_single": {
+      "label": "Single bed",
+      "category": "Bedroom",
+      "tags": ["bed", "twin"],
+      "size": [990, 1910],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 990, 1910], "r": 30},
+        {"rect": [0, 1840, 990, 70]},
+        {"rect": [90, 1430, 810, 360], "r": 70},
+        {"line": [0, 1184.2, 990, 1184.2]},
+        {"line": [514.8, 1184.2, 990, 802.2]}
+      ]
+    },
+    "bed_double": {
+      "label": "Double bed",
+      "category": "Bedroom",
+      "tags": ["bed", "full"],
+      "size": [1370, 1910],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1370, 1910], "r": 30},
+        {"rect": [0, 1840, 1370, 70]},
+        {"rect": [90, 1430, 565, 360], "r": 70},
+        {"rect": [715, 1430, 565, 360], "r": 70},
+        {"line": [0, 1184.2, 1370, 1184.2]},
+        {"line": [712.4, 1184.2, 1370, 802.2]}
+      ]
+    },
+    "bed_queen": {
+      "label": "Queen bed",
+      "category": "Bedroom",
+      "tags": ["bed"],
+      "size": [1530, 2030],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1530, 2030], "r": 30},
+        {"rect": [0, 1960, 1530, 70]},
+        {"rect": [90, 1550, 645, 360], "r": 70},
+        {"rect": [795, 1550, 645, 360], "r": 70},
+        {"line": [0, 1258.6, 1530, 1258.6]},
+        {"line": [795.6, 1258.6, 1530, 852.6]}
+      ]
+    },
+    "bed_king": {
+      "label": "King bed",
+      "category": "Bedroom",
+      "tags": ["bed"],
+      "size": [1930, 2030],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1930, 2030], "r": 30},
+        {"rect": [0, 1960, 1930, 70]},
+        {"rect": [90, 1550, 845, 360], "r": 70},
+        {"rect": [995, 1550, 845, 360], "r": 70},
+        {"line": [0, 1258.6, 1930, 1258.6]},
+        {"line": [1003.6, 1258.6, 1930, 852.6]}
+      ]
+    },
+    "bunk_bed": {
+      "label": "Bunk bed",
+      "category": "Bedroom",
+      "tags": ["bed", "kids"],
+      "size": [990, 1910],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 990, 1910], "r": 30},
+        {"rect": [0, 1840, 990, 70]},
+        {"rect": [45, 45, 900, 1750]},
+        {"rect": [150, 1450, 690, 340], "r": 70},
+        {"line": [945, 200, 945, 700]},
+        {"line": [945, 300, 830, 300]},
+        {"line": [945, 450, 830, 450]},
+        {"line": [945, 600, 830, 600]},
+        {"line": [830, 200, 830, 700]}
+      ]
+    },
+    "crib": {
+      "label": "Crib",
+      "category": "Bedroom",
+      "tags": ["baby", "cot", "nursery"],
+      "size": [700, 1300],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 700, 1300]},
+        {"rect": [50, 50, 600, 1200]},
+        {"line": [100, 0, 100, 50]},
+        {"line": [200, 0, 200, 50]},
+        {"line": [300, 0, 300, 50]},
+        {"line": [400, 0, 400, 50]},
+        {"line": [500, 0, 500, 50]},
+        {"line": [600, 0, 600, 50]},
+        {"line": [100, 1250, 100, 1300]},
+        {"line": [200, 1250, 200, 1300]},
+        {"line": [300, 1250, 300, 1300]},
+        {"line": [400, 1250, 400, 1300]},
+        {"line": [500, 1250, 500, 1300]},
+        {"line": [600, 1250, 600, 1300]}
+      ]
+    },
+    "nightstand": {
+      "label": "Nightstand",
+      "category": "Bedroom",
+      "tags": ["bedside", "table"],
+      "size": [500, 450],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 500, 450], "r": 20},
+        {"line": [0, 60, 500, 60]},
+        {"circle": [250, 260, 110]}
+      ]
+    },
+    "dresser": {
+      "label": "Dresser",
+      "category": "Bedroom",
+      "tags": ["drawers", "chest"],
+      "size": [1500, 500],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1500, 500], "r": 20},
+        {"line": [0, 50, 1500, 50]},
+        {"line": [500, 0, 500, 50]},
+        {"line": [1000, 0, 1000, 50]},
+        {"line": [170, 25, 330, 25]},
+        {"line": [670, 25, 830, 25]},
+        {"line": [1170, 25, 1330, 25]}
+      ]
+    },
+    "wardrobe": {
+      "label": "Wardrobe",
+      "category": "Bedroom",
+      "tags": ["closet", "armoire"],
+      "size": [1200, 600],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1200, 600]},
+        {"line": [40, 300, 1160, 300]},
+        {"line": [60, 120, 240, 480]},
+        {"line": [210, 120, 390, 480]},
+        {"line": [360, 120, 540, 480]},
+        {"line": [510, 120, 690, 480]},
+        {"line": [660, 120, 840, 480]},
+        {"line": [810, 120, 990, 480]},
+        {"line": [960, 120, 1140, 480]}
+      ]
+    },
+    "sofa": {
+      "label": "Sofa",
+      "category": "Living",
+      "tags": ["couch", "settee"],
+      "size": [2100, 900],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 2100, 900], "r": 40},
+        {"rect": [0, 700, 2100, 200], "r": 40},
+        {"rect": [0, 0, 180, 900], "r": 40},
+        {"rect": [1920, 0, 180, 900], "r": 40},
+        {"rect": [190, 40, 560, 650], "r": 40},
+        {"rect": [770, 40, 560, 650], "r": 40},
+        {"rect": [1350, 40, 560, 650], "r": 40}
+      ]
+    },
+    "loveseat": {
+      "label": "Loveseat",
+      "category": "Living",
+      "tags": ["couch", "sofa"],
+      "size": [1500, 900],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1500, 900], "r": 40},
+        {"rect": [0, 700, 1500, 200], "r": 40},
+        {"rect": [0, 0, 180, 900], "r": 40},
+        {"rect": [1320, 0, 180, 900], "r": 40},
+        {"rect": [190, 40, 550, 650], "r": 40},
+        {"rect": [760, 40, 550, 650], "r": 40}
+      ]
+    },
+    "armchair": {
+      "label": "Armchair",
+      "category": "Living",
+      "tags": ["chair", "seat"],
+      "size": [850, 850],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 850, 850], "r": 40},
+        {"rect": [0, 670, 850, 180], "r": 40},
+        {"rect": [0, 0, 160, 850], "r": 40},
+        {"rect": [690, 0, 160, 850], "r": 40},
+        {"rect": [170, 40, 510, 620], "r": 40}
+      ]
+    },
+    "corner_sofa": {
+      "label": "Corner sofa",
+      "category": "Living",
+      "tags": ["sectional", "couch", "sofa"],
+      "size": [2600, 2000],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [0, 0, 900, 0, 900, 1100, 2600, 1100, 2600, 2000, 0, 2000]},
+        {"poly": [0, 0, 200, 0, 200, 1800, 2600, 1800, 2600, 2000, 0, 2000]},
+        {"rect": [2420, 1100, 180, 900], "r": 40},
+        {"rect": [0, 0, 900, 160], "r": 40},
+        {"rect": [220, 180, 660, 900], "r": 40},
+        {"rect": [220, 1100, 1090, 680], "r": 40},
+        {"rect": [1330, 1100, 1080, 680], "r": 40}
+      ]
+    },
+    "coffee_table": {
+      "label": "Coffee table",
+      "category": "Living",
+      "tags": ["table"],
+      "size": [1200, 600],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1200, 600], "r": 30},
+        {"rect": [60, 60, 1080, 480], "r": 20}
+      ]
+    },
+    "side_table": {
+      "label": "Side table",
+      "category": "Living",
+      "tags": ["table", "end table"],
+      "size": [500, 500],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [250, 250, 250]},
+        {"circle": [250, 250, 200]}
+      ]
+    },
+    "tv_unit": {
+      "label": "TV and stand",
+      "category": "Living",
+      "tags": ["television", "media", "console"],
+      "size": [1800, 450],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1800, 450], "r": 20},
+        {"rect": [216, 300, 1368, 60], "tone": "dark"},
+        {"line": [900, 0, 900, 300]}
+      ]
+    },
+    "bookshelf": {
+      "label": "Bookshelf",
+      "category": "Living",
+      "tags": ["shelves", "books", "library"],
+      "size": [900, 350],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 900, 350]},
+        {"line": [300, 0, 300, 350]},
+        {"line": [600, 0, 600, 350]},
+        {"line": [0, 40, 900, 40]}
+      ]
+    },
+    "rug": {
+      "label": "Rug",
+      "category": "Living",
+      "tags": ["carpet"],
+      "size": [2400, 1700],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 2400, 1700]},
+        {"rect": [100, 100, 2200, 1500]},
+        {"line": [0, 100, 60, 100]},
+        {"line": [0, 250, 60, 250]},
+        {"line": [0, 400, 60, 400]},
+        {"line": [0, 550, 60, 550]},
+        {"line": [0, 700, 60, 700]},
+        {"line": [0, 850, 60, 850]},
+        {"line": [0, 1000, 60, 1000]},
+        {"line": [0, 1150, 60, 1150]},
+        {"line": [0, 1300, 60, 1300]},
+        {"line": [0, 1450, 60, 1450]},
+        {"line": [0, 1600, 60, 1600]},
+        {"line": [2400, 100, 2340, 100]},
+        {"line": [2400, 250, 2340, 250]},
+        {"line": [2400, 400, 2340, 400]},
+        {"line": [2400, 550, 2340, 550]},
+        {"line": [2400, 700, 2340, 700]},
+        {"line": [2400, 850, 2340, 850]},
+        {"line": [2400, 1000, 2340, 1000]},
+        {"line": [2400, 1150, 2340, 1150]},
+        {"line": [2400, 1300, 2340, 1300]},
+        {"line": [2400, 1450, 2340, 1450]},
+        {"line": [2400, 1600, 2340, 1600]}
+      ]
+    },
+    "piano": {
+      "label": "Upright piano",
+      "category": "Living",
+      "tags": ["music", "keyboard"],
+      "size": [1500, 600],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 1500, 600], "r": 20},
+        {"rect": [60, 0, 1380, 180]},
+        {"line": [106, 60, 106, 180]},
+        {"line": [152, 60, 152, 180]},
+        {"line": [198, 60, 198, 180]},
+        {"line": [244, 60, 244, 180]},
+        {"line": [290, 60, 290, 180]},
+        {"line": [336, 60, 336, 180]},
+        {"line": [382, 60, 382, 180]},
+        {"line": [428, 60, 428, 180]},
+        {"line": [474, 60, 474, 180]},
+        {"line": [520, 60, 520, 180]},
+        {"line": [566, 60, 566, 180]},
+        {"line": [612, 60, 612, 180]},
+        {"line": [658, 60, 658, 180]},
+        {"line": [704, 60, 704, 180]},
+        {"line": [750, 60, 750, 180]},
+        {"line": [796, 60, 796, 180]},
+        {"line": [842, 60, 842, 180]},
+        {"line": [888, 60, 888, 180]},
+        {"line": [934, 60, 934, 180]},
+        {"line": [980, 60, 980, 180]},
+        {"line": [1026, 60, 1026, 180]},
+        {"line": [1072, 60, 1072, 180]},
+        {"line": [1118, 60, 1118, 180]},
+        {"line": [1164, 60, 1164, 180]},
+        {"line": [1210, 60, 1210, 180]},
+        {"line": [1256, 60, 1256, 180]},
+        {"line": [1302, 60, 1302, 180]},
+        {"line": [1348, 60, 1348, 180]},
+        {"line": [1394, 60, 1394, 180]}
+      ]
+    },
+    "fireplace": {
+      "label": "Fireplace",
+      "category": "Living",
+      "tags": ["hearth", "stove"],
+      "size": [1500, 500],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1500, 500]},
+        {"poly": [375, 0, 1125, 0, 975, 350, 525, 350], "tone": "dark"}
+      ]
+    },
+    "house_plant": {
+      "label": "House plant",
+      "category": "Living",
+      "tags": ["plant", "pot"],
+      "size": [600, 600],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [600, 300, 581.8, 342.5, 543.7, 375.2, 516.2, 404.1, 510.7, 443.6, 508.9, 493.8, 487, 534.5, 442.5, 546.8, 393.2, 537.4, 353.4, 534, 319.1, 554.3, 278.7, 584.2, 233.2, 592.5, 195.9, 565.3, 172.5, 520.8, 150.4, 487.6, 113.1, 473.4, 64.5, 460.5, 29.7, 430.2, 27.7, 384, 47.8, 338, 60, 300, 47.8, 262, 27.7, 216, 29.7, 169.8, 64.5, 139.5, 113.1, 126.6, 150.4, 112.4, 172.5, 79.2, 195.9, 34.7, 233.2, 7.5, 278.7, 15.8, 319.1, 45.7, 353.4, 66, 393.2, 62.6, 442.5, 53.2, 487, 65.5, 508.9, 106.2, 510.7, 156.4, 516.2, 195.9, 543.7, 224.8, 581.8, 257.5], "tone": "plant"},
+        {"circle": [300, 300, 160]}
+      ]
+    },
+    "dining_table_4": {
+      "label": "Dining table, 4 seats",
+      "category": "Dining",
+      "tags": ["table", "dining", "kitchen table"],
+      "size": [1200, 1400],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [525, 450, 75, 450, 75, 0, 525, 0]},
+        {"line": [525, 70, 75, 70]},
+        {"poly": [75, 950, 525, 950, 525, 1400, 75, 1400]},
+        {"line": [75, 1330, 525, 1330]},
+        {"poly": [1125, 450, 675, 450, 675, 0, 1125, 0]},
+        {"line": [1125, 70, 675, 70]},
+        {"poly": [675, 950, 1125, 950, 1125, 1400, 675, 1400]},
+        {"line": [675, 1330, 1125, 1330]},
+        {"rect": [0, 300, 1200, 800], "r": 20}
+      ]
+    },
+    "dining_table_6": {
+      "label": "Dining table, 6 seats",
+      "category": "Dining",
+      "tags": ["table", "dining"],
+      "size": [2400, 1500],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [975, 450, 525, 450, 525, 0, 975, 0]},
+        {"line": [975, 70, 525, 70]},
+        {"poly": [525, 1050, 975, 1050, 975, 1500, 525, 1500]},
+        {"line": [525, 1430, 975, 1430]},
+        {"poly": [1875, 450, 1425, 450, 1425, 0, 1875, 0]},
+        {"line": [1875, 70, 1425, 70]},
+        {"poly": [1425, 1050, 1875, 1050, 1875, 1500, 1425, 1500]},
+        {"line": [1425, 1430, 1875, 1430]},
+        {"poly": [450, 525, 450, 975, 0, 975, 0, 525]},
+        {"line": [70, 525, 70, 975]},
+        {"poly": [1950, 975, 1950, 525, 2400, 525, 2400, 975]},
+        {"line": [2330, 975, 2330, 525]},
+        {"rect": [300, 300, 1800, 900], "r": 20}
+      ]
+    },
+    "dining_table_8": {
+      "label": "Dining table, 8 seats",
+      "category": "Dining",
+      "tags": ["table", "dining"],
+      "size": [3000, 1600],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [925, 450, 475, 450, 475, 0, 925, 0]},
+        {"line": [925, 70, 475, 70]},
+        {"poly": [475, 1150, 925, 1150, 925, 1600, 475, 1600]},
+        {"line": [475, 1530, 925, 1530]},
+        {"poly": [1725, 450, 1275, 450, 1275, 0, 1725, 0]},
+        {"line": [1725, 70, 1275, 70]},
+        {"poly": [1275, 1150, 1725, 1150, 1725, 1600, 1275, 1600]},
+        {"line": [1275, 1530, 1725, 1530]},
+        {"poly": [2525, 450, 2075, 450, 2075, 0, 2525, 0]},
+        {"line": [2525, 70, 2075, 70]},
+        {"poly": [2075, 1150, 2525, 1150, 2525, 1600, 2075, 1600]},
+        {"line": [2075, 1530, 2525, 1530]},
+        {"poly": [450, 575, 450, 1025, 0, 1025, 0, 575]},
+        {"line": [70, 575, 70, 1025]},
+        {"poly": [2550, 1025, 2550, 575, 3000, 575, 3000, 1025]},
+        {"line": [2930, 1025, 2930, 575]},
+        {"rect": [300, 300, 2400, 1000], "r": 20}
+      ]
+    },
+    "round_table": {
+      "label": "Round table, 4 seats",
+      "category": "Dining",
+      "tags": ["table", "dining", "bistro"],
+      "size": [1500, 1500],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [827.8, 1146, 1146, 827.8, 1464.2, 1146, 1146, 1464.2]},
+        {"line": [1096.5, 1414.7, 1414.7, 1096.5]},
+        {"poly": [354, 827.8, 672.2, 1146, 354, 1464.2, 35.8, 1146]},
+        {"line": [85.3, 1096.5, 403.5, 1414.7]},
+        {"poly": [672.2, 354, 354, 672.2, 35.8, 354, 354, 35.8]},
+        {"line": [403.5, 85.3, 85.3, 403.5]},
+        {"poly": [1146, 672.2, 827.8, 354, 1146, 35.8, 1464.2, 354]},
+        {"line": [1414.7, 403.5, 1096.5, 85.3]},
+        {"circle": [750, 750, 500]}
+      ]
+    },
+    "chair": {
+      "label": "Chair",
+      "category": "Dining",
+      "tags": ["seat"],
+      "size": [450, 500],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 450, 500], "r": 30},
+        {"line": [0, 420, 450, 420]}
+      ]
+    },
+    "bar_stool": {
+      "label": "Bar stool",
+      "category": "Dining",
+      "tags": ["stool", "seat"],
+      "size": [400, 400],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [200, 200, 200]},
+        {"circle": [200, 200, 150]}
+      ]
+    },
+    "counter": {
+      "label": "Counter",
+      "category": "Kitchen",
+      "tags": ["cabinets", "worktop", "kitchen"],
+      "size": [2400, 600],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 2400, 600]},
+        {"line": [0, 30, 2400, 30]}
+      ]
+    },
+    "kitchen_sink": {
+      "label": "Kitchen sink",
+      "category": "Kitchen",
+      "tags": ["sink"],
+      "size": [800, 600],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 800, 600]},
+        {"rect": [70, 70, 660, 420], "r": 60},
+        {"circle": [400, 260, 30]},
+        {"circle": [400, 545, 25]}
+      ]
+    },
+    "double_sink": {
+      "label": "Double kitchen sink",
+      "category": "Kitchen",
+      "tags": ["sink"],
+      "size": [1200, 600],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 1200, 600]},
+        {"rect": [70, 70, 495, 420], "r": 60},
+        {"rect": [635, 70, 495, 420], "r": 60},
+        {"circle": [317, 260, 30]},
+        {"circle": [883, 260, 30]},
+        {"circle": [600, 545, 25]}
+      ]
+    },
+    "stove": {
+      "label": "Stove",
+      "category": "Kitchen",
+      "tags": ["range", "cooktop", "oven", "hob"],
+      "size": [760, 650],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 760, 650]},
+        {"line": [0, 90, 760, 90]},
+        {"circle": [200, 240, 120]},
+        {"circle": [200, 240, 70]},
+        {"circle": [560, 240, 100]},
+        {"circle": [200, 500, 100]},
+        {"circle": [560, 500, 120]},
+        {"circle": [560, 500, 70]},
+        {"circle": [120, 45, 22]},
+        {"circle": [260, 45, 22]},
+        {"circle": [500, 45, 22]},
+        {"circle": [640, 45, 22]}
+      ]
+    },
+    "fridge": {
+      "label": "Fridge",
+      "category": "Kitchen",
+      "tags": ["refrigerator", "freezer"],
+      "size": [900, 750],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 900, 750], "r": 20},
+        {"rect": [40, 0, 820, 710]},
+        {"line": [450, 0, 450, 710]},
+        {"line": [390, 30, 390, 200]},
+        {"line": [510, 30, 510, 200]}
+      ]
+    },
+    "dishwasher": {
+      "label": "Dishwasher",
+      "category": "Kitchen",
+      "tags": ["dw"],
+      "size": [600, 600],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 600, 600]},
+        {"rect": [40, 0, 520, 560]},
+        {"line": [150, 40, 450, 40]},
+        {"line": [40, 560, 560, 40]},
+        {"line": [40, 40, 560, 560]}
+      ]
+    },
+    "kitchen_island": {
+      "label": "Kitchen island",
+      "category": "Kitchen",
+      "tags": ["island", "breakfast bar"],
+      "size": [2400, 1000],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 2400, 1000]},
+        {"line": [0, 300, 2400, 300]},
+        {"circle": [480, 150, 160]},
+        {"circle": [1200, 150, 160]},
+        {"circle": [1920, 150, 160]}
+      ]
+    },
+    "toilet": {
+      "label": "Toilet",
+      "category": "Bathroom",
+      "tags": ["wc", "lavatory"],
+      "size": [400, 700],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 510, 400, 190], "r": 30},
+        {"ellipse": [200, 300, 190, 280]},
+        {"ellipse": [200, 280, 130, 200]}
+      ]
+    },
+    "basin": {
+      "label": "Basin",
+      "category": "Bathroom",
+      "tags": ["sink", "vanity", "lavatory"],
+      "size": [600, 450],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 600, 450], "r": 40},
+        {"ellipse": [300, 190, 220, 150]},
+        {"circle": [300, 190, 22]},
+        {"circle": [300, 390, 25]}
+      ]
+    },
+    "double_vanity": {
+      "label": "Double vanity",
+      "category": "Bathroom",
+      "tags": ["sink", "basin", "vanity"],
+      "size": [1500, 550],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 1500, 550], "r": 30},
+        {"ellipse": [405, 230, 220, 150]},
+        {"ellipse": [1095, 230, 220, 150]},
+        {"circle": [405, 230, 22]},
+        {"circle": [1095, 230, 22]},
+        {"circle": [405, 490, 25]},
+        {"circle": [1095, 490, 25]}
+      ]
+    },
+    "bathtub": {
+      "label": "Bathtub",
+      "category": "Bathroom",
+      "tags": ["bath", "tub"],
+      "size": [1700, 750],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1700, 750], "r": 40},
+        {"rect": [70, 70, 1560, 610], "r": 220},
+        {"circle": [1470, 375, 30]}
+      ]
+    },
+    "shower": {
+      "label": "Shower",
+      "category": "Bathroom",
+      "tags": ["stall"],
+      "size": [900, 900],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 900, 900]},
+        {"line": [0, 0, 900, 900]},
+        {"line": [900, 0, 0, 900]},
+        {"circle": [450, 450, 40]},
+        {"arc": [0, 0, 840, 0, 90]}
+      ]
+    },
+    "urinal": {
+      "label": "Urinal",
+      "category": "Bathroom",
+      "tags": ["wc"],
+      "size": [450, 350],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 300, 450, 50]},
+        {"poly": [30, 300, 420, 300, 380, 80, 300, 20, 150, 20, 70, 80]},
+        {"circle": [225, 170, 25]}
+      ]
+    },
+    "washer": {
+      "label": "Washer",
+      "category": "Laundry",
+      "tags": ["washing machine", "laundry"],
+      "size": [600, 650],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 600, 650], "r": 20},
+        {"line": [0, 530, 600, 530]},
+        {"circle": [300, 285, 200]},
+        {"circle": [300, 285, 140]},
+        {"circle": [100, 590, 25]}
+      ]
+    },
+    "dryer": {
+      "label": "Dryer",
+      "category": "Laundry",
+      "tags": ["tumble dryer", "laundry"],
+      "size": [600, 650],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 600, 650], "r": 20},
+        {"line": [0, 530, 600, 530]},
+        {"circle": [300, 285, 200]},
+        {"line": [180, 210, 420, 210]},
+        {"line": [180, 270, 420, 270]},
+        {"line": [180, 330, 420, 330]},
+        {"circle": [500, 590, 25]}
+      ]
+    },
+    "water_heater": {
+      "label": "Water heater",
+      "category": "Utility",
+      "tags": ["boiler", "tank", "hot water"],
+      "size": [550, 550],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [275, 275, 275]},
+        {"circle": [275, 275, 200]},
+        {"circle": [275, 275, 50]}
+      ]
+    },
+    "heat_pump": {
+      "label": "Heat pump",
+      "category": "Utility",
+      "tags": ["ac", "air conditioner", "condenser"],
+      "size": [900, 400],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 900, 400], "r": 20},
+        {"circle": [560, 200, 160]},
+        {"line": [400, 200, 720, 200]},
+        {"line": [560, 40, 560, 360]},
+        {"line": [60, 60, 60, 340]},
+        {"line": [140, 60, 140, 340]},
+        {"line": [220, 60, 220, 340]}
+      ]
+    },
+    "desk": {
+      "label": "Desk",
+      "category": "Office",
+      "tags": ["table", "workstation", "study"],
+      "size": [1400, 700],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1400, 700]},
+        {"line": [950, 0, 950, 700]},
+        {"line": [950, 230, 1400, 230]},
+        {"line": [950, 460, 1400, 460]}
+      ]
+    },
+    "office_chair": {
+      "label": "Office chair",
+      "category": "Office",
+      "tags": ["chair", "desk chair"],
+      "size": [650, 650],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [325, 325, 300]},
+        {"rect": [110, 120, 430, 390], "r": 80},
+        {"arc": [325, 200, 270, 30, 150]},
+        {"rect": [50, 150, 60, 300], "r": 25},
+        {"rect": [540, 150, 60, 300], "r": 25}
+      ]
+    },
+    "conference_table": {
+      "label": "Meeting table",
+      "category": "Office",
+      "tags": ["table", "boardroom", "conference"],
+      "size": [3800, 2000],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [1025, 500, 525, 500, 525, 0, 1025, 0]},
+        {"line": [1025, 70, 525, 70]},
+        {"poly": [525, 1500, 1025, 1500, 1025, 2000, 525, 2000]},
+        {"line": [525, 1930, 1025, 1930]},
+        {"poly": [1775, 500, 1275, 500, 1275, 0, 1775, 0]},
+        {"line": [1775, 70, 1275, 70]},
+        {"poly": [1275, 1500, 1775, 1500, 1775, 2000, 1275, 2000]},
+        {"line": [1275, 1930, 1775, 1930]},
+        {"poly": [2525, 500, 2025, 500, 2025, 0, 2525, 0]},
+        {"line": [2525, 70, 2025, 70]},
+        {"poly": [2025, 1500, 2525, 1500, 2525, 2000, 2025, 2000]},
+        {"line": [2025, 1930, 2525, 1930]},
+        {"poly": [3275, 500, 2775, 500, 2775, 0, 3275, 0]},
+        {"line": [3275, 70, 2775, 70]},
+        {"poly": [2775, 1500, 3275, 1500, 3275, 2000, 2775, 2000]},
+        {"line": [2775, 1930, 3275, 1930]},
+        {"poly": [500, 750, 500, 1250, 0, 1250, 0, 750]},
+        {"line": [70, 750, 70, 1250]},
+        {"poly": [3300, 1250, 3300, 750, 3800, 750, 3800, 1250]},
+        {"line": [3730, 1250, 3730, 750]},
+        {"rect": [400, 400, 3000, 1200], "r": 20}
+      ]
+    },
+    "filing_cabinet": {
+      "label": "Filing cabinet",
+      "category": "Office",
+      "tags": ["storage", "cabinet"],
+      "size": [900, 450],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 900, 450]},
+        {"line": [450, 0, 450, 450]},
+        {"line": [145, 30, 305, 30]},
+        {"line": [595, 30, 755, 30]}
+      ]
+    },
+    "stair": {
+      "label": "Stair",
+      "category": "Circulation",
+      "tags": ["stairs", "steps", "staircase"],
+      "size": [1000, 3000],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1000, 3000]},
+        {"line": [0, 280, 1000, 280]},
+        {"line": [0, 560, 1000, 560]},
+        {"line": [0, 840, 1000, 840]},
+        {"line": [0, 1120, 1000, 1120]},
+        {"line": [0, 1400, 1000, 1400]},
+        {"line": [0, 1680, 1000, 1680]},
+        {"line": [0, 1960, 1000, 1960]},
+        {"line": [0, 2240, 1000, 2240]},
+        {"line": [0, 2520, 1000, 2520]},
+        {"line": [0, 2800, 1000, 2800]},
+        {"line": [500, 150, 500, 2800]},
+        {"poly": [410, 2620, 500, 2850, 590, 2620], "tone": "dark"},
+        {"circle": [500, 150, 40]}
+      ]
+    },
+    "lift": {
+      "label": "Lift",
+      "category": "Circulation",
+      "tags": ["elevator"],
+      "size": [1600, 1600],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 1600, 1600]},
+        {"rect": [100, 100, 1400, 1400]},
+        {"line": [100, 100, 1500, 1500]},
+        {"line": [1500, 100, 100, 1500]},
+        {"rect": [350, 0, 900, 100], "tone": "dark"}
+      ]
+    },
+    "car": {
+      "label": "Car",
+      "category": "Vehicles",
+      "tags": ["parking", "garage", "driveway", "vehicle"],
+      "size": [1850, 4700],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [130, 3450, 120, 650], "r": 40, "tone": "dark"},
+        {"rect": [1600, 3450, 120, 650], "r": 40, "tone": "dark"},
+        {"rect": [130, 550, 120, 650], "r": 40, "tone": "dark"},
+        {"rect": [1600, 550, 120, 650], "r": 40, "tone": "dark"},
+        {"rect": [110, 0, 1630, 4700], "r": 380},
+        {"poly": [290, 3350, 1560, 3350, 1480, 2800, 370, 2800]},
+        {"rect": [360, 1150, 1130, 1650], "r": 120},
+        {"poly": [370, 1150, 1480, 1150, 1540, 750, 310, 750]},
+        {"line": [410, 4400, 1440, 4400]},
+        {"rect": [0, 3200, 120, 220], "r": 40},
+        {"rect": [1730, 3200, 120, 220], "r": 40}
+      ]
+    },
+    "pickup_truck": {
+      "label": "Pickup truck",
+      "category": "Vehicles",
+      "tags": ["truck", "parking", "garage", "vehicle"],
+      "size": [2000, 5800],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 2000, 5800], "r": 300},
+        {"rect": [120, 120, 1760, 1900], "r": 60},
+        {"line": [0, 2150, 2000, 2150]},
+        {"poly": [200, 4500, 1800, 4500, 1740, 3950, 260, 3950]},
+        {"rect": [260, 2150, 1480, 1800], "r": 100},
+        {"rect": [-30, 4450, 120, 700], "r": 40, "tone": "dark"},
+        {"rect": [1910, 4450, 120, 700], "r": 40, "tone": "dark"},
+        {"rect": [-30, 600, 120, 700], "r": 40, "tone": "dark"},
+        {"rect": [1910, 600, 120, 700], "r": 40, "tone": "dark"}
+      ]
+    },
+    "motorcycle": {
+      "label": "Motorcycle",
+      "category": "Vehicles",
+      "tags": ["motorbike", "scooter", "vehicle"],
+      "size": [800, 2150],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [330, 0, 140, 600], "r": 60, "tone": "dark"},
+        {"rect": [330, 1550, 140, 600], "r": 60, "tone": "dark"},
+        {"poly": [230, 500, 570, 500, 600, 1300, 520, 1650, 280, 1650, 200, 1300]},
+        {"line": [0, 1500, 800, 1500]},
+        {"ellipse": [400, 1150, 110, 250]}
+      ]
+    },
+    "bicycle": {
+      "label": "Bicycle",
+      "category": "Vehicles",
+      "tags": ["bike", "cycle"],
+      "size": [600, 1750],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [275, 0, 50, 680], "r": 25, "tone": "dark"},
+        {"rect": [275, 1070, 50, 680], "r": 25, "tone": "dark"},
+        {"line": [300, 600, 300, 1300]},
+        {"line": [0, 1330, 600, 1330]},
+        {"ellipse": [300, 750, 70, 130]}
+      ]
+    },
+    "boat": {
+      "label": "Sailboat",
+      "category": "Vehicles",
+      "tags": ["sailboat", "yacht", "dock", "marina", "slip"],
+      "size": [3400, 10000],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [0, 0, 3400, 0, 3400, 5000, 2890, 7800, 1700, 10000, 510, 7800, 0, 5000]},
+        {"poly": [150, 150, 3250, 150, 3250, 5000, 2788, 7600, 1700, 9750, 612, 7600, 150, 5000]},
+        {"rect": [850, 600, 1700, 2200], "r": 200},
+        {"rect": [1020, 3200, 1360, 2600], "r": 300},
+        {"circle": [1700, 6400, 90], "tone": "dark"},
+        {"line": [1700, 6400, 1700, 600]}
+      ]
+    },
+    "parking_space": {
+      "label": "Parking space",
+      "category": "Vehicles",
+      "tags": ["parking", "stall", "car"],
+      "size": [2600, 5500],
+      "fit": "stretch",
+      "shapes": [
+        {"line": [0, 0, 0, 5500, 2600, 5500, 2600, 0]},
+        {"line": [1000, 5300, 1600, 5300]}
+      ]
+    },
+    "ev_charger": {
+      "label": "EV charger",
+      "category": "Vehicles",
+      "tags": ["charger", "parking", "garage"],
+      "size": [600, 300],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 600, 300], "r": 40},
+        {"circle": [300, 120, 70]},
+        {"line": [270, 160, 320, 120, 280, 120, 330, 80]}
+      ]
+    },
+    "patio": {
+      "label": "Patio",
+      "category": "Outdoor",
+      "tags": ["paving", "pavers", "terrace", "flagstone"],
+      "size": [3000, 3000],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 3000, 3000]},
+        {"line": [600, 0, 600, 3000]},
+        {"line": [1200, 0, 1200, 3000]},
+        {"line": [1800, 0, 1800, 3000]},
+        {"line": [2400, 0, 2400, 3000]},
+        {"line": [0, 600, 3000, 600]},
+        {"line": [0, 1200, 3000, 1200]},
+        {"line": [0, 1800, 3000, 1800]},
+        {"line": [0, 2400, 3000, 2400]}
+      ]
+    },
+    "deck": {
+      "label": "Deck",
+      "category": "Outdoor",
+      "tags": ["decking", "boards", "terrace"],
+      "size": [3600, 3000],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 3600, 3000]},
+        {"line": [0, 140, 3600, 140]},
+        {"line": [0, 280, 3600, 280]},
+        {"line": [0, 420, 3600, 420]},
+        {"line": [0, 560, 3600, 560]},
+        {"line": [0, 700, 3600, 700]},
+        {"line": [0, 840, 3600, 840]},
+        {"line": [0, 980, 3600, 980]},
+        {"line": [0, 1120, 3600, 1120]},
+        {"line": [0, 1260, 3600, 1260]},
+        {"line": [0, 1400, 3600, 1400]},
+        {"line": [0, 1540, 3600, 1540]},
+        {"line": [0, 1680, 3600, 1680]},
+        {"line": [0, 1820, 3600, 1820]},
+        {"line": [0, 1960, 3600, 1960]},
+        {"line": [0, 2100, 3600, 2100]},
+        {"line": [0, 2240, 3600, 2240]},
+        {"line": [0, 2380, 3600, 2380]},
+        {"line": [0, 2520, 3600, 2520]},
+        {"line": [0, 2660, 3600, 2660]},
+        {"line": [0, 2800, 3600, 2800]},
+        {"line": [0, 2940, 3600, 2940]},
+        {"line": [1800, 0, 1800, 3000]}
+      ]
+    },
+    "pool": {
+      "label": "Swimming pool",
+      "category": "Outdoor",
+      "tags": ["swimming", "lap pool"],
+      "size": [4000, 8000],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 4000, 8000], "r": 400},
+        {"rect": [300, 300, 3400, 7400], "r": 250, "tone": "water"},
+        {"arc": [300, 300, 600, 0, 90]},
+        {"arc": [300, 300, 900, 0, 90]},
+        {"arc": [300, 300, 1200, 0, 90]},
+        {"line": [3300, 7700, 3300, 7250]},
+        {"line": [3550, 7700, 3550, 7250]},
+        {"line": [3300, 7550, 3550, 7550]},
+        {"line": [3300, 7400, 3550, 7400]}
+      ]
+    },
+    "hot_tub": {
+      "label": "Hot tub",
+      "category": "Outdoor",
+      "tags": ["spa", "jacuzzi", "whirlpool"],
+      "size": [2200, 2200],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 2200, 2200], "r": 250},
+        {"rect": [180, 180, 1840, 1840], "r": 600, "tone": "water"},
+        {"circle": [1100, 1100, 450]}
+      ]
+    },
+    "basketball_hoop": {
+      "label": "Basketball hoop",
+      "category": "Outdoor",
+      "tags": ["basketball", "hoop", "net", "driveway"],
+      "size": [1800, 1200],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [820, 980, 160, 220], "tone": "dark"},
+        {"rect": [0, 820, 1800, 60], "tone": "dark"},
+        {"line": [900, 820, 900, 760]},
+        {"circle": [900, 530, 230]}
+      ]
+    },
+    "basketball_court": {
+      "label": "Basketball half court",
+      "category": "Outdoor",
+      "tags": ["basketball", "court", "sport"],
+      "size": [15000, 14000],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 15000, 14000]},
+        {"rect": [5050, 8200, 4900, 5800]},
+        {"arc": [7500, 8200, 1800, 180, 360]},
+        {"arc": [7500, 8200, 1800, 0, 180]},
+        {"line": [900, 14000, 900, 11010]},
+        {"line": [14100, 14000, 14100, 11010]},
+        {"arc": [7500, 12425, 6750, 192.6, 347.4]},
+        {"circle": [7500, 12425, 230]},
+        {"line": [6600, 12800, 8400, 12800]},
+        {"arc": [7500, 0, 1800, 0, 180]}
+      ]
+    },
+    "tennis_court": {
+      "label": "Tennis court",
+      "category": "Outdoor",
+      "tags": ["tennis", "court", "sport", "pickleball"],
+      "size": [10970, 23770],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 10970, 23770]},
+        {"line": [1370, 0, 1370, 23770]},
+        {"line": [9600, 0, 9600, 23770]},
+        {"line": [1370, 5485, 9600, 5485]},
+        {"line": [1370, 18285, 9600, 18285]},
+        {"line": [5485, 5485, 5485, 18285]},
+        {"line": [5485, 0, 5485, 150]},
+        {"line": [5485, 23770, 5485, 23620]},
+        {"rect": [0, 11845, 10970, 80], "tone": "dark"}
+      ]
+    },
+    "trampoline": {
+      "label": "Trampoline",
+      "category": "Outdoor",
+      "tags": ["kids", "play", "garden"],
+      "size": [3600, 3600],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [1800, 1800, 1800]},
+        {"circle": [1800, 1800, 1450]},
+        {"line": [3250, 1800, 3600, 1800]},
+        {"line": [3162.6, 2295.9, 3491.4, 2415.6]},
+        {"line": [2910.8, 2732, 3178.9, 2957]},
+        {"line": [2525, 3055.7, 2700, 3358.8]},
+        {"line": [2051.8, 3228, 2112.6, 3572.7]},
+        {"line": [1548.2, 3228, 1487.4, 3572.7]},
+        {"line": [1075, 3055.7, 900, 3358.8]},
+        {"line": [689.2, 2732, 421.1, 2957]},
+        {"line": [437.4, 2295.9, 108.6, 2415.6]},
+        {"line": [350, 1800, 0, 1800]},
+        {"line": [437.4, 1304.1, 108.6, 1184.4]},
+        {"line": [689.2, 868, 421.1, 643]},
+        {"line": [1075, 544.3, 900, 241.2]},
+        {"line": [1548.2, 372, 1487.4, 27.3]},
+        {"line": [2051.8, 372, 2112.6, 27.3]},
+        {"line": [2525, 544.3, 2700, 241.2]},
+        {"line": [2910.8, 868, 3178.9, 643]},
+        {"line": [3162.6, 1304.1, 3491.4, 1184.4]}
+      ]
+    },
+    "swing_set": {
+      "label": "Swing set",
+      "category": "Outdoor",
+      "tags": ["swings", "play", "kids", "playground"],
+      "size": [3600, 1800],
+      "fit": "contain",
+      "shapes": [
+        {"line": [0, 0, 150, 900, 0, 1800]},
+        {"line": [3600, 0, 3450, 900, 3600, 1800]},
+        {"line": [150, 900, 3450, 900]},
+        {"rect": [830, 800, 500, 200], "r": 30},
+        {"rect": [2270, 800, 500, 200], "r": 30},
+        {"line": [880, 900, 880, 800]},
+        {"line": [2720, 900, 2720, 800]}
+      ]
+    },
+    "sandbox": {
+      "label": "Sandbox",
+      "category": "Outdoor",
+      "tags": ["sand", "play", "kids", "sandpit"],
+      "size": [1800, 1800],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 1800, 1800]},
+        {"rect": [120, 120, 1560, 1560], "tone": "sand"},
+        {"rect": [0, 0, 300, 300]},
+        {"rect": [1500, 1500, 300, 300]}
+      ]
+    },
+    "picnic_table": {
+      "label": "Picnic table",
+      "category": "Outdoor",
+      "tags": ["table", "bench", "picnic"],
+      "size": [1800, 1600],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 1800, 300]},
+        {"rect": [0, 1300, 1800, 300]},
+        {"rect": [0, 450, 1800, 700]},
+        {"line": [0, 800, 1800, 800]},
+        {"line": [300, 0, 300, 1600]},
+        {"line": [1500, 0, 1500, 1600]}
+      ]
+    },
+    "bbq": {
+      "label": "Barbecue",
+      "category": "Outdoor",
+      "tags": ["grill", "barbecue", "bbq"],
+      "size": [1300, 600],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 1300, 600], "r": 30},
+        {"rect": [300, 60, 700, 480], "r": 80, "tone": "dark"},
+        {"line": [380, 100, 380, 500]},
+        {"line": [460, 100, 460, 500]},
+        {"line": [540, 100, 540, 500]},
+        {"line": [620, 100, 620, 500]},
+        {"line": [700, 100, 700, 500]},
+        {"line": [780, 100, 780, 500]},
+        {"line": [860, 100, 860, 500]},
+        {"line": [940, 100, 940, 500]},
+        {"circle": [150, 300, 70]},
+        {"circle": [1150, 300, 70]}
+      ]
+    },
+    "parasol": {
+      "label": "Parasol",
+      "category": "Outdoor",
+      "tags": ["umbrella", "shade", "patio"],
+      "size": [2700, 2700],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [1350, 1350, 1350]},
+        {"line": [1350, 1350, 2700, 1350]},
+        {"line": [1350, 1350, 2304.6, 2304.6]},
+        {"line": [1350, 1350, 1350, 2700]},
+        {"line": [1350, 1350, 395.4, 2304.6]},
+        {"line": [1350, 1350, 0, 1350]},
+        {"line": [1350, 1350, 395.4, 395.4]},
+        {"line": [1350, 1350, 1350, 0]},
+        {"line": [1350, 1350, 2304.6, 395.4]},
+        {"circle": [1350, 1350, 80], "tone": "dark"}
+      ]
+    },
+    "sun_lounger": {
+      "label": "Sun lounger",
+      "category": "Outdoor",
+      "tags": ["lounger", "chaise", "deck chair", "pool"],
+      "size": [700, 1950],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 700, 1950], "r": 80},
+        {"line": [0, 1300, 700, 1300]},
+        {"line": [60, 150, 640, 150]},
+        {"line": [60, 300, 640, 300]},
+        {"line": [60, 450, 640, 450]},
+        {"line": [60, 600, 640, 600]},
+        {"line": [60, 750, 640, 750]},
+        {"line": [60, 900, 640, 900]},
+        {"line": [60, 1050, 640, 1050]},
+        {"line": [60, 1200, 640, 1200]},
+        {"line": [60, 1390, 640, 1390]},
+        {"line": [60, 1510, 640, 1510]},
+        {"line": [60, 1630, 640, 1630]},
+        {"line": [60, 1750, 640, 1750]},
+        {"line": [60, 1870, 640, 1870]}
+      ]
+    },
+    "fire_pit": {
+      "label": "Fire pit",
+      "category": "Outdoor",
+      "tags": ["fire", "campfire", "patio"],
+      "size": [1200, 1200],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [600, 600, 600]},
+        {"circle": [600, 600, 430]},
+        {"circle": [600, 600, 250], "tone": "dark"}
+      ]
+    },
+    "bench": {
+      "label": "Bench",
+      "category": "Outdoor",
+      "tags": ["seat", "park bench"],
+      "size": [1600, 500],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1600, 500], "r": 30},
+        {"line": [30, 125, 1570, 125]},
+        {"line": [30, 250, 1570, 250]},
+        {"line": [30, 375, 1570, 375]}
+      ]
+    },
+    "fountain": {
+      "label": "Fountain",
+      "category": "Outdoor",
+      "tags": ["water feature", "garden"],
+      "size": [2000, 2000],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [1000, 1000, 1000]},
+        {"circle": [1000, 1000, 850], "tone": "water"},
+        {"circle": [1000, 1000, 220]},
+        {"circle": [1000, 1000, 70]}
+      ]
+    },
+    "bins": {
+      "label": "Bins",
+      "category": "Outdoor",
+      "tags": ["trash", "garbage", "recycling", "compost"],
+      "size": [1500, 800],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 680, 800], "r": 60},
+        {"rect": [820, 0, 680, 800], "r": 60},
+        {"line": [0, 680, 680, 680]},
+        {"line": [820, 680, 1500, 680]}
+      ]
+    },
+    "shed": {
+      "label": "Shed",
+      "category": "Outdoor",
+      "tags": ["storage", "garden shed", "outbuilding"],
+      "size": [2400, 1800],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 2400, 1800]},
+        {"line": [900, 900, 1500, 900]},
+        {"line": [0, 0, 900, 900, 0, 1800]},
+        {"line": [2400, 0, 1500, 900, 2400, 1800]},
+        {"rect": [750, 0, 900, 60], "tone": "dark"}
+      ]
+    },
+    "tree": {
+      "label": "Tree",
+      "category": "Planting",
+      "tags": ["tree", "canopy", "garden"],
+      "size": [5000, 5000],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [5000, 2500, 4908.6, 2781.5, 4713.7, 3024.7, 4567.3, 3252.4, 4533, 3521, 4526.1, 3832.6, 4415.1, 4107, 4164.1, 4263.9, 3858.5, 4324.8, 3600, 4405.3, 3401.1, 4588.9, 3195.5, 4823.1, 2934.1, 4962, 2641, 4920.9, 2367.7, 4771.2, 2118, 4666.6, 1847.5, 4679.4, 1539.5, 4726.7, 1250, 4665.1, 1051.9, 4445.1, 938.8, 4154.8, 814.7, 3914.1, 599.3, 3750.1, 332.9, 3588.3, 150.8, 3355.1, 140.4, 3059.2, 240.4, 2764.1, 300, 2500, 240.4, 2235.9, 140.4, 1940.8, 150.8, 1644.9, 332.9, 1411.7, 599.3, 1249.9, 814.7, 1085.9, 938.8, 845.2, 1051.9, 554.9, 1250, 334.9, 1539.5, 273.3, 1847.5, 320.6, 2118, 333.4, 2367.7, 228.8, 2641, 79.1, 2934.1, 38, 3195.5, 176.9, 3401.1, 411.1, 3600, 594.7, 3858.5, 675.2, 4164.1, 736.1, 4415.1, 893, 4526.1, 1167.4, 4533, 1479, 4567.3, 1747.6, 4713.7, 1975.3, 4908.6, 2218.5], "tone": "plant"},
+        {"circle": [2500, 2500, 180]},
+        {"line": [2500, 2500, 3948.9, 2888.2]},
+        {"line": [2500, 2500, 2578.5, 3997.9]},
+        {"line": [2500, 2500, 1099.6, 3037.6]},
+        {"line": [2500, 2500, 1556, 1334.3]},
+        {"line": [2500, 2500, 3317, 1242]}
+      ]
+    },
+    "shrub": {
+      "label": "Shrub",
+      "category": "Planting",
+      "tags": ["bush", "hedge", "garden"],
+      "size": [1200, 1200],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [1200, 600, 1166.1, 685.3, 1094.5, 752.5, 1041.5, 812.6, 1027.6, 891.5, 1019.7, 989.4, 974.1, 1069.1, 886.2, 1095.8, 789.1, 1081.7, 709, 1077.7, 638.7, 1116.1, 557.2, 1170.9, 466.5, 1185, 390.8, 1132.9, 341.3, 1048.2, 294.5, 983.1, 220.6, 952, 127, 922.5, 59.4, 860.3, 52.9, 768.7, 88.3, 677.1, 110, 600, 88.3, 522.9, 52.9, 431.3, 59.4, 339.7, 127, 277.5, 220.6, 248, 294.5, 216.9, 341.2, 151.8, 390.8, 67.1, 466.5, 15, 557.2, 29.1, 638.7, 83.9, 709, 122.3, 789.1, 118.3, 886.2, 104.2, 974.1, 130.9, 1019.7, 210.6, 1027.6, 308.5, 1041.5, 387.4, 1094.5, 447.5, 1166.1, 514.7], "tone": "plant"},
+        {"circle": [600, 600, 60]}
+      ]
+    },
+    "flower_bed": {
+      "label": "Flower bed",
+      "category": "Planting",
+      "tags": ["planter", "flowers", "garden"],
+      "size": [2400, 800],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 2400, 800], "r": 60},
+        {"rect": [80, 80, 2240, 640], "r": 40, "tone": "plant"},
+        {"circle": [300, 280, 70]},
+        {"circle": [650, 520, 70]},
+        {"circle": [1000, 260, 70]},
+        {"circle": [1350, 540, 70]},
+        {"circle": [1700, 280, 70]},
+        {"circle": [2100, 500, 70]}
+      ]
+    },
+    "garden_bed": {
+      "label": "Vegetable bed",
+      "category": "Planting",
+      "tags": ["vegetables", "raised bed", "garden", "allotment"],
+      "size": [2400, 1200],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 2400, 1200]},
+        {"rect": [80, 80, 2240, 1040], "tone": "plant"},
+        {"line": [200, 330, 2200, 330]},
+        {"line": [200, 600, 2200, 600]},
+        {"line": [200, 870, 2200, 870]}
+      ]
+    },
+    "lawn": {
+      "label": "Lawn",
+      "category": "Planting",
+      "tags": ["grass", "yard", "garden", "turf"],
+      "size": [5000, 5000],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 5000, 5000], "tone": "plant"},
+        {"line": [610, 920, 700, 800, 790, 920]},
+        {"line": [2010, 720, 2100, 600, 2190, 720]},
+        {"line": [3510, 1020, 3600, 900, 3690, 1020]},
+        {"line": [1210, 2120, 1300, 2000, 1390, 2120]},
+        {"line": [2810, 2320, 2900, 2200, 2990, 2320]},
+        {"line": [4210, 2220, 4300, 2100, 4390, 2220]},
+        {"line": [510, 3420, 600, 3300, 690, 3420]},
+        {"line": [1910, 3620, 2000, 3500, 2090, 3620]},
+        {"line": [3410, 3720, 3500, 3600, 3590, 3720]},
+        {"line": [1110, 4520, 1200, 4400, 1290, 4520]},
+        {"line": [2710, 4620, 2800, 4500, 2890, 4620]},
+        {"line": [4210, 4420, 4300, 4300, 4390, 4420]}
+      ]
+    }
+  }
+}

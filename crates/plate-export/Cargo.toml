@@ -1,0 +1,12 @@
+[package]
+name = "plate-export"
+description = "Writes plate layouts to CAD exchange formats"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+plate-core.workspace = true
+serde_json.workspace = true
+dxf = "0.6"
