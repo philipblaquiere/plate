@@ -1129,6 +1129,26 @@ viewer.onVertexDrag = (element, index, point, phase) => {
   }
 };
 
+/** An edge moved as a whole: the viewer shows a ghost while dragging; the file is written on release. */
+viewer.onEdgeDrag = (element, index, move, phase) => {
+  if (phase === "start") {
+    const result = geo.beginEdgeMove(element, index);
+    if (!result.ok) {
+      viewer.abortEdgeDrag();
+      toast(result.reason, true);
+    } else if (result.note) {
+      toast(result.note);
+    }
+  } else if (phase === "end" && move) {
+    const result = geo.endEdgeMove(move.a, move.b);
+    if (!result.ok) toast(result.reason, true);
+    void runSolve();
+  } else {
+    geo.cancelEdgeMove();
+    if (move?.problem) toast(`${move.problem} The edge wasn't moved.`, true);
+  }
+};
+
 const SLOT_SHAPE = "The preview slot is a rectangle: drag its corners to resize it.";
 
 viewer.onVertexInsert = (element, after, point) => {

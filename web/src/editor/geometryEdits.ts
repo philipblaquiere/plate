@@ -24,10 +24,26 @@ interface Drag {
   originals: [string, string];
 }
 
+/** A coordinate as it's written: one text span may hold several (a `let` used twice). */
+interface Written {
+  source: SourceSpan;
+  original: string;
+}
+
+/** An edge being moved: its four coordinates (x, y of each end) and where each is written. */
+interface EdgeMoveState {
+  doc: TextDoc;
+  /** Distinct spans, in the order they're highlighted. */
+  written: Written[];
+  /** For x and y of each end: which of `written` holds it, and its value before the move. */
+  coords: { at: number; value: number }[];
+}
+
 export class GeometryEdits {
   private sources: SourceSpan[] = [];
   private units: Units = "m";
   private drag: Drag | null = null;
+  private edge: EdgeMoveState | null = null;
   private main = "";
   /** The document being edited: the file of the value an operation starts from. */
   private doc!: TextDoc;
@@ -181,6 +197,107 @@ export class GeometryEdits {
       );
     }
     this.endDrag();
+  }
+
+  // ---------------------------------------------------------------- moving an edge
+
+  /**
+   * Pick up edge `index` (from point `index` to the next): find where its four coordinates are
+   * written and highlight them. Nothing is written until `endEdgeMove`, so a computed coordinate
+   * only stops the move if the move would change it.
+   */
+  beginEdgeMove(element: Element, index: number): EditResult {
+    this.edge = null;
+    const base = element.source ?? "/start/points";
+    const ends = [index, (index + 1) % element.points.length];
+    const found: SourceSpan[] = [];
+    for (const i of ends) {
+      const x = this.find(`${base}/${i}/0`);
+      const y = this.find(`${base}/${i}/1`);
+      if (!x || !y) return { ok: false, reason: "This edge's ends aren't written as [x, y] in the file." };
+      if (sameSpan(x.span, y.span) && x.file === y.file) {
+        return { ok: false, reason: `x and y of an end of this edge both come from ${this.where(x)}.` };
+      }
+      found.push(x, y);
+    }
+    if (found.some((s) => s.file !== found[0].file)) {
+      return { ok: false, reason: "The ends of this edge are written in different files." };
+    }
+    if (!this.use(found[0]))
+      return { ok: false, reason: `${found[0].file} isn't in the workspace any more.` };
+    const written: Written[] = [];
+    const coords = found.map((s, k) => {
+      let at = written.findIndex((w) => sameSpan(w.source.span, s.span));
+      if (at < 0) at = written.push({ source: s, original: this.text(s.span) }) - 1;
+      const p = element.points[ends[k >> 1]];
+      return { at, value: k % 2 ? p.y : p.x };
+    });
+    // Values shared with other places (a `let` used elsewhere) move those too.
+    const pointers = new Set(found.map((s) => s.pointer));
+    const shared = this.sources.filter(
+      (s) =>
+        !pointers.has(s.pointer) &&
+        s.file === found[0].file &&
+        s.literal &&
+        written.some((w) => sameSpan(w.source.span, s.span)),
+    ).length;
+    this.edge = { doc: this.doc, written, coords };
+    this.doc.highlight(written.map((w) => w.source.span));
+    const note = shared
+      ? `This edge shares coordinates with ${shared} other value${shared === 1 ? "" : "s"}; they move too.`
+      : undefined;
+    return { ok: true, note };
+  }
+
+  /** Write the edge's new ends `a` and `b`, as one undo step. */
+  endEdgeMove(a: Point, b: Point): EditResult {
+    const e = this.edge;
+    if (!e) return { ok: false, reason: "Nothing is being moved." };
+    this.doc = e.doc;
+    const spans = this.doc.highlighted();
+    if (spans.length !== e.written.length) {
+      this.cancelEdgeMove();
+      return { ok: false, reason: "The file changed while the edge was moved. Try again." };
+    }
+    const values = [a.x, a.y, b.x, b.y];
+    const texts: (string | undefined)[] = e.written.map(() => undefined);
+    for (let k = 0; k < 4; k++) {
+      const { at, value } = e.coords[k];
+      const w = e.written[at];
+      const same = Math.abs(values[k] - value) <= 1e-9 * (1 + Math.abs(value));
+      if (!same && !w.source.literal) {
+        this.cancelEdgeMove();
+        return {
+          ok: false,
+          reason: `This edge's ${k % 2 ? "y" : "x"} is computed on ${this.where(w.source)} (\`${w.original.trim()}\`). Edit it there, or move the edge the other way.`,
+        };
+      }
+      // Unchanged coordinates keep their text exactly as written.
+      const text = same ? w.original : this.format(values[k], w.source.kind, w.original);
+      if (texts[at] !== undefined && texts[at] !== text) {
+        this.cancelEdgeMove();
+        return {
+          ok: false,
+          reason: `Both ends of this edge use the value on ${this.where(w.source)}, so it can't move that way. Edit it there.`,
+        };
+      }
+      texts[at] = text;
+    }
+    const edits = spans
+      .map((span, i) => ({ ...this.offsets(span), text: texts[i]! }))
+      .filter((edit) => this.doc.value.slice(edit.start, edit.end) !== edit.text);
+    this.edge = null;
+    this.doc.clearHighlight();
+    if (edits.length) this.doc.editOffsets(edits);
+    return { ok: true };
+  }
+
+  /** Put the edge down without writing anything. */
+  cancelEdgeMove(): void {
+    const e = this.edge;
+    if (!e) return;
+    this.edge = null;
+    e.doc.clearHighlight();
   }
 
   // ---------------------------------------------------------------- adding and removing points

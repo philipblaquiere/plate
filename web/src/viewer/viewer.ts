@@ -1,5 +1,15 @@
 import type { Element, Layout, Point, System, Units } from "../types";
 import { degrees, Lengths } from "./format";
+import {
+  edgeNormal,
+  isNoop,
+  movedPoints,
+  neighbours,
+  offsetEdge,
+  snapOffset,
+  translateEdge,
+  type EdgeMove,
+} from "./edgeMove";
 
 /**
  * A 2D drawing sheet: pan, zoom, grid with rulers, dimensions, hover inspection, a measure
@@ -83,6 +93,23 @@ interface Drawing {
   points: Point[];
 }
 
+/** An edge being dragged: a ghost of where it goes, written to the file on release. */
+interface EdgeDrag {
+  element: Element;
+  index: number;
+  /** The element's points as they were when the drag started. */
+  original: Point[];
+  /** Where the edge was picked up, on the edge (drawing units). */
+  grab: Point;
+  /** Where the pointer went down, on screen: a click doesn't move anything. */
+  down: { x: number; y: number };
+  pointerId: number;
+  moved: boolean;
+  move: EdgeMove | null;
+  /** An existing point the edge snapped to. */
+  snap: Point | null;
+}
+
 interface VertexDrag {
   element: Element;
   index: number;
@@ -122,6 +149,9 @@ export class Viewer {
   private snapPoint: Point | null = null;
   private pan: { x: number; y: number; tx: number; ty: number; moved: boolean } | null = null;
   private vertexDrag: VertexDrag | null = null;
+  private edgeDrag: EdgeDrag | null = null;
+  /** A layout that arrived during an edge drag, shown if the drag is cancelled. */
+  private pendingLayout: Layout | null | undefined = undefined;
   private drawing: Drawing | null = null;
   private spaceDown = false;
   private shiftDown = false;
@@ -136,6 +166,17 @@ export class Viewer {
   onStatus: (status: ViewerStatus) => void = () => {};
   /** A point of an element is being dragged. `point` is in drawing units. */
   onVertexDrag: (element: Element, index: number, point: Point, phase: DragPhase) => void = () => {};
+  /**
+   * An edge of the starting geometry is being dragged. `start` when it's picked up (the app can
+   * refuse with `abortEdgeDrag`), `end` with where it was dropped, `cancel` when nothing is to be
+   * written (Esc, a click, or a drop where the outline would be invalid: `move.problem` says why).
+   */
+  onEdgeDrag: (
+    element: Element,
+    index: number,
+    move: EdgeMove | null,
+    phase: Exclude<DragPhase, "move">,
+  ) => void = () => {};
   /** Double-click on an edge: insert a point after `index`. */
   onVertexInsert: (element: Element, index: number, point: Point) => void = () => {};
   /** Right-click (or Delete) on a point. */
@@ -168,6 +209,10 @@ export class Viewer {
     const first = !this.layout;
     // Keep the dragged element's local edits until the drag ends.
     if (this.vertexDrag) return;
+    if (this.edgeDrag) {
+      this.pendingLayout = layout;
+      return;
+    }
     this.layout = layout;
     this.hover = null;
     if (layout && (this.follow || first)) this.fit(!first);
@@ -274,6 +319,11 @@ export class Viewer {
     this.vertexDrag = null;
     this.root.classList.remove("is-dragging");
     this.request();
+  }
+
+  /** Abandon an edge drag the app can't write to the file. */
+  abortEdgeDrag(): void {
+    if (this.edgeDrag) this.finishEdgeDrag(false, false);
   }
 
   /** Move one point of the displayed geometry (an optimistic preview while dragging). */
@@ -418,7 +468,7 @@ export class Viewer {
       lengths: this.lengths,
       tool: this.tool,
       pxPerUnit: this.view.k,
-      snapStep: this.tool === "draw" || this.vertexDrag ? this.snapStep() : 0,
+      snapStep: this.tool === "draw" || this.vertexDrag || this.edgeDrag ? this.snapStep() : 0,
     });
   }
 
@@ -497,6 +547,32 @@ export class Viewer {
         this.onVertexDrag(element, index, p, "start");
         return;
       }
+      // Pick up an edge: a ghost shows where it goes until the button is released.
+      if (
+        e.button === 0 &&
+        this.tool === "select" &&
+        !this.spaceDown &&
+        this.hover?.type === "edge" &&
+        edgeMovable(this.hover.element)
+      ) {
+        e.preventDefault();
+        svg.setPointerCapture(e.pointerId);
+        const { element, index, a, b } = this.hover;
+        const at = local(e);
+        this.edgeDrag = {
+          element,
+          index,
+          original: element.points.map((p) => ({ ...p })),
+          grab: projectOnSegment(this.toWorld(at.x, at.y), a, b),
+          down: at,
+          pointerId: e.pointerId,
+          moved: false,
+          move: null,
+          snap: null,
+        };
+        this.root.classList.add("is-moving-edge");
+        return;
+      }
       const panning =
         e.button === 1 ||
         this.spaceDown ||
@@ -511,7 +587,15 @@ export class Viewer {
     svg.addEventListener("pointermove", (e) => {
       this.syncModifiers(e);
       const { x, y } = local(e);
-      if (this.vertexDrag) {
+      if (this.edgeDrag) {
+        const d = this.edgeDrag;
+        if (!d.moved && Math.hypot(x - d.down.x, y - d.down.y) > 3) {
+          // Picked up for real (not a click or a double-click): the app may refuse it here.
+          d.moved = true;
+          this.follow = false;
+          this.onEdgeDrag(d.element, d.index, null, "start");
+        }
+      } else if (this.vertexDrag) {
         const d = this.vertexDrag;
         const prev = d.element.points[(d.index - 1 + d.element.points.length) % d.element.points.length];
         const p = this.snapWorld(x, y, d.element.points.length > 1 ? prev : null, d);
@@ -535,11 +619,16 @@ export class Viewer {
         }
       }
       this.updateCursor(x, y);
+      this.updateEdgeGhost();
       this.request();
       this.emitStatus();
     });
 
     const end = (e: PointerEvent) => {
+      if (this.edgeDrag) {
+        this.finishEdgeDrag(e.type === "pointerup");
+        return;
+      }
       if (this.vertexDrag) {
         const d = this.vertexDrag;
         svg.releasePointerCapture(d.pointerId);
@@ -564,7 +653,7 @@ export class Viewer {
     svg.addEventListener("pointercancel", end);
 
     svg.addEventListener("pointerleave", () => {
-      if (this.pan || this.vertexDrag) return;
+      if (this.pan || this.vertexDrag || this.edgeDrag) return;
       this.cursor = null;
       this.screenCursor = null;
       this.hover = null;
@@ -626,6 +715,7 @@ export class Viewer {
       this.shiftDown = e.shiftKey;
       this.altDown = e.altKey;
       if (this.screenCursor) this.updateCursor(this.screenCursor.x, this.screenCursor.y);
+      this.updateEdgeGhost();
       this.request();
       this.emitStatus();
     }
@@ -647,6 +737,10 @@ export class Viewer {
           this.undoDrawPoint();
           return true;
       }
+    }
+    if (this.edgeDrag && e.key === "Escape") {
+      this.finishEdgeDrag(false);
+      return true;
     }
     if (this.vertexDrag && e.key === "Escape") {
       const d = this.vertexDrag;
@@ -783,10 +877,107 @@ export class Viewer {
     this.screenCursor = { x, y };
     const inSheet = x > RULER && y > RULER;
     this.cursor = inSheet ? this.toWorld(x, y) : null;
-    const busy = this.pan?.moved || this.vertexDrag || this.tool === "draw";
-    this.hover = inSheet && !busy ? this.hitTest(x, y) : this.vertexDrag ? this.hover : null;
+    const busy = this.pan?.moved || this.vertexDrag || this.edgeDrag || this.tool === "draw";
+    this.hover = inSheet && !busy ? this.hitTest(x, y) : this.vertexDrag || this.edgeDrag ? this.hover : null;
     this.snapPoint = this.tool === "measure" && inSheet ? this.measureSnap(x, y) : null;
     this.root.dataset.hover = this.hover?.type ?? "";
+    // The cursor says which way an edge can be pushed.
+    const h = this.hover;
+    this.root.dataset.edgeAxis =
+      h?.type !== "edge"
+        ? ""
+        : !edgeMovable(h.element)
+          ? "fixed"
+          : this.edgeDrag && this.shiftDown
+            ? "free"
+            : axisOf(h.a, h.b);
+  }
+
+  // ------------------------------------------------------------ moving an edge
+
+  /** Recompute the ghost from the cursor: a parallel move, or a free one with Shift. */
+  private updateEdgeGhost(): void {
+    const d = this.edgeDrag;
+    const c = this.screenCursor;
+    if (!d || !d.moved || !c) return;
+    const pts = d.original;
+    const j = (d.index + 1) % pts.length;
+    const [a, b] = [pts[d.index], pts[j]];
+    const w = this.toWorld(c.x, c.y);
+    const near = this.altDown ? null : this.nearPoint(c.x, c.y, d);
+    d.snap = near;
+    if (this.shiftDown) {
+      // Free: both ends follow the cursor. Snapping puts the nearer end on a point, or moves by
+      // whole grid steps.
+      let delta = { x: w.x - d.grab.x, y: w.y - d.grab.y };
+      if (near) {
+        const da = Math.hypot(a.x + delta.x - near.x, a.y + delta.y - near.y);
+        const db = Math.hypot(b.x + delta.x - near.x, b.y + delta.y - near.y);
+        const end = da <= db ? a : b;
+        delta = { x: near.x - end.x, y: near.y - end.y };
+      } else {
+        const step = this.snapStep();
+        if (step) delta = { x: Math.round(delta.x / step) * step, y: Math.round(delta.y / step) * step };
+      }
+      d.move = translateEdge(pts, d.element.closed, d.index, delta);
+      return;
+    }
+    // Parallel: only the distance square to the edge counts. A nearby point puts the edge's line
+    // through it; otherwise the grid.
+    const n = edgeNormal(a, b);
+    const offset = near
+      ? (near.x - a.x) * n.x + (near.y - a.y) * n.y
+      : snapOffset(a, b, (w.x - d.grab.x) * n.x + (w.y - d.grab.y) * n.y, this.snapStep());
+    d.move = offsetEdge(pts, d.element.closed, d.index, offset);
+  }
+
+  /** An existing point near screen (x, y) to snap the dragged edge to (not its own ends). */
+  private nearPoint(x: number, y: number, d: EdgeDrag): Point | null {
+    const j = (d.index + 1) % d.original.length;
+    let best: Point | null = null;
+    let bestD = SNAP;
+    for (const e of this.layout?.elements ?? []) {
+      if (e.kind !== "boundary" && e.kind !== "spine" && e.kind !== "space" && e.kind !== "slot") continue;
+      e.points.forEach((p, i) => {
+        if (e.id === d.element.id && (i === d.index || i === j)) return;
+        const s = this.toScreen(p);
+        const dist = Math.hypot(s.x - x, s.y - y);
+        if (dist < bestD) {
+          best = p;
+          bestD = dist;
+        }
+      });
+    }
+    return best;
+  }
+
+  /**
+   * End an edge drag. `commit`: write where it was dropped (when it moved, and the outline is
+   * valid). `report`: tell the app (not when the app itself aborted the drag).
+   */
+  private finishEdgeDrag(commit: boolean, report = true): void {
+    const d = this.edgeDrag;
+    if (!d) return;
+    this.svg.releasePointerCapture?.(d.pointerId);
+    this.edgeDrag = null;
+    this.root.classList.remove("is-moving-edge");
+    const m = d.move;
+    const write = commit && d.moved && m && !m.problem && !isNoop(d.original, d.index, m);
+    report &&= d.moved; // the app only hears about drags it saw start
+    const pending = this.pendingLayout;
+    this.pendingLayout = undefined;
+    if (write) {
+      // Show it where it was dropped until the new solve comes back.
+      const moved = movedPoints(d.original, d.index, m);
+      d.element.points.splice(0, d.element.points.length, ...moved);
+      if (report) this.onEdgeDrag(d.element, d.index, m, "end");
+    } else {
+      if (report) this.onEdgeDrag(d.element, d.index, commit && d.moved ? m : null, "cancel");
+      if (pending !== undefined) this.setLayout(pending);
+    }
+    if (this.screenCursor) this.updateCursor(this.screenCursor.x, this.screenCursor.y);
+    this.request();
+    this.emitStatus();
   }
 
   private hitTest(x: number, y: number): Hover {
@@ -896,6 +1087,7 @@ export class Viewer {
       this.renderElements(sheet);
       if (this.showDimensions) this.renderDimensions(sheet);
       this.renderHover(sheet);
+      if (this.edgeDrag) this.renderEdgeGhost(sheet);
     }
     if (this.drawing) this.renderDrawing(sheet);
     if (this.tool === "measure") this.renderMeasure(sheet);
@@ -1223,6 +1415,8 @@ export class Viewer {
   private renderDimensions(parent: SVGElement): void {
     const g = el("g", { class: "dims" }, parent);
     for (const element of this.layout!.elements.filter(framing)) {
+      // While an edge is being moved its ghost carries the dimensions.
+      if (this.edgeDrag?.moved && this.edgeDrag.element === element) continue;
       const flip = element.closed && signedArea(element.points) < 0;
       for (const [a, b] of edgesOf(element)) this.drawDimension(g, a, b, false, flip);
       if (element.kind === "origin") this.originLabel(g, element.points[0]);
@@ -1318,7 +1512,7 @@ export class Viewer {
           p: this.vertexDrag.element.points[this.vertexDrag.index],
         }
       : this.hover;
-    if (!h || this.pan?.moved) return;
+    if (!h || this.pan?.moved || this.edgeDrag?.moved) return;
     const g = el("g", { class: "hover" }, parent);
     if (h.type === "space") {
       const info = h.element.space!;
@@ -1380,6 +1574,76 @@ export class Viewer {
       }
       const p = this.toScreen(h.p);
       el("rect", { x: p.x - 5, y: p.y - 5, width: 10, height: 10, class: "grip grip-hot" }, g);
+    }
+  }
+
+  /**
+   * An edge being moved: the outline as it would be, dashed, with the moved edge in redline, live
+   * dimensions, and how far it went. The real geometry stays as it is until the button is
+   * released.
+   */
+  private renderEdgeGhost(parent: SVGElement): void {
+    const d = this.edgeDrag!;
+    const m = d.move;
+    if (!d.moved || !m) return;
+    const pts = d.original;
+    const n = pts.length;
+    const closed = d.element.closed;
+    const j = (d.index + 1) % n;
+    const g = el("g", { class: m.problem ? "ghost is-invalid" : "ghost" }, parent);
+
+    // Where it was.
+    const [oa, ob] = [this.toScreen(pts[d.index]), this.toScreen(pts[j])];
+    el("path", { d: `M${oa.x},${oa.y}L${ob.x},${ob.y}`, class: "ghost-from" }, g);
+
+    // Where it goes: the whole outline, then the edge itself.
+    const moved = movedPoints(pts, d.index, m);
+    const screen = moved.map((p) => this.toScreen(p));
+    if (closed) el("path", { d: pathOf(screen, true), class: "ghost-face" }, g);
+    el("path", { d: pathOf(screen, closed), class: "ghost-outline" }, g);
+    const [na, nb] = [this.toScreen(m.a), this.toScreen(m.b)];
+    el("path", { d: `M${na.x},${na.y}L${nb.x},${nb.y}`, class: "ghost-edge" }, g);
+
+    // Dimensions of the outline as it would be; the edges that change are emphasised.
+    const { prev, next } = neighbours(pts, closed, d.index);
+    const changed = new Set([d.index, prev, next === null ? null : j].filter((i) => i !== null));
+    const flip = closed && signedArea(moved) < 0;
+    edgesOf({ ...d.element, points: moved }).forEach(([p, q], i) => {
+      if (changed.has(i) || this.showDimensions) this.drawDimension(g, p, q, changed.has(i), flip);
+    });
+
+    // How far: from the middle of the old edge to the new one.
+    const [f, t] = [this.toScreen(m.from), this.toScreen(m.to)];
+    const len = Math.hypot(t.x - f.x, t.y - f.y);
+    if (len > 6) {
+      const [ux, uy] = [(t.x - f.x) / len, (t.y - f.y) / len];
+      el("path", { d: `M${f.x},${f.y}L${t.x},${t.y}`, class: "ghost-offset" }, g);
+      el(
+        "path",
+        {
+          d: `M${t.x},${t.y}L${t.x - ux * 8 - uy * 4},${t.y - uy * 8 + ux * 4}L${t.x - ux * 8 + uy * 4},${t.y - uy * 8 - ux * 4}Z`,
+          class: "ghost-arrow",
+        },
+        g,
+      );
+      el("circle", { cx: f.x, cy: f.y, r: 2.5, class: "ghost-arrow" }, g);
+      const label = this.lengths.length(Math.hypot(m.to.x - m.from.x, m.to.y - m.from.y), true);
+      const w = label.length * 7.4 + 14;
+      // Beside the arrow, not on it.
+      const [mx, my] = [(f.x + t.x) / 2 - uy * (w / 2 + 6), (f.y + t.y) / 2 + ux * 14];
+      el("rect", { x: mx - w / 2, y: my - 10, width: w, height: 20, rx: 3, class: "ghost-tag" }, g);
+      const text = el(
+        "text",
+        { x: mx, y: my, class: "ghost-text", "text-anchor": "middle", "dominant-baseline": "middle" },
+        g,
+      );
+      text.textContent = label;
+    }
+    for (const p of [na, nb])
+      el("rect", { x: p.x - 4, y: p.y - 4, width: 8, height: 8, class: "ghost-grip" }, g);
+    if (d.snap) {
+      const s = this.toScreen(d.snap);
+      el("rect", { x: s.x - 6, y: s.y - 6, width: 12, height: 12, class: "snap" }, g);
     }
   }
 
@@ -1527,6 +1791,48 @@ export class Viewer {
     u.textContent = this.lengths.rulerUnit;
   }
 
+  /** The tooltip while an edge is moved: how far, which way, and what it does to the outline. */
+  private edgeGhostCard(d: EdgeDrag, m: EdgeMove): string {
+    const L = this.lengths;
+    const len = (v: number) => L.length(v, true);
+    const xy = (p: Point) => `${L.length(p.x)}, ${L.length(p.y)}`;
+    const pts = d.original;
+    const closed = d.element.closed;
+    const n = closed ? pts.length : pts.length - 1;
+    const what = d.element.kind === "spine" ? "spine segment" : "edge";
+    const j = (d.index + 1) % pts.length;
+    const rows: [string, string][] = [];
+    if (m.free) {
+      rows.push(["Δx", len(m.to.x - m.from.x)], ["Δy", len(m.to.y - m.from.y)]);
+    } else if (closed && Math.abs(m.offset) > 0) {
+      // The left normal points inward on a counter-clockwise outline.
+      const outward = m.offset * (signedArea(pts) > 0 ? -1 : 1) > 0;
+      rows.push(["Direction", outward ? "outward" : "inward"]);
+    }
+    const before = Math.hypot(pts[j].x - pts[d.index].x, pts[j].y - pts[d.index].y);
+    const after = Math.hypot(m.b.x - m.a.x, m.b.y - m.a.y);
+    rows.push(["Length", Math.abs(after - before) < 1e-9 ? len(after) : `${len(before)} → ${len(after)}`]);
+    rows.push(["From", xy(m.a)], ["To", xy(m.b)]);
+    if (closed) {
+      const a0 = Math.abs(signedArea(pts));
+      const a1 = Math.abs(signedArea(movedPoints(pts, d.index, m)));
+      const diff = a1 - a0;
+      const sign = diff > 0 ? "+" : diff < 0 ? "−" : "±";
+      rows.push(["Area", `${L.area(a1)} (${sign}${L.area(Math.abs(diff))})`]);
+    }
+    const hint =
+      m.problem ??
+      (m.free
+        ? "Release Shift to keep it parallel · Alt: no snap · Esc: cancel"
+        : "Shift: move freely · Alt: no snap · Esc: cancel");
+    return card(
+      `Moving ${what} ${d.index + 1} of ${n}`,
+      len(Math.hypot(m.to.x - m.from.x, m.to.y - m.from.y)),
+      rows,
+      hint,
+    );
+  }
+
   private renderTooltip(): void {
     const tip = this.tooltip;
     const pos = this.screenCursor;
@@ -1543,7 +1849,9 @@ export class Viewer {
       : this.hover;
 
     let html = "";
-    if (this.drawing && pos) {
+    if (this.edgeDrag?.moved && this.edgeDrag.move && pos) {
+      html = this.edgeGhostCard(this.edgeDrag, this.edgeDrag.move);
+    } else if (this.drawing && pos) {
       const d = this.drawing;
       const last = d.points[d.points.length - 1];
       const next = this.snapWorld(pos.x, pos.y, last ?? null);
@@ -1591,7 +1899,9 @@ export class Viewer {
         `${what} ${h.index + 1} of ${n}`,
         len(Math.hypot(h.b.x - h.a.x, h.b.y - h.a.y)),
         rows,
-        boundary ? "Double-click to add a point, right-click to set its port" : "Double-click to add a point",
+        boundary
+          ? "Drag to move, double-click to add a point, right-click to set its port"
+          : "Drag to move, double-click to add a point",
       );
     } else if (h?.type === "space") {
       const info = h.element.space!;
@@ -1685,6 +1995,7 @@ export class Viewer {
       tip.hidden = true;
       return;
     }
+    tip.classList.toggle("tip-invalid", !!this.edgeDrag?.move?.problem);
     tip.innerHTML = html;
     tip.hidden = false;
     const tw = tip.offsetWidth;
@@ -1698,6 +2009,19 @@ export class Viewer {
 }
 
 // ---------------------------------------------------------------- helpers
+
+/** Edges that can be dragged: those of the boundary or spine (a preview slot resizes by corners). */
+function edgeMovable(e: Element): boolean {
+  return editable(e) && e.kind !== "slot" && e.points.length >= 2;
+}
+
+/** Which way a parallel move goes, for the cursor: across a horizontal or vertical edge. */
+function axisOf(a: Point, b: Point): string {
+  const [dx, dy] = [Math.abs(b.x - a.x), Math.abs(b.y - a.y)];
+  if (dy <= dx * 1e-6) return "ns";
+  if (dx <= dy * 1e-6) return "ew";
+  return "diagonal";
+}
 
 /** Round away floating-point noise (e.g. 0.30000000000000004). */
 function tidy(v: number): number {
