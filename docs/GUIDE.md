@@ -85,6 +85,12 @@ The drawing and the file stay in step both ways:
   highlighted, and the whole drag is one undo step (`Ctrl+Z` in the editor). `Esc` cancels.
   If a coordinate comes from a `let` binding, the binding is rewritten. If it's computed
   (`w - 12`), the drag is refused and you're pointed at the line.
+- **Drag an edge** to move the whole wall. While the button is down a ghost shows the outline as
+  it would be, with its dimensions, how far the edge moved and the new area; the file is only
+  written when you let go, as one undo step. The edge stays parallel and its ends slide along the
+  edges beside it, so on a rectangular plate it's a straight push or pull. `Shift` moves it
+  freely, `Alt` turns off snapping, `Esc` cancels. A drop that would make the outline cross
+  itself or turn inside out is refused.
 - **Double-click an edge** to add a point there; **right-click a point** (or hover it and press
   `Delete`) to remove it. The `points` list is edited in place.
 - **Edit the coordinates** in the file and the drawing follows.

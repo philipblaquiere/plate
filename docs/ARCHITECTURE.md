@@ -157,7 +157,7 @@ Every value Nickel produces keeps the position of the text it came from. After e
 span, plus whether that text is a plain literal (`30`, `"98'-6"`, `[x, y]`) or an expression.
 The browser gets it with every evaluation.
 
-The viewer reports edits in drawing units (point dragged, inserted, removed), and
+The viewer reports edits in drawing units (point dragged, edge moved, point inserted or removed), and
 `web/src/editor/geometryEdits.ts` turns them into text edits:
 
 - **Moving a point** looks up `/start/points/<i>/0` and `/1`. If both are literals, their spans
@@ -165,6 +165,11 @@ The viewer reports edits in drawing units (point dragged, inserted, removed), an
   or a length string in its original unit), as one undo step. Because positions follow `let`
   bindings, a coordinate defined once at the top of the file is rewritten there. Expressions are
   refused with a pointer to their line.
+- **Moving an edge** is previewed in the viewer only (a ghost; the geometry is in
+  `web/src/viewer/edgeMove.ts`, pure and tested). On release both ends' four coordinates are
+  rewritten as one undo step. A span shared by two coordinates (a `let` used by both ends) is
+  written once, and refused if the move needs it to take two values; an expression only stops
+  the move if the move would change it.
 - **Inserting / removing a point** edits the `points` array literal in place, keeping its layout
   (one point per line, or inline).
 
