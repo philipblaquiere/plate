@@ -94,13 +94,27 @@ The wasm build takes about 2 minutes from cold; give it a long timeout. The dev 
 - **Monaco models can't be renamed.** A renamed file gets a new `TextDoc`; the store emits
   `{ list, renamed }` and the workbench moves tabs. Don't rename by mutating paths in place.
 - **Symbols are view-only.** `Space.symbol` is `skip_serializing` (out of the fingerprint, like
-  `preview`), so the solve cache key adds `symbols_key` instead. Don't fold symbols into the
+  `preview`), so the solve cache key adds `view_key` instead. Don't fold symbols into the
   fingerprint: choosing a drawing would re-seed the solve and move everything.
 - **The symbol catalog is two lists.** `schema/symbols.json` and the schema's `Symbol` enum must
   name the same symbols; tests in `plate-config` and `web/src/symbols.test.ts` check it.
 - **Plan fingerprints.** A plan's fingerprint (its serialised form) picks the seed of its
   solve. `Plan.preview` is `skip_serializing` so editing a preview never changes a solution;
   keep any other view-only field out of the fingerprint the same way.
+- **Services never move a wall.** A service's `place`, `connect`, `parts` and `params` are
+  `skip_serializing` (out of the fingerprint) and go into `view_key`; only `scope` and `claims`
+  change a solve. `Service::full()` serialises everything when you need it all. A new field that
+  only affects where parts go belongs in the first group.
+- **Claims and pointers.** Rules and spaces a service claims are merged into plans in
+  `solve/context.rs`; their pointers are absolute (`@/services/power/claims/rules/0`) and must
+  stay so through `under()`. Strip the `@` with `resolved()` before anything leaves the solver.
+- **Library files are told by shape.** No `start` and no plan fields: a file with any of
+  `parts`/`place`/`connect`/`claims`/`params` is a service; a record whose every entry has
+  `thickness` or `layers` is a set of assemblies (`FileKind::of`, and `by_shape` in the schema
+  prelude for the contract). A service file can't be a Nickel function (it couldn't be exported
+  to JSON): parameterise with `params` and merge (`(import "power.ncl") & (import "codes/nec.ncl")`).
+- **The schema isn't prettier-managed.** `schema/plate.schema.json` and `schema/symbols.json` keep
+  their own formatting (`json.dump(..., indent=2)` style); don't run prettier on them.
 - **Annealing tests.** The grid engine is stochastic per seed; tests that assert quality try a
   few seeds rather than one.
 - **Tuning an example.** Sweep seeds before blaming a file: `plate check f.ncl --seed N` for N in
@@ -122,6 +136,8 @@ The wasm build takes about 2 minutes from cold; give it a long timeout. The dev 
   text scan) and walks the schema; `insert.ts` places inserts. All pure and tested except
   `panel.ts`.
 - `plates.ts`: plate vs plan (`start =`), import graph, import rewriting on moves. Pure, tested.
+- `services.ts`: which service an element belongs to, the views bar's chips and their counts.
+  `library.ts`: the card for a service or assemblies file opened on its own. Pure, tested.
 - `symbols.ts`: the symbol catalog (`schema/symbols.json`) for the reference gallery and the
   drawing's right-click suggestions. Pure, tested. The engine draws placed symbols itself.
 - `preview.ts`: plan previews (a plan file drawn on its own in a slot): its cases, a plate's slot

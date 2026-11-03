@@ -44,6 +44,12 @@ pub enum ElementKind {
     /// Floor that no space covers (closed polygon, maybe with `holes`): what keeps a solution
     /// from being perfect.
     Leftover,
+    /// A built wall: its footprint (closed polygon), and what it's built as (`wall`).
+    Wall,
+    /// A part a service placed (`part`): its footprint, drawn with its symbol.
+    Part,
+    /// A run of a service's network (`run`): an open polyline.
+    Run,
 }
 
 impl ElementKind {
@@ -61,6 +67,9 @@ impl ElementKind {
             ElementKind::Clearance => "PLATE-CLEARANCE",
             ElementKind::Symbol => "PLATE-SYMBOL",
             ElementKind::Leftover => "PLATE-LEFTOVER",
+            ElementKind::Wall => "PLATE-WALL",
+            ElementKind::Part => "PLATE-PART",
+            ElementKind::Run => "PLATE-RUN",
         }
     }
 }
@@ -119,6 +128,89 @@ pub struct SpaceInfo {
     /// a symbol can't be fitted to a shape that isn't a rectangle.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tone: Option<crate::symbols::Tone>,
+    /// Its tags (`tags`).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
+    /// Floor area to its walls' centrelines, when walls take some of it (its own `area` is
+    /// then the clear floor).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gross: Option<f64>,
+}
+
+/// What a wall is built as.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WallInfo {
+    pub assembly: String,
+    pub label: String,
+    pub thickness: f64,
+    pub cavity: f64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fire: Option<f64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub acoustic: Option<f64>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub bearing: bool,
+    /// Its build-up, from one face to the other.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub layers: Vec<LayerInfo>,
+    pub pattern: &'static str,
+    /// The port roles either side sees.
+    pub roles: Vec<String>,
+    /// The spaces either side; one may be a port role such as `'facade`.
+    pub between: Vec<String>,
+    /// Why it's built so: the assemblies its roles call for, the rules that ask for more.
+    pub because: String,
+    /// Its centreline.
+    pub line: [Point; 2],
+    /// The CAD layer the assembly asks for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layer: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct LayerInfo {
+    pub material: String,
+    pub thickness: f64,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub cavity: bool,
+}
+
+/// A part a service placed.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PartInfo {
+    pub service: String,
+    pub part: String,
+    pub label: String,
+    pub mount: &'static str,
+    /// Height above the floor (wall parts).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub above: Option<f64>,
+    /// The space it serves.
+    pub space: String,
+    /// How it got there, in words: "every 3.6 along the walls of #room".
+    pub placed: String,
+    /// The group of its network it's in (a circuit), once connected.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// Where it stands: the middle of its wall side, or of its footprint.
+    pub at: Point,
+}
+
+/// A run of a network.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct RunInfo {
+    pub service: String,
+    pub network: String,
+    /// The group it serves (`C1`), if the network has groups.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub group: Option<String>,
+    /// The last leg back to the source: drawn with an arrow.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub home: bool,
+    pub draw: &'static str,
 }
 
 /// A symbol drawn in a space.
@@ -147,6 +239,10 @@ pub struct SlotInfo {
     pub unique: Option<String>,
     /// Fingerprint of the plan as the plate used it.
     pub plan: String,
+    /// What the plate gave the plan besides its slot: the assemblies and services it inherits,
+    /// and the space it's in (for claims), so the plan opened on its own solves the same.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub context: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -162,6 +258,9 @@ pub struct OpeningInfo {
     /// Full names of the spaces on each side; one side may be a port role such as `'facade`.
     pub between: Vec<String>,
     pub width: f64,
+    /// The thickness of the wall it's in, if walls are built.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub depth: Option<f64>,
 }
 
 /// A piece of geometry. Points keep the order they have in the configuration, so the editor can
@@ -198,6 +297,12 @@ pub struct Element {
     /// Where its label goes, for a shape whose middle may be outside it (a fill, floor left over).
     #[serde(rename = "labelAt", skip_serializing_if = "Option::is_none")]
     pub label_at: Option<Point>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wall: Option<WallInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub part: Option<PartInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub run: Option<RunInfo>,
 }
 
 impl Element {
@@ -217,6 +322,9 @@ impl Element {
             symbol: None,
             holes: Vec::new(),
             label_at: None,
+            wall: None,
+            part: None,
+            run: None,
         }
     }
 
@@ -254,6 +362,22 @@ impl Element {
     pub fn with_source(mut self, pointer: impl Into<String>) -> Self {
         self.source = Some(pointer.into());
         self
+    }
+
+    /// The CAD layer it's exported on: its kind's, or for a wall its assembly's (`A-WALL-…`), for
+    /// a service's parts and runs the service's (`PLATE-POWER`, `PLATE-POWER-RUN`).
+    pub fn cad_layer(&self) -> String {
+        let upper = |s: &str| s.to_uppercase().replace(['_', ' ', '.'], "-");
+        if let Some(w) = &self.wall {
+            return w.layer.clone().unwrap_or_else(|| format!("A-WALL-{}", upper(&w.assembly)));
+        }
+        if let Some(p) = &self.part {
+            return format!("PLATE-{}", upper(&p.service));
+        }
+        if let Some(r) = &self.run {
+            return format!("PLATE-{}-RUN", upper(&r.service));
+        }
+        self.layer.to_owned()
     }
 }
 

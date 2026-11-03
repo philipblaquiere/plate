@@ -186,6 +186,49 @@ fn print_diagnostics(path: &str, root: &std::path::Path, diagnostics: &[Diagnost
 
 fn check(args: &[String]) -> Result<(), String> {
     let path = args.first().ok_or_else(|| USAGE.to_owned())?;
+    // A library (a service, a set of assemblies) is checked, not drawn.
+    let Files { main, files, .. } = with_siblings(path)?;
+    if let Ok((_, ev)) = plate_config::check_files(plate_config::Workspace { main: &main, files: &files }) {
+        let name = main.rsplit('/').next().unwrap_or(&main).trim_end_matches(".ncl");
+        let len = |k: &str| {
+            ev.value
+                .get(k)
+                .map_or(0, |v| v.as_object().map_or_else(|| v.as_array().map_or(0, Vec::len), |o| o.len()))
+        };
+        match ev.kind {
+            plate_config::schema::FileKind::Service
+                if ev.value.as_object().is_some_and(|o| o.keys().all(|k| k == "params" || k == "label")) =>
+            {
+                let names: Vec<&String> =
+                    ev.value["params"].as_object().map(|o| o.keys().collect()).unwrap_or_default();
+                println!(
+                    "ok: numbers for a service in \"{name}\": {}",
+                    names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                );
+                return Ok(());
+            }
+            plate_config::schema::FileKind::Service => {
+                println!(
+                    "ok: service \"{name}\": {} parts, {} placements, {} networks",
+                    len("parts"),
+                    len("place"),
+                    len("connect")
+                );
+                return Ok(());
+            }
+            plate_config::schema::FileKind::Assemblies => {
+                let names: Vec<&String> =
+                    ev.value.as_object().map(|o| o.keys().collect()).unwrap_or_default();
+                println!(
+                    "ok: {} assemblies in \"{name}\": {}",
+                    names.len(),
+                    names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+                );
+                return Ok(());
+            }
+            _ => {}
+        }
+    }
     match run_file(path, args).map_err(|e| vec![plate_core::Diagnostic::error(e)]) {
         Ok((solved, root)) => {
             use plate_core::layout::ElementKind;

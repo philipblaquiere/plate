@@ -485,6 +485,7 @@ function fromText(text: string, offset: number, ref: Reference): Path | undefine
   };
   const helperValue = (name: string): unknown => {
     const h: Helper | undefined = ref.helperByName.get(name);
+    if (h?.places.length) return { place: h.places[0] };
     if (!h?.rules.length) return undefined;
     return h.list ? h.rules.map((rule) => ({ rule })) : { rule: h.rules[0] };
   };

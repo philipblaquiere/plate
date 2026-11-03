@@ -10,11 +10,13 @@
 //! Nothing in this crate knows about Nickel, HTTP or file formats, which keeps
 //! it usable from a server, a CLI, or a future WebAssembly build.
 
+pub mod assembly;
 pub mod config;
 pub mod diagnostic;
 pub mod geometry;
 pub mod layout;
 pub mod plan;
+pub mod service;
 pub mod solve;
 pub mod solver;
 pub mod symbols;

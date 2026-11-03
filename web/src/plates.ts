@@ -13,6 +13,18 @@ export function isPlan(source: string): boolean {
   return !isPlate(source) && /^[\s{]*(spaces|needs|preview)\s*[=.|]/m.test(source);
 }
 
+/**
+ * Is this file a library of the engine's own kinds: a service (it has a service's fields at the
+ * top) or a set of assemblies (wall types, each with a thickness or layers)? Such a file is
+ * checked and described on its own, though there's nothing to draw.
+ */
+export function libraryKind(source: string): "service" | "assemblies" | null {
+  if (isPlate(source) || isPlan(source)) return null;
+  if (/^[\s{]*(parts|place|connect|claims|scope|params)\s*[=.|]/m.test(source)) return "service";
+  if (/^\s*[a-z_][a-z0-9_]*\s*=\s*\{[^]*?\b(thickness|layers)\s*=/m.test(source)) return "assemblies";
+  return null;
+}
+
 /** The plates that import `path`, directly or not. */
 export function importersOf(path: string, files: Record<string, string>): string[] {
   return Object.keys(files)

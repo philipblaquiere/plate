@@ -1,6 +1,6 @@
 import { createCodeEditor, type CodeEditor, type EditorCommands, type ViewState } from "./editor/editor";
 import { openMenu } from "./menu";
-import { importPath } from "./plates";
+import { importPath, libraryKind } from "./plates";
 import { SideBar, type SideState } from "./sidebar";
 import { isPlan, isPlate, type WorkspaceStore } from "./workspace";
 
@@ -259,7 +259,7 @@ export class Workbench {
   /** "Show in the drawing" for a plate or a plan that isn't shown. */
   showItems(path: string): { label: string; action: () => void }[] {
     const text = this.store.get(path)?.text.value ?? "";
-    if (this.mainPath === path || !(isPlate(text) || isPlan(text))) return [];
+    if (this.mainPath === path || !(isPlate(text) || isPlan(text) || libraryKind(text))) return [];
     return [{ label: "Show in the drawing", action: () => this.events.onShowPlate(path) }];
   }
 
@@ -615,7 +615,11 @@ class Explorer {
       ? `${path}: a plate (it has a start)`
       : isPlan(this.store.get(path)?.text.value ?? "")
         ? `${path}: a plan, shown on its own in its preview slot`
-        : `${path}: a library to import`;
+        : libraryKind(this.store.get(path)?.text.value ?? "") === "service"
+          ? `${path}: a service, for a plate's services`
+          : libraryKind(this.store.get(path)?.text.value ?? "") === "assemblies"
+            ? `${path}: assemblies, for a plate's assemblies`
+            : `${path}: a library to import`;
     row.innerHTML = `<span class="ex-icon" aria-hidden="true"></span><span class="ex-name"></span><span class="ex-dot" aria-hidden="true"></span>`;
     row.querySelector(".ex-name")!.textContent = path.split("/").pop()!;
     row.addEventListener("click", () => this.bench.open(path));

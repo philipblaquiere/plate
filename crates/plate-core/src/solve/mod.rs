@@ -15,28 +15,38 @@
 //! - **Diagnostics.** Rules and sizes that can't be met come back as warnings that point at the
 //!   rule or space in the file (a JSON pointer, mapped to the text by the editor).
 
+pub mod build;
+#[cfg(test)]
+mod built_tests;
 mod common;
+pub mod connect;
+pub mod context;
+pub mod fit;
 pub mod frame;
 mod grid;
 pub mod outline;
 pub mod ports;
 mod spine;
 
-use std::collections::HashMap;
-use std::sync::{Mutex, OnceLock};
+use std::collections::{BTreeMap, HashMap};
+use std::sync::{Arc, Mutex, OnceLock};
 
-use self::common::{hash64, num};
+use self::common::hash64;
+pub use self::common::num;
 use self::frame::{Rect, Transform};
 use self::ports::PortSeg;
 use serde::Deserialize;
 
+use self::context::{origin, resolved, under, Within};
 use crate::config::{Config, Start};
 use crate::diagnostic::{Code, Diagnostic};
 use crate::geometry::Point;
 use crate::layout::{
-    Element, ElementKind, Layout, OpeningInfo, PortInfo, Report, SlotInfo, SpaceInfo, Status, SymbolInfo,
+    Element, ElementKind, LayerInfo, Layout, OpeningInfo, PortInfo, Report, SlotInfo, SpaceInfo, Status,
+    SymbolInfo, WallInfo,
 };
 use crate::plan::{bounds, role_matches, Engine, Plan, PortNeed, Previews, Rule, SidePorts, SpaceKind};
+use crate::service::Service;
 use crate::units::{System, Units};
 
 /// What one level is solved inside, in that level's own frame.
@@ -61,8 +71,10 @@ pub struct Ctx<'a> {
     /// seed) is only spent while this is under [`WORK_LIMIT`]. Counted, not timed, so the same
     /// file always gets the same effort and the same answer.
     pub work: std::sync::Arc<std::sync::atomic::AtomicU64>,
-    #[allow(dead_code)]
+    /// The plan's absolute pointer in the configuration ("" at the root).
     pub plan_pointer: &'a str,
+    /// The top level of a plate: it builds the walls on the plate's boundary too.
+    pub root: bool,
 }
 
 /// Moves the extra effort of a solve may take it up to (see [`Ctx::work`]).
@@ -164,6 +176,25 @@ struct Sub {
     /// Moves it took to solve (counted again when it comes from the cache, so a solve spends
     /// the same effort whatever is cached).
     work: u64,
+    walls: Vec<SubWall>,
+    /// The levels that declare services, for the passes that place and connect their parts.
+    services: Vec<ServiceLevel>,
+}
+
+#[derive(Debug, Clone)]
+struct SubWall {
+    path: String,
+    polygon: Vec<Point>,
+    info: WallInfo,
+    source: String,
+}
+
+/// A level that declares services: the path of the spaces it placed (`flat_2.`), and the
+/// services in effect there (its own and those it inherits).
+#[derive(Debug, Clone)]
+pub struct ServiceLevel {
+    pub prefix: String,
+    pub services: Arc<BTreeMap<String, Service>>,
 }
 
 #[derive(Debug, Clone)]
@@ -197,6 +228,8 @@ struct SubSpace {
     /// Fixtures: the fixture with its clearance.
     clearance: Option<Vec<Point>>,
     holes: Vec<Vec<Point>>,
+    /// What its walls leave of it, when they take some: drawn instead of `polygon`.
+    clear: Option<(Vec<Point>, Vec<Vec<Point>>)>,
 }
 
 #[derive(Debug, Clone)]
@@ -373,15 +406,19 @@ fn solve_plate(config: &Config, start: &Start) -> Solution {
             }
         };
         let mut host = Host::new(units, config.system, config.seed);
+        let (plan, _) = context::prepare(&plan, None, None, "");
         let ctx = Ctx {
             units,
             grid,
             seed: hash64(&[&config.seed.to_string(), "root"]),
             work: host.work.clone(),
             plan_pointer: "",
+            root: true,
         };
         let sub = host.solve_plan(&plan, &slot, &ctx);
+        let levels = sub.services.clone();
         let (leftover, spaces) = host.finish(sub, &world, &mut elements, &mut diagnostics);
+        fit::run(&levels, units, &mut elements, &mut diagnostics);
         let floor = match start {
             Start::Boundary { .. } => crate::geometry::signed_area(&points).abs(),
             Start::Spine { .. } => 0.0,
@@ -419,6 +456,10 @@ fn solve_preview(config: &Config, view: &View) -> Solution {
         label: String,
     }
     let mut diagnostics = Vec::new();
+    let plan = match view {
+        View::Slot(SlotInfo { context: Some(c), .. }) => context_plan(&plan, c),
+        _ => context::prepare(&plan, None, None, "").0,
+    };
     let setup = match view {
         View::Slot(s) => {
             if s.plan != format!("{:016x}", plan.fingerprint()) {
@@ -506,7 +547,18 @@ fn solve_preview(config: &Config, view: &View) -> Solution {
     }
 
     let mut host = Host::new(units, setup.system, setup.seed);
-    let child = host.solve_child(&plan, setup.w, setup.h, &setup.sides, true, setup.unique.as_deref(), grid);
+    let child = host.solve_child(
+        &plan,
+        setup.w,
+        setup.h,
+        &setup.sides,
+        true,
+        setup.unique.as_deref(),
+        grid,
+        "",
+        None,
+    );
+    let mut levels = Vec::new();
     let (leftover, spaces) = match child.outcome {
         Err((pointer, message)) => {
             let label = setup.label;
@@ -518,8 +570,16 @@ fn solve_preview(config: &Config, view: &View) -> Solution {
             );
             (0.0, 0)
         }
-        Ok((sub, _)) => host.finish(sub, &child.canon.inverse(), &mut elements, &mut diagnostics),
+        Ok((sub, _)) => {
+            levels = sub
+                .services
+                .iter()
+                .map(|l| ServiceLevel { prefix: l.prefix.clone(), services: l.services.clone() })
+                .collect();
+            host.finish(sub, &child.canon.inverse(), &mut elements, &mut diagnostics)
+        }
     };
+    fit::run(&levels, units, &mut elements, &mut diagnostics);
     let report = report(&diagnostics, leftover, setup.w * setup.h, spaces);
     Solution { layout: Layout::new(config.name.clone(), setup.system, units, elements), diagnostics, report }
 }
@@ -642,6 +702,8 @@ impl Host {
         mirror: bool,
         unique: Option<&str>,
         grid: f64,
+        abs: &str,
+        context: Option<serde_json::Value>,
     ) -> Child {
         let mm = self.units.to_mm();
         let (canon, cw, ch) = canonical(w, h, ports, mirror, mm);
@@ -656,6 +718,7 @@ impl Host {
             grid,
             unique: unique.map(str::to_owned),
             plan: format!("{:016x}", child.fingerprint()),
+            context,
         };
         if let Err(e) = check_needs(child, cw, ch, &ports, self.units) {
             return Child { canon, slot, outcome: Err(e) };
@@ -673,7 +736,7 @@ impl Host {
             holes: Vec::new(),
         };
         // Symbols don't change a solution (nor its seed or typical), but the cached copy draws them.
-        let cache_key = format!("{key}|{}", symbols_key(child));
+        let cache_key = format!("{key}|{}", view_key(child));
         let shared_key = format!("{cache_key}|{:?}|{grid}|{}", self.units, self.root_seed);
         let remembered = self
             .cache
@@ -691,7 +754,8 @@ impl Host {
                     grid,
                     seed: hash64(&[&self.root_seed.to_string(), &key]),
                     work: self.work.clone(),
-                    plan_pointer: "",
+                    plan_pointer: abs,
+                    root: false,
                 };
                 let before = self.work.load(std::sync::atomic::Ordering::Relaxed);
                 let mut s = self.solve_plan(child, &child_slot, &child_ctx);
@@ -732,16 +796,19 @@ impl Host {
         let spaces = sub.spaces.len();
         for s in sub.spaces {
             let mut info = s.info;
+            info.plan = resolved(&info.plan);
             info.typical = s.typical_key.as_ref().and_then(|k| letters.get(k).cloned());
             info.front = info.front.map(|f| move_front(f, world));
-            let polygon = move_polygon(&s.polygon, world);
-            let holes: Vec<Vec<Point>> = s.holes.iter().map(|h| move_polygon(h, world)).collect();
+            let (outline, inner) = s.clear.clone().unwrap_or((s.polygon, s.holes));
+            let polygon = move_polygon(&outline, world);
+            let holes: Vec<Vec<Point>> = inner.iter().map(|h| move_polygon(h, world)).collect();
+            let source = resolved(&s.source);
             // A fill space's shape isn't a rectangle a symbol could be fitted to: its tone colours it.
             let symbol = info
                 .symbol
                 .as_deref()
                 .filter(|_| !info.fill)
-                .and_then(|name| symbol_element(&s.path, &s.source, name, &polygon, info.front));
+                .and_then(|name| symbol_element(&s.path, &source, name, &polygon, info.front));
             if let Some(clear) = &s.clearance {
                 let mut e = Element::new(
                     format!("clearance:{}", s.path),
@@ -749,24 +816,40 @@ impl Host {
                     move_polygon(clear, world),
                     true,
                 );
-                e.source = Some(format!("{}/clearance", s.source));
+                e.source = Some(format!("{source}/clearance"));
                 elements.push(e);
             }
             elements.push(
                 Element::space(s.path, polygon, info)
                     .with_holes(holes)
                     .with_label_point()
-                    .with_source(s.source),
+                    .with_source(source),
             );
             elements.extend(symbol);
         }
+        let walls: Vec<(Point, Point, f64)> = sub
+            .walls
+            .iter()
+            .map(|w| (world.apply(w.info.line[0]), world.apply(w.info.line[1]), w.info.thickness))
+            .collect();
+        for w in sub.walls {
+            let mut info = w.info;
+            info.line = [world.apply(info.line[0]), world.apply(info.line[1])];
+            let mut e = Element::new(w.path, ElementKind::Wall, move_polygon(&w.polygon, world), true);
+            if !w.source.is_empty() {
+                e.source = Some(resolved(&w.source));
+            }
+            e.wall = Some(info);
+            elements.push(e);
+        }
         for o in sub.openings {
+            let (a, b, depth) = in_wall(world.apply(o.a), world.apply(o.b), &walls);
             elements.push(Element::opening(
                 o.path,
                 o.kind,
-                world.apply(o.a),
-                world.apply(o.b),
-                OpeningInfo { between: o.between, width: o.width },
+                a,
+                b,
+                OpeningInfo { between: o.between, width: o.width, depth },
             ));
         }
         let mut leftover = 0.0;
@@ -781,7 +864,7 @@ impl Host {
             )
             .with_holes(holes)
             .with_label_point()
-            .with_source(l.source);
+            .with_source(resolved(&l.source));
             elements.push(e);
         }
         for issue in sub.issues {
@@ -795,7 +878,7 @@ impl Host {
                 Level::Preferred => Diagnostic::info(message).with_code(Code::Preference),
                 Level::Leftover => Diagnostic::info(message).with_code(Code::Leftover),
             }
-            .with_pointer(issue.pointer);
+            .with_pointer(resolved(&issue.pointer));
             diagnostics.push(match issue.hint {
                 Some(h) => d.with_note(h),
                 None => d,
@@ -834,6 +917,7 @@ impl Host {
                 seed,
                 work: ctx.work.clone(),
                 plan_pointer: ctx.plan_pointer,
+                root: ctx.root,
             };
             self.uses = uses.clone();
             let sub = self.solve_plan_once(plan, slot, &try_ctx);
@@ -860,13 +944,18 @@ impl Host {
             Some(s) if s.len() >= 2 => Engine::SpineStack,
             _ => Engine::Grid,
         });
+        // Spaces with plans are sized for the walls around them too: their plans' needs are clear.
+        let engine_plan = build::with_allowance(plan, self.units);
         let level = match engine {
-            Engine::Grid => grid::solve(plan, slot, ctx),
-            Engine::SpineStack => spine::solve(plan, slot, ctx),
+            Engine::Grid => grid::solve(&engine_plan, slot, ctx),
+            Engine::SpineStack => spine::solve(&engine_plan, slot, ctx),
         };
+        let built = build::build(plan, slot, &level, self.units, ctx.root);
         let mut sub = Sub::default();
-        for issue in needs_conflicts(plan, self.units).iter().chain(&level.issues) {
-            push_issue(&mut sub.issues, SubIssue::from(issue));
+        for issue in needs_conflicts(plan, self.units).iter().chain(&level.issues).chain(&built.issues) {
+            let mut i = SubIssue::from(issue);
+            i.pointer = origin(plan, &i.pointer);
+            push_issue(&mut sub.issues, i);
         }
         if let Some(boundary) = &slot.boundary {
             // Floor left over: only where a plan divides its space into spaces. A plan that places
@@ -874,6 +963,14 @@ impl Host {
             if !plan.spaces.is_empty() && plan.spaces.values().all(|s| !s.is_fixture()) {
                 leftover(plan, boundary, &slot.holes, &level, ctx, &mut sub);
             }
+        }
+        // Services declared here (the top level, or a plan with its own): where they apply.
+        let own = format!("{}/services/", ctx.plan_pointer);
+        let declares =
+            plan.services.values().any(|s| s.source.as_deref().is_some_and(|src| src.starts_with(&own)));
+        if !plan.services.is_empty() && (ctx.plan_pointer.is_empty() || declares) {
+            sub.services
+                .push(ServiceLevel { prefix: String::new(), services: Arc::new(plan.services.clone()) });
         }
 
         // Host-level rules: which instances are unique, and which get another plan.
@@ -905,13 +1002,57 @@ impl Host {
         reach_issues(plan, &level, &mut sub);
         let own_openings = sub.openings.len();
 
-        for placed in &level.placed {
+        for (k, w) in built.walls.iter().enumerate() {
+            let owner = level.placed[w.owner].name.clone();
+            let other = match w.other {
+                Some(o) => level.placed[o].name.clone(),
+                None => format!("'{}", w.roles.first().map_or("outside", String::as_str)),
+            };
+            sub.walls.push(SubWall {
+                path: format!("wall:{owner}|{other}#{k}"),
+                polygon: w.polygon(),
+                info: wall_info(w, vec![owner, other], self.units),
+                source: w.assembly.source.as_ref().map_or_else(String::new, |s| format!("@{s}")),
+            });
+        }
+
+        for (index, placed) in level.placed.iter().enumerate() {
             let Some(space) = plan.spaces.get(&placed.type_key) else { continue };
             let overridden = override_plan(&placed.name, &placed.type_key);
             let is_unique = unique(&placed.name, &placed.type_key) || overridden.is_some();
             let (child_plan, child_ptr) = match &overridden {
                 Some((ptr, p)) => (Some(*p), ptr.clone()),
                 None => (space.plan.as_deref(), format!("/spaces/{}/plan", placed.type_key)),
+            };
+            let child_ptr = origin(plan, &child_ptr);
+            let child_abs = match child_ptr.strip_prefix('@') {
+                Some(abs) => abs.to_owned(),
+                None => format!("{}{child_ptr}", ctx.plan_pointer),
+            };
+            let within = Within { name: &placed.name, key: &placed.type_key, space };
+            // A service may give this space what it claims (a fixture, rules) even without a plan.
+            let child_plan: Option<Plan> = match child_plan {
+                Some(p) => Some(p.clone()),
+                None if !space.is_fixture() && claims_inside(plan, within) => Some(Plan::default()),
+                None => None,
+            };
+            let child_plan = child_plan.map(|c| {
+                let (prepared, issues) = context::prepare(&c, Some(plan), Some(within), &child_abs);
+                for i in &issues {
+                    push_issue(&mut sub.issues, SubIssue::from(i).at(vec![placed.name.clone()]));
+                }
+                prepared
+            });
+            // What the walls leave of it, and what they're built as (a role of the ports inside).
+            let insets = built.insets.get(index).copied().unwrap_or_default();
+            let own_ports = assembly_roles(placed, index, &built.walls, self.units);
+            let clear = match (&placed.rect, built.fill.get(index).cloned().flatten()) {
+                (Some((w, h, t)), _) if insets.iter().any(|v| *v > 0.0) => {
+                    let r = Rect::new(insets[3], insets[0], w - insets[1], h - insets[2]);
+                    Some((r.corners().into_iter().map(|p| t.apply(p)).collect(), Vec::new()))
+                }
+                (None, Some(shape)) if shape.0 != placed.polygon => Some(shape),
+                _ => None,
             };
             let mut info = SpaceInfo {
                 name: placed.name.clone(),
@@ -933,6 +1074,8 @@ impl Host {
                 symbol: space.symbol.clone(),
                 fill: space.fill,
                 tone: space.symbol.as_deref().filter(|_| space.fill).and_then(crate::symbols::tone),
+                tags: space.tags.clone(),
+                gross: None,
             };
             let mut typical_key = None;
             let mut nested: Option<(Sub, Transform)> = None;
@@ -940,46 +1083,59 @@ impl Host {
             if let (true, Some((ptr, _))) = (space.is_fixture(), &overridden) {
                 push_issue(
                     &mut sub.issues,
-                    SubIssue::required(ptr.clone(), "a fixture can't have a plan: nothing goes inside it")
-                        .at(vec![placed.name.clone()]),
+                    SubIssue::required(
+                        origin(plan, ptr),
+                        "a fixture can't have a plan: nothing goes inside it",
+                    )
+                    .at(vec![placed.name.clone()]),
                 );
             }
             let child_plan = child_plan.filter(|_| !space.is_fixture());
-            if let (Some(child), None, true) = (child_plan, placed.rect, space.fill) {
+            if let (Some(child), None, true) = (child_plan.as_ref(), placed.rect, space.fill) {
                 // A fill space's plan is solved in its own shape, in this level's frame: it's one
                 // of a kind, so there's no typical to share.
                 let grid = plan_grid(child, self.units, Some(ctx.grid));
+                let (outer, holes) =
+                    clear.clone().unwrap_or_else(|| (placed.polygon.clone(), placed.holes.clone()));
+                let mut loops = vec![outer.clone()];
+                loops.extend(holes.iter().cloned());
                 let fill_slot = Slot {
-                    boundary: Some(placed.polygon.clone()),
-                    ports: placed.ports.clone(),
+                    boundary: Some(outer),
+                    ports: own_ports.iter().map(|p| snap_port(p, &loops)).collect(),
                     spine: None,
                     pin: slot.pin,
-                    holes: placed.holes.clone(),
+                    holes,
                 };
                 let child_ctx = Ctx {
                     units: self.units,
                     grid,
                     seed: hash64(&[&ctx.seed.to_string(), &placed.name, "fill"]),
                     work: self.work.clone(),
-                    plan_pointer: "",
+                    plan_pointer: &child_abs,
+                    root: false,
                 };
                 let child_sub = self.solve_plan(child, &fill_slot, &child_ctx);
                 if child_sub.issues.iter().any(|i| i.level == Level::Required) {
                     info.ok = false;
                 }
                 nested = Some((child_sub, Transform::IDENTITY));
-            } else if let (Some(child), Some((w, h, to_level))) = (child_plan, placed.rect) {
+            } else if let (Some(child), Some((w, h, to_level))) = (child_plan.as_ref(), placed.rect) {
                 let grid = plan_grid(child, self.units, Some(ctx.grid));
                 let name = is_unique.then_some(placed.name.as_str());
-                let solved = self.solve_child(child, w, h, &placed.ports, space.mirror, name, grid);
+                let (cw, ch) = (w - insets[1] - insets[3], h - insets[0] - insets[2]);
+                let ports = clear_ports(&own_ports, w, h, insets);
+                let context = slot_context(plan, within);
+                let solved =
+                    self.solve_child(child, cw, ch, &ports, space.mirror, name, grid, &child_abs, context);
                 info.slot = Some(solved.slot);
+                let to_clear = to_level.then_after(&Transform::translate(insets[3], insets[0]));
                 match solved.outcome {
                     Err((ptr, msg)) => {
                         info.ok = false;
                         let hint = needs_hint(&ptr);
                         push_issue(
                             &mut sub.issues,
-                            SubIssue::required(format!("{child_ptr}{ptr}"), msg)
+                            SubIssue::required(under(&child_ptr, &ptr), msg)
                                 .at(vec![placed.name.clone()])
                                 .hint(hint),
                         );
@@ -989,19 +1145,26 @@ impl Host {
                             info.ok = false;
                         }
                         typical_key = Some(key);
-                        nested = Some((child_sub, to_level.then_after(&solved.canon.inverse())));
+                        nested = Some((child_sub, to_clear.then_after(&solved.canon.inverse())));
                     }
                 }
+            }
+            if clear.is_some() {
+                info.gross = Some(
+                    crate::geometry::signed_area(&placed.polygon).abs()
+                        - placed.holes.iter().map(|h| crate::geometry::signed_area(h).abs()).sum::<f64>(),
+                );
             }
 
             sub.spaces.push(SubSpace {
                 path: placed.name.clone(),
                 polygon: placed.polygon.clone(),
                 info,
-                source: format!("/spaces/{}", placed.type_key),
+                source: origin(plan, &format!("/spaces/{}", placed.type_key)),
                 typical_key,
                 clearance: placed.fixture.as_ref().and_then(|f| f.clearance.clone()),
                 holes: placed.holes.clone(),
+                clear,
             });
 
             // Everything inside, moved into this level's frame and renamed under this space.
@@ -1011,11 +1174,14 @@ impl Host {
                     s.path = format!("{prefix}{}", s.path);
                     s.polygon = move_polygon(&s.polygon, &t);
                     s.holes = s.holes.iter().map(|h| move_polygon(h, &t)).collect();
+                    s.clear = s.clear.map(|(o, h)| {
+                        (move_polygon(&o, &t), h.iter().map(|h| move_polygon(h, &t)).collect())
+                    });
                     s.clearance = s.clearance.map(|c| move_polygon(&c, &t));
                     s.info.front = s.info.front.map(|f| move_front(f, &t));
                     s.info.depth += 1;
-                    s.info.plan = format!("{child_ptr}{}", s.info.plan);
-                    s.source = format!("{child_ptr}{}", s.source);
+                    s.info.plan = under(&child_ptr, &s.info.plan);
+                    s.source = under(&child_ptr, &s.source);
                     sub.spaces.push(s);
                 }
                 for mut o in child.openings {
@@ -1029,11 +1195,28 @@ impl Host {
                         .collect();
                     sub.openings.push(o);
                 }
+                for mut w in child.walls {
+                    w.path = format!("{prefix}{}", w.path);
+                    w.polygon = move_polygon(&w.polygon, &t);
+                    w.info.line = [t.apply(w.info.line[0]), t.apply(w.info.line[1])];
+                    w.info.between = w
+                        .info
+                        .between
+                        .iter()
+                        .map(|n| if n.starts_with('\'') { n.clone() } else { format!("{prefix}{n}") })
+                        .collect();
+                    w.source = under(&child_ptr, &w.source);
+                    sub.walls.push(w);
+                }
+                for mut l in child.services {
+                    l.prefix = format!("{prefix}{}", l.prefix);
+                    sub.services.push(l);
+                }
                 for mut l in child.leftover {
                     l.path = format!("{prefix}{}", l.path);
                     l.polygon = move_polygon(&l.polygon, &t);
                     l.holes = l.holes.iter().map(|h| move_polygon(h, &t)).collect();
-                    l.source = format!("{child_ptr}{}", l.source);
+                    l.source = under(&child_ptr, &l.source);
                     sub.leftover.push(l);
                 }
                 for mut issue in child.issues {
@@ -1042,13 +1225,185 @@ impl Host {
                     } else {
                         issue.places.into_iter().map(|p| format!("{prefix}{p}")).collect()
                     };
-                    issue.pointer = format!("{child_ptr}{}", issue.pointer);
+                    issue.pointer = under(&child_ptr, &issue.pointer);
                     push_issue(&mut sub.issues, issue);
                 }
             }
         }
-        align_doors(&mut sub, own_openings);
+        let slack = plan.assemblies.values().map(|a| a.thickness(self.units)).fold(0.0, f64::max);
+        align_doors(&mut sub, own_openings, slack);
         sub
+    }
+}
+
+/// Does a service in scope here put something inside this space (`claims.inside`)?
+fn claims_inside(plan: &Plan, within: Within) -> bool {
+    plan.services.values().any(|s| {
+        let here = s.in_scope
+            || s.scope.as_ref().is_some_and(|sc| {
+                sc.matches_tagged(within.name, within.key, &within.space.tags, within.space.kind)
+            });
+        here && s.claims.inside.keys().any(|k| {
+            crate::plan::Selector::One(k.clone()).matches_tagged(
+                within.name,
+                within.key,
+                &within.space.tags,
+                within.space.kind,
+            )
+        })
+    })
+}
+
+/// A space's ports with the name of the assembly each is built as added to its roles, so a plan
+/// inside can ask for the wall itself (`against = 'wet`: the wall built as `wet`).
+fn assembly_roles(placed: &Placed, index: usize, walls: &[build::BuiltWall], units: Units) -> Vec<PortSeg> {
+    let mine: Vec<&build::BuiltWall> =
+        walls.iter().filter(|w| w.owner == index || w.other == Some(index)).collect();
+    if mine.is_empty() {
+        return placed.ports.clone();
+    }
+    let to_level = placed.rect.as_ref().map_or(Transform::IDENTITY, |r| r.2);
+    let tol = units.tolerance() * 10.0;
+    placed
+        .ports
+        .iter()
+        .map(|p| {
+            let (a, b) = (to_level.apply(p.a), to_level.apply(p.b));
+            let mut p = p.clone();
+            let best = mine
+                .iter()
+                .filter_map(|w| ports::collinear_overlap(a, b, w.a, w.b, tol).map(|(t0, t1)| (t1 - t0, w)))
+                .max_by(|x, y| x.0.total_cmp(&y.0));
+            if let Some((_, w)) = best {
+                if !w.name.is_empty() && !p.roles.contains(&w.name) {
+                    p.roles.push(w.name.clone());
+                }
+            }
+            p
+        })
+        .collect()
+}
+
+/// A space's ports, moved onto what its walls leave of it (`insets`: bottom, right, top, left).
+fn clear_ports(ports: &[PortSeg], w: f64, h: f64, insets: [f64; 4]) -> Vec<PortSeg> {
+    if insets.iter().all(|v| *v == 0.0) {
+        return ports.to_vec();
+    }
+    let [b, r, t, l] = insets;
+    let (cw, ch) = (w - l - r, h - b - t);
+    let tol = 1e-9 * (1.0 + w + h);
+    let mut out = Vec::new();
+    for p in ports {
+        let on = |f: &dyn Fn(Point) -> f64, v: f64| (f(p.a) - v).abs() < tol && (f(p.b) - v).abs() < tol;
+        let clamp = |v: f64, hi: f64| v.max(0.0).min(hi);
+        let (a, bb) = if on(&|q| q.y, 0.0) {
+            (Point::new(clamp(p.a.x - l, cw), 0.0), Point::new(clamp(p.b.x - l, cw), 0.0))
+        } else if on(&|q| q.y, h) {
+            (Point::new(clamp(p.a.x - l, cw), ch), Point::new(clamp(p.b.x - l, cw), ch))
+        } else if on(&|q| q.x, 0.0) {
+            (Point::new(0.0, clamp(p.a.y - b, ch)), Point::new(0.0, clamp(p.b.y - b, ch)))
+        } else if on(&|q| q.x, w) {
+            (Point::new(cw, clamp(p.a.y - b, ch)), Point::new(cw, clamp(p.b.y - b, ch)))
+        } else {
+            continue;
+        };
+        if a.distance(bb) > tol {
+            out.push(PortSeg { roles: p.roles.clone(), a, b: bb, other: p.other.clone() });
+        }
+    }
+    out
+}
+
+/// A port moved onto the nearest edge of a fill's clear outline.
+fn snap_port(p: &PortSeg, loops: &[Vec<Point>]) -> PortSeg {
+    let snap = |q: Point| -> Point {
+        let mut best = (f64::INFINITY, q);
+        for l in loops {
+            for k in 0..l.len() {
+                let (a, b) = (l[k], l[(k + 1) % l.len()]);
+                let (dx, dy) = (b.x - a.x, b.y - a.y);
+                let len2 = (dx * dx + dy * dy).max(1e-18);
+                let t = (((q.x - a.x) * dx + (q.y - a.y) * dy) / len2).clamp(0.0, 1.0);
+                let c = Point::new(a.x + dx * t, a.y + dy * t);
+                let d = c.distance(q);
+                if d < best.0 {
+                    best = (d, c);
+                }
+            }
+        }
+        best.1
+    };
+    PortSeg { roles: p.roles.clone(), a: snap(p.a), b: snap(p.b), other: p.other.clone() }
+}
+
+/// What a wall is, for the drawing and the inspector.
+fn wall_info(w: &build::BuiltWall, between: Vec<String>, units: Units) -> WallInfo {
+    let a = &w.assembly;
+    WallInfo {
+        assembly: w.name.clone(),
+        label: a.label.clone().unwrap_or_else(|| w.name.clone()),
+        thickness: w.thickness,
+        cavity: a.cavity(units),
+        fire: a.fire,
+        acoustic: a.acoustic,
+        bearing: a.bearing,
+        layers: a
+            .layers
+            .iter()
+            .map(|l| LayerInfo {
+                material: l.material.clone(),
+                thickness: l.thickness.0.to(units),
+                cavity: l.cavity,
+            })
+            .collect(),
+        pattern: a.pattern.unwrap_or_default().name(),
+        roles: w.roles.clone(),
+        between,
+        because: w.because.clone(),
+        line: w.centreline(),
+        layer: a.layer.clone(),
+    }
+}
+
+/// What a space's plan inherits from `parent`, for its slot: so the plan opened on its own (in
+/// that slot) solves the same.
+fn slot_context(parent: &Plan, within: Within) -> Option<serde_json::Value> {
+    if parent.assemblies.is_empty() && parent.services.is_empty() {
+        return None;
+    }
+    let assemblies: serde_json::Map<String, serde_json::Value> =
+        parent.assemblies.iter().map(|(k, a)| (k.clone(), a.full())).collect();
+    let services: serde_json::Map<String, serde_json::Value> =
+        parent.services.iter().map(|(k, s)| (k.clone(), s.full())).collect();
+    let scoped: Vec<&String> = parent.services.iter().filter(|(_, s)| s.in_scope).map(|(k, _)| k).collect();
+    Some(serde_json::json!({
+        "assemblies": assemblies,
+        "services": services,
+        "scoped": scoped,
+        "within": { "name": within.name, "key": within.key, "kind": within.space.kind, "tags": within.space.tags },
+    }))
+}
+
+/// A plan prepared as it was in a plate's space, from that space's [`slot_context`].
+fn context_plan(plan: &Plan, c: &serde_json::Value) -> Plan {
+    let mut parent = Plan::default();
+    if let Ok(a) = serde_json::from_value(c["assemblies"].clone()) {
+        parent.assemblies = a;
+    }
+    if let Ok(s) = serde_json::from_value::<BTreeMap<String, Service>>(c["services"].clone()) {
+        parent.services = s;
+    }
+    let scoped: Vec<String> = serde_json::from_value(c["scoped"].clone()).unwrap_or_default();
+    for (k, s) in parent.services.iter_mut() {
+        s.in_scope = scoped.contains(k);
+    }
+    let w = &c["within"];
+    let space: Option<crate::plan::Space> =
+        serde_json::from_value(serde_json::json!({ "kind": w["kind"], "tags": w["tags"] })).ok();
+    let (name, key) = (w["name"].as_str().unwrap_or_default(), w["key"].as_str().unwrap_or_default());
+    match &space {
+        Some(space) => context::prepare(plan, Some(&parent), Some(Within { name, key, space }), "").0,
+        None => context::prepare(plan, Some(&parent), None, "").0,
     }
 }
 
@@ -1096,7 +1451,7 @@ fn needs_conflicts(plan: &Plan, units: crate::units::Units) -> Vec<Issue> {
 /// plan inside put its own door on that wall (to its 'entrance, say), they are the same door; else
 /// the door goes where it opens into circulation on both sides (a gallery, not someone's
 /// bedroom), if the wall has such a place.
-fn align_doors(sub: &mut Sub, own: usize) {
+fn align_doors(sub: &mut Sub, own: usize, slack: f64) {
     let mut dropped = Vec::new();
     for k in 0..own {
         let o = sub.openings[k].clone();
@@ -1113,7 +1468,8 @@ fn align_doors(sub: &mut Sub, own: usize) {
             continue;
         }
         let u = ((o.b.x - o.a.x) / w, (o.b.y - o.a.y) / w);
-        let tol = 1e-6 * (1.0 + o.a.x.abs() + o.a.y.abs() + w);
+        // Walls take floor: a plan inside meets this wall at its face, up to `slack` away.
+        let tol = 1e-6 * (1.0 + o.a.x.abs() + o.a.y.abs() + w) + slack;
         let t = |p: Point| (p.x - o.a.x) * u.0 + (p.y - o.a.y) * u.1;
         let off = |p: Point| ((p.x - o.a.x) * u.1 - (p.y - o.a.y) * u.0).abs();
         // Stretches of a polygon's edges on the door's line, as (from, to) along it.
@@ -1274,10 +1630,14 @@ fn symbol_element(
     Some(e)
 }
 
-/// The symbols a plan and every plan inside it draw, as a key: they don't change a solution, but
-/// a cached solution must still draw the current ones.
-fn symbols_key(plan: &Plan) -> String {
+/// What a plan and every plan inside it draw that doesn't change a solution, as a key: symbols,
+/// how assemblies are shown, what services place and connect. A cached solution must still draw
+/// the current ones.
+fn view_key(plan: &Plan) -> String {
     fn walk(plan: &Plan, out: &mut String) {
+        if !plan.assemblies.is_empty() || !plan.services.is_empty() {
+            out.push_str(&format!("{:?}{:?};", plan.assemblies, plan.services));
+        }
         for (key, space) in &plan.spaces {
             if let Some(symbol) = &space.symbol {
                 out.push_str(&format!("{key}={symbol};"));
@@ -1302,6 +1662,45 @@ fn symbols_key(plan: &Plan) -> String {
         out
     } else {
         format!("{:016x}", hash64(&[&out]))
+    }
+}
+
+/// An opening put in the wall it's on: on that wall's centreline, as deep as the wall. Plans
+/// inside a space put their doors and windows on its clear edge, a wall's half-thickness away.
+fn in_wall(a: Point, b: Point, walls: &[(Point, Point, f64)]) -> (Point, Point, Option<f64>) {
+    let len = a.distance(b);
+    if len <= 0.0 {
+        return (a, b, None);
+    }
+    let u = ((b.x - a.x) / len, (b.y - a.y) / len);
+    let mut best: Option<(f64, Point, Point, f64)> = None;
+    for &(p, q, thick) in walls {
+        let wl = p.distance(q);
+        if wl <= 0.0 {
+            continue;
+        }
+        let v = ((q.x - p.x) / wl, (q.y - p.y) / wl);
+        if (u.0 * v.1 - u.1 * v.0).abs() > 1e-6 {
+            continue;
+        }
+        let off = |r: Point| ((r.x - p.x) * v.1 - (r.y - p.y) * v.0).abs();
+        let d = off(a).max(off(b));
+        if d > thick * 0.75 + 1e-6 {
+            continue;
+        }
+        let t = |r: Point| (r.x - p.x) * v.0 + (r.y - p.y) * v.1;
+        let (ta, tb) = (t(a), t(b));
+        if ta.max(tb) < 1e-6 || ta.min(tb) > wl - 1e-6 {
+            continue;
+        }
+        if best.as_ref().is_none_or(|x| d < x.0) {
+            let at = |s: f64| Point::new(p.x + v.0 * s, p.y + v.1 * s);
+            best = Some((d, at(ta), at(tb), thick));
+        }
+    }
+    match best {
+        Some((_, a, b, t)) => (a, b, Some(t)),
+        None => (a, b, None),
     }
 }
 
@@ -1645,7 +2044,7 @@ fn reach_issues(plan: &Plan, level: &LevelResult, sub: &mut Sub) {
                     push_issue(
                         &mut sub.issues,
                         SubIssue::required(
-                            ptr.clone(),
+                            origin(plan, &ptr),
                             format!(
                                 "{} reaches {} without going through {}",
                                 names[from].0,
@@ -2298,6 +2697,7 @@ mod tests {
             grid: 0.1,
             unique: None,
             plan,
+            context: None,
         };
         run_view(v, &View::Slot(slot))
     }

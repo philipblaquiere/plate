@@ -36,6 +36,13 @@ pub fn to_svg(layout: &Layout) -> String {
         h = num(hatch),
         w = num(hatch / 4.0)
     );
+    // Wall hatches.
+    let _ = writeln!(
+        svg,
+        r##"  <defs><pattern id="plate-wall-hatch" patternUnits="userSpaceOnUse" width="{h}" height="{h}" patternTransform="rotate(45)"><rect width="{h}" height="{h}" fill="#ffffff" /><line x1="0" y1="0" x2="0" y2="{h}" stroke="#1d2125" stroke-width="{w}" /></pattern><pattern id="plate-wall-cross" patternUnits="userSpaceOnUse" width="{h}" height="{h}" patternTransform="rotate(45)"><rect width="{h}" height="{h}" fill="#ffffff" /><path d="M0 0V{h}M0 0H{h}" stroke="#1d2125" stroke-width="{w}" /></pattern></defs>"##,
+        h = num(hatch / 2.0),
+        w = num(hatch / 10.0)
+    );
     // Flip y so drawing coordinates (y up) map to SVG (y down).
     let _ = writeln!(
         svg,
@@ -45,7 +52,7 @@ pub fn to_svg(layout: &Layout) -> String {
     for element in &layout.elements {
         let points: Vec<String> =
             element.points.iter().map(|p| format!("{},{}", num(p.x), num(p.y))).collect();
-        let (id, layer) = (escape(&element.id), element.layer);
+        let (id, layer) = (escape(&element.id), escape(&element.cad_layer()));
         let _ = match element.kind {
             ElementKind::Origin => {
                 let p = element.points[0];
@@ -115,8 +122,68 @@ pub fn to_svg(layout: &Layout) -> String {
                 num(stroke * 1.5),
                 num(stroke * 0.6)
             ),
+            ElementKind::Wall => {
+                let fill = match element.wall.as_ref().map_or("solid", |w| w.pattern) {
+                    "hatch" => "url(#plate-wall-hatch)",
+                    "cross" => "url(#plate-wall-cross)",
+                    "light" => "#b9bec4",
+                    _ => "#2b2f33",
+                };
+                writeln!(
+                    svg,
+                    r#"    <polygon id="{id}" data-layer="{layer}" points="{}" fill="{fill}" stroke="none" />"#,
+                    points.join(" ")
+                )
+            }
+            ElementKind::Part => {
+                let mut g =
+                    format!(r#"    <g id="{id}" data-layer="{layer}" stroke-width="{}">"#, num(stroke * 0.4));
+                match &element.symbol {
+                    Some(symbol) => {
+                        for path in &symbol.paths {
+                            let pts: Vec<String> =
+                                path.points.iter().map(|p| format!("{},{}", num(p.x), num(p.y))).collect();
+                            let fill = path.tone.map_or("#ffffff", tone_fill);
+                            let tag = if path.closed { "polygon" } else { "polyline" };
+                            let fill = if path.closed { fill } else { "none" };
+                            let _ = write!(g, r#"<{tag} points="{}" fill="{fill}" />"#, pts.join(" "));
+                        }
+                    }
+                    None => {
+                        let _ = write!(g, r##"<polygon points="{}" fill="#ffffff" />"##, points.join(" "));
+                    }
+                }
+                writeln!(svg, "{g}</g>")
+            }
+            ElementKind::Run => {
+                let dash = "";
+                writeln!(
+                    svg,
+                    r##"    <polyline id="{id}" data-layer="{layer}" points="{}" stroke="#5b4fb3" stroke-width="{}"{dash} />"##,
+                    points.join(" "),
+                    num(stroke * 0.6)
+                )
+            }
             ElementKind::Door | ElementKind::Window => {
                 let colour = if element.kind == ElementKind::Door { "#c8442c" } else { "#3b6fb6" };
+                // In a wall: cut it.
+                if let Some(depth) = element.opening.as_ref().and_then(|o| o.depth) {
+                    let (a, b) = (element.points[0], element.points[1]);
+                    let len = a.distance(b).max(1e-12);
+                    let (nx, ny) = (-(b.y - a.y) / len * depth / 2.0, (b.x - a.x) / len * depth / 2.0);
+                    let _ = writeln!(
+                        svg,
+                        r##"    <polygon points="{},{} {},{} {},{} {},{}" fill="#ffffff" stroke="none" />"##,
+                        num(a.x + nx),
+                        num(a.y + ny),
+                        num(b.x + nx),
+                        num(b.y + ny),
+                        num(b.x - nx),
+                        num(b.y - ny),
+                        num(a.x - nx),
+                        num(a.y - ny)
+                    );
+                }
                 writeln!(
                     svg,
                     r#"    <polyline id="{id}" data-layer="{layer}" points="{}" stroke="{colour}" stroke-width="{}" />"#,

@@ -145,6 +145,8 @@ impl Set<'_> {
 pub struct Evaluation {
     pub value: serde_json::Value,
     pub sources: Vec<SourceSpan>,
+    /// What the file is: a plate, a plan, or a library (a service, a set of assemblies).
+    pub kind: schema::FileKind,
 }
 
 /// Evaluate Nickel source, check it against the schema, and export it as plain JSON data.
@@ -170,11 +172,11 @@ pub fn evaluate_files(ws: Workspace) -> Result<Evaluation, Vec<Diagnostic>> {
         }
     }
     let mut evaluation = eval_set(&set)?;
+    evaluation.kind = schema::FileKind::of(&evaluation.value);
     if let Ok(json) = schema_json() {
-        if evaluation.value.get("start").is_some() {
-            schema::apply_defaults(json, &mut evaluation.value);
-        } else {
-            schema::apply_defaults_def(json, "Plan", &mut evaluation.value);
+        match evaluation.kind.definition() {
+            None => schema::apply_defaults(json, &mut evaluation.value),
+            Some(def) => schema::apply_defaults_def(json, def, &mut evaluation.value),
         }
     }
     Ok(evaluation)
@@ -205,6 +207,32 @@ pub fn check(source: &str) -> Result<(Config, Evaluation), Vec<Diagnostic>> {
 /// [`check`] for the main file of a workspace.
 pub fn check_files(ws: Workspace) -> Result<(Config, Evaluation), Vec<Diagnostic>> {
     let evaluation = evaluate_files(ws)?;
+    // A library is checked as what it is: a service's placements must name its parts, say.
+    let library = match evaluation.kind {
+        schema::FileKind::Service => {
+            serde_json::from_value::<plate_core::service::Service>(evaluation.value.clone())
+                .map_err(|e| ("".to_owned(), e.to_string()))
+                .and_then(|s| s.validate(""))
+        }
+        schema::FileKind::Assemblies => serde_json::from_value::<
+            BTreeMap<String, plate_core::assembly::Assembly>,
+        >(evaluation.value.clone())
+        .map_err(|e| ("".to_owned(), e.to_string()))
+        .and_then(|all| {
+            all.iter().try_for_each(|(k, a)| {
+                a.validate(&format!("/{}", plate_core::plan::escape_pointer(k)), plate_core::Units::M)
+            })
+        }),
+        _ => Ok(()),
+    };
+    if let Err((pointer, message)) = library {
+        let path: Vec<String> = pointer.split('/').filter(|s| !s.is_empty()).map(str::to_owned).collect();
+        let mut d = Diagnostic::error(describe_path(&path, &message));
+        if let Some(s) = sources::lookup(&evaluation.sources, &pointer) {
+            d = d.with_span(Some(s.span)).in_file(s.file.clone());
+        }
+        return Err(vec![d]);
+    }
     match Config::from_value(evaluation.value.clone()) {
         Ok(config) => Ok((config, evaluation)),
         Err(err) => {
@@ -306,7 +334,7 @@ fn eval_set(set: &Set) -> Result<Evaluation, Vec<Diagnostic>> {
     let value = serde_json::to_value(&value).map_err(|err| {
         vec![Diagnostic::error(format!("the configuration can't be exported as data: {err}"))]
     })?;
-    Ok(Evaluation { value, sources })
+    Ok(Evaluation { value, sources, kind: schema::FileKind::Plan })
 }
 
 /// Reformat Nickel source with the official formatter.
@@ -676,9 +704,21 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
         let schema = schema_json().unwrap();
         let plan_schema = serde_json::json!({ "$ref": "#/$defs/Plan", "$defs": schema["$defs"].clone() });
         let validator = jsonschema::validator_for(&plan_schema).unwrap();
+        let mut libraries = 0;
         for name in files.iter().filter(|(_, s)| !is_plate(s)).map(|(n, _)| n) {
             let (config, evaluation) = check_files(Workspace { main: name, files: &files })
                 .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            // A library (a service, a set of assemblies) is checked against its own definition.
+            if let Some(def @ ("Service" | "Assemblies")) = evaluation.kind.definition() {
+                libraries += 1;
+                let def_schema =
+                    serde_json::json!({ "$ref": format!("#/$defs/{def}"), "$defs": schema["$defs"].clone() });
+                let v = jsonschema::validator_for(&def_schema).unwrap();
+                if let Err(e) = v.validate(&evaluation.value) {
+                    panic!("{name}: {e}");
+                }
+                continue;
+            }
             assert!(config.is_plan(), "{name}");
             if let Err(e) = validator.validate(&evaluation.value) {
                 panic!("{name}: {e}");
@@ -699,6 +739,25 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
                 );
             }
         }
+        assert!(libraries >= 4, "example services and assemblies");
+    }
+
+    #[test]
+    fn library_files_are_told_by_their_shape() {
+        use schema::FileKind;
+        let files = examples();
+        let kind = |name: &str| check_files(Workspace { main: name, files: &files }).unwrap().1.kind;
+        assert_eq!(kind("build/services/lighting.ncl"), FileKind::Service);
+        assert_eq!(kind("build/codes/nec.ncl"), FileKind::Service);
+        assert_eq!(kind("build/assemblies/wood-frame.ncl"), FileKind::Assemblies);
+        assert_eq!(kind("plans/flat.ncl"), FileKind::Plan);
+        assert_eq!(kind("5-duplex.ncl"), FileKind::Plate);
+        // A service's placement naming a part it doesn't have is caught in the file itself.
+        let bad = "{ parts = { light = {} }, place = [plate.over \"lamp\" \"#room\"] }";
+        let files = BTreeMap::from([("s.ncl".to_owned(), bad.to_owned())]);
+        let err = check_files(Workspace { main: "s.ncl", files: &files }).unwrap_err();
+        assert!(err[0].message.contains("no part named \"lamp\""), "{:?}", err[0].message);
+        assert!(err[0].span.is_some());
     }
 
     #[test]

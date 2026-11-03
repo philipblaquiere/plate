@@ -18,11 +18,11 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
         System::Metric => DrawingUnits::Metric,
     };
 
-    let mut layers: Vec<&str> = layout.elements.iter().map(|e| e.layer).collect();
+    let mut layers: Vec<String> = layout.elements.iter().map(|e| e.cad_layer()).collect();
     layers.sort_unstable();
     layers.dedup();
     for name in layers {
-        drawing.add_layer(Layer { name: name.to_owned(), color: Color::from_index(7), ..Default::default() });
+        drawing.add_layer(Layer { name, color: Color::from_index(7), ..Default::default() });
     }
     drawing.add_layer(Layer {
         name: ANNOTATION_LAYER.to_owned(),
@@ -36,8 +36,9 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
     let height = span / 40.0;
 
     for element in &layout.elements {
-        // A symbol: one polyline per path, on its own layer.
-        if let (ElementKind::Symbol, Some(symbol)) = (element.kind, &element.symbol) {
+        let layer = element.cad_layer();
+        // A symbol, or a part drawn with one: one polyline per path, on its own layer.
+        if let (ElementKind::Symbol | ElementKind::Part, Some(symbol)) = (element.kind, &element.symbol) {
             for path in &symbol.paths {
                 let mut poly = LwPolyline::default();
                 poly.set_is_closed(path.closed);
@@ -47,7 +48,7 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
                     .map(|p| LwPolylineVertex { x: p.x, y: p.y, ..Default::default() })
                     .collect();
                 let mut entity = Entity::new(EntityType::LwPolyline(poly));
-                entity.common.layer = element.layer.to_owned();
+                entity.common.layer = layer.clone();
                 drawing.add_entity(entity);
             }
             continue;
@@ -58,7 +59,7 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
                 let p = element.points[0];
                 let mut point =
                     Entity::new(EntityType::ModelPoint(ModelPoint::new(DxfPoint::new(p.x, p.y, 0.0))));
-                point.common.layer = element.layer.to_owned();
+                point.common.layer = layer.clone();
                 drawing.add_entity(point);
                 EntityType::Circle(Circle::new(DxfPoint::new(p.x, p.y, 0.0), height / 2.0))
             }
@@ -71,7 +72,10 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
             | ElementKind::Port
             | ElementKind::Clearance
             | ElementKind::Leftover
-            | ElementKind::Symbol => {
+            | ElementKind::Symbol
+            | ElementKind::Wall
+            | ElementKind::Part
+            | ElementKind::Run => {
                 let mut poly = LwPolyline::default();
                 poly.set_is_closed(element.closed);
                 poly.vertices = element
@@ -83,7 +87,7 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
             }
         };
         let mut entity = Entity::new(specific);
-        entity.common.layer = element.layer.to_owned();
+        entity.common.layer = layer.clone();
         drawing.add_entity(entity);
         // Holes: one closed polyline each, on the same layer.
         for hole in &element.holes {
@@ -92,7 +96,7 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
             poly.vertices =
                 hole.iter().map(|p| LwPolylineVertex { x: p.x, y: p.y, ..Default::default() }).collect();
             let mut entity = Entity::new(EntityType::LwPolyline(poly));
-            entity.common.layer = element.layer.to_owned();
+            entity.common.layer = layer.clone();
             drawing.add_entity(entity);
         }
 
