@@ -284,6 +284,12 @@ Three more passes, around the solve above. Types are in `assembly.rs` and `servi
   picks the one wall with the longest run clear of doors). Walls are inset into the rectangles
   they bound (boundary walls inward, unless `line = 'centre`), ends extended to meet at corners,
   and each child's slot is the clear rectangle left, so plans inside are solved in clear floor.
+  The engines look ahead to this: a space whose plan's `needs` its walls could decide
+  (`SpaceType::clear`) is held to them in the clear. The grid engine scores what the walls around
+  it would leave at every move, from `build::Foresight` (the same choice of assembly, by the roles
+  the edge would have); spine bays are sized for the walls they'll have. Spaces with no such needs
+  pay nothing. Foresight assumes a door rule's door gets built and leaves out `wall` rules with
+  `length`, so `check_needs` still has the last word, on the walls really built.
   Openings snap to their wall's centreline and take its depth (`in_wall`).
 - **Fit** (`fit.rs`, `connect.rs`), once everything is solved: services' `place` and `connect`
   run on the finished elements. `fit` builds a model of leaf rooms (faces split by the wall

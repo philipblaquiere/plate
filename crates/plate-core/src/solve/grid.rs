@@ -12,10 +12,11 @@
 //! inside the slot. A fixture's size is checked as width along its front and depth from front to
 //! back, and its exact size is drawn inside its cells, back against the cells' back edge.
 
+use super::build::Foresight;
 use super::common::{names_instances, num, select, Named, Rng, SpaceType};
 use super::frame::{Rect, Transform};
 use super::outline;
-use super::ports::{door_ports, ports_along, window_ports, PortSeg, Source, DOOR, OPEN};
+use super::ports::{door_ports, ports_along, window_ports, PortSeg, Source, DOOR, OPEN, WINDOW};
 use super::{Ctx, FixtureOut, Issue, Level, LevelResult, Opening, Placed, Slot};
 use crate::geometry::Point;
 use crate::layout::ElementKind;
@@ -668,6 +669,20 @@ struct Problem<'a> {
     a0: f64,
     utilization: f64,
     compactness: f64,
+    /// Instances whose plan's clear needs depend on the walls around them.
+    needy: Vec<usize>,
+    walls: Foreseen,
+}
+
+/// How far the walls around each needy instance will take floor from it (see [`Foresight`]).
+#[derive(Default)]
+struct Foreseen {
+    /// `between[k * (n + 1) + j]`: from instance `k`, by the wall to `j` (`n`: the fill).
+    between: Vec<f64>,
+    /// Per instance: the slot's ports with a wall on them, and how far it takes floor.
+    ports: Vec<Vec<(usize, f64)>>,
+    /// Per instance: the deepest of all those.
+    deepest: Vec<f64>,
 }
 
 pub fn solve(plan: &Plan, slot: &Slot, ctx: &Ctx) -> LevelResult {
@@ -861,9 +876,12 @@ pub fn solve(plan: &Plan, slot: &Slot, ctx: &Ctx) -> LevelResult {
         a0: l0 * l0,
         utilization: plan.goals.utilization,
         compactness: plan.goals.compactness,
+        needy: Vec::new(),
+        walls: Foreseen::default(),
     };
     problem.ordered = problem.types.iter().map(|_| false).collect();
     problem.rules = problem.compile(plan, &mut issues);
+    problem.foresee_walls(plan, slot);
 
     let mut rects = problem.initial();
     problem.pin(&mut rects, &pin_at, &mut issues);
@@ -1569,8 +1587,9 @@ impl Problem<'_> {
         let t = &self.types[self.inst[i].type_index];
         let (dw, dh) = (r.w as f64 * g.gx, r.h as f64 * g.gy);
         if self.fixture(i).is_none() {
-            let o1 = t.width.miss(dw) + t.depth.miss(dh);
-            let o2 = t.width.miss(dh) + t.depth.miss(dw);
+            let (width, depth, _) = t.gross_limits();
+            let o1 = width.miss(dw) + depth.miss(dh);
+            let o2 = width.miss(dh) + depth.miss(dw);
             return Shape { w: dw, h: dh, miss: o1.min(o2), compact: true };
         }
         // Along the front and front to back; a limit may be up to a cell over, since the fixture
@@ -1743,11 +1762,12 @@ impl Problem<'_> {
             let shape = self.shape(i, r);
             let (dw, dh) = (shape.w, shape.h);
             let area = dw * dh;
-            if t.area.miss(area) > slack(area) {
-                if area < t.area.min {
+            let (_, _, limit) = t.gross_limits();
+            if limit.miss(area) > slack(area) {
+                if area < limit.min {
                     say(
                         format!("{}/area", ptr()),
-                        format!("{name} is {} {sym}², less than {}", num(area), num(t.area.min)),
+                        format!("{name} is {} {sym}², less than {}", num(area), num(limit.min)),
                         if short {
                             crowded.clone()
                         } else {
@@ -1757,7 +1777,7 @@ impl Problem<'_> {
                 } else {
                     say(
                         format!("{}/area", ptr()),
-                        format!("{name} is {} {sym}², more than {}", num(area), num(t.area.max)),
+                        format!("{name} is {} {sym}², more than {}", num(area), num(limit.max)),
                         "The floor around it has nowhere else to go. Raise its area.max, or let another space (or a `fill = true` space) take the rest.".into(),
                     );
                 }
@@ -2064,7 +2084,8 @@ impl Problem<'_> {
     fn unmet(&self, rects: &[R]) -> usize {
         let mut issues = Vec::new();
         self.report(rects, &mut issues);
-        issues.iter().filter(|i| i.level == Level::Required).count()
+        let short = self.needy.iter().filter(|&&k| self.clear_miss(k, rects) > 1e-6).count();
+        issues.iter().filter(|i| i.level == Level::Required).count() + short
     }
 
     fn clamp(&self, r: &mut R) {
@@ -2357,12 +2378,7 @@ impl Problem<'_> {
             let old: Vec<(usize, R)> = changed.iter().map(|&(i, _)| (i, rects[i])).collect();
             let mut delta = 0.0;
             for &(i, r) in &changed {
-                let before = self.contribution(i, rects, &members, hs);
-                if let Some(f) = fill.as_mut() {
-                    f.occ.shift(g, &rects[i], &r);
-                }
-                rects[i] = r;
-                delta += self.contribution(i, rects, &members, hs) - before;
+                delta += self.apply(i, r, rects, &members, hs, &mut fill);
             }
             let undo = fill.as_mut().map(|f| {
                 let moved: Vec<(usize, R, R)> =
@@ -2493,12 +2509,7 @@ impl Problem<'_> {
                     let old: Vec<(usize, R)> = changed.iter().map(|&(j, _)| (j, rects[j])).collect();
                     let mut delta = 0.0;
                     for &(j, nr) in &changed {
-                        let before = self.contribution(j, rects, &members, hs);
-                        if let Some(f) = fill.as_mut() {
-                            f.occ.shift(g, &rects[j], &nr);
-                        }
-                        rects[j] = nr;
-                        delta += self.contribution(j, rects, &members, hs) - before;
+                        delta += self.apply(j, nr, rects, &members, hs, &mut fill);
                     }
                     let undo = match fill.as_mut() {
                         Some(f) => {
@@ -2769,33 +2780,14 @@ impl Problem<'_> {
         let window_segs: Vec<(Point, Point)> =
             openings.iter().filter(|o| o.kind == ElementKind::Window).map(|o| (o.a, o.b)).collect();
         let slot_segments: Vec<(Point, Point)> = slot.ports.iter().map(|p| (p.a, p.b)).collect();
-        // What a neighbour's walls say about it: a door to circulation is an entrance; a zone
-        // facing open floor (the fill or another zone) has no wall there; a neighbour can say
-        // what its walls are (`walls = 'wet`).
+        // What a neighbour's walls say about it.
         let roles_from = |i: usize, j: usize, t: &SpaceType| {
             let tj = if j == n {
                 &self.types[self.fill.as_ref().unwrap().type_index]
             } else {
                 &self.types[self.inst[j].type_index]
             };
-            let open = t.space.kind == SpaceKind::Zone && (j == n || tj.space.kind == SpaceKind::Zone);
-            if open {
-                return vec![OPEN.to_owned()];
-            }
-            let mut roles = Vec::new();
-            if has_door(&doors, i, j) {
-                // A door from circulation or open ground is a way in; from another room, a link.
-                let way_in = matches!(tj.space.kind, SpaceKind::Circulation | SpaceKind::Zone);
-                roles.push(if way_in { "entrance" } else { "link" }.to_owned());
-            }
-            match tj.space.walls.as_ref() {
-                Some(w) => roles.extend(w.roles()),
-                None => {
-                    let same = tj.key == t.key && t.space.plan.is_some();
-                    roles.push(if same { "party" } else { "partition" }.to_owned());
-                }
-            }
-            roles
+            t.roles_from(tj, j == n, has_door(&doors, i, j))
         };
         let mut placed = Vec::new();
         for (i, r) in rects.iter().enumerate() {
@@ -2984,6 +2976,163 @@ impl Problem<'_> {
         Membership { in_a, in_b }
     }
 
+    /// Work out what the walls around each space with clear needs will take from it. Plans with
+    /// no such space (most) pay nothing for any of this, here or while annealing.
+    fn foresee_walls(&mut self, plan: &Plan, slot: &Slot) {
+        let n = self.inst.len();
+        self.needy = (0..n).filter(|&i| self.types[self.inst[i].type_index].clear.is_some()).collect();
+        if self.needy.is_empty() {
+            return;
+        }
+        let foresight = Foresight::new(plan, self.ctx.units);
+        let door_between = |k: usize, j: usize| {
+            self.rules.iter().any(|rule| match rule {
+                C::Touch { a, b: Target::Spaces(b) | Target::Fill(b), door: Some(_), .. }
+                    if j < n
+                        && ((a.contains(&k) && b.contains(&j)) || (a.contains(&j) && b.contains(&k))) =>
+                {
+                    true
+                }
+                C::Touch { a, b: Target::Fill(_), door: Some(_), .. } if j == n => a.contains(&k),
+                C::FillTouch { b: Target::Spaces(b) | Target::Fill(b), door: Some(_), .. } if j == n => {
+                    b.contains(&k)
+                }
+                _ => false,
+            })
+        };
+        let fill_type = self.fill.as_ref().map(|f| f.type_index);
+        let mut between = vec![0.0; n * (n + 1)];
+        let mut ports = vec![Vec::new(); n];
+        for &k in &self.needy {
+            let (tk, name) = (&self.types[self.inst[k].type_index], self.inst[k].name.as_str());
+            for j in 0..=n {
+                let (tj, other) = match (j == n, fill_type) {
+                    (false, _) => (&self.types[self.inst[j].type_index], self.inst[j].name.as_str()),
+                    (true, Some(ti)) => (&self.types[ti], self.fill.as_ref().unwrap().name.as_str()),
+                    (true, None) => continue,
+                };
+                if j == k || tj.space.is_fixture() {
+                    continue;
+                }
+                let door = door_between(k, j);
+                let mut roles = tk.roles_from(tj, j == n, door);
+                for r in tj.roles_from(tk, false, door) {
+                    if !roles.contains(&r) {
+                        roles.push(r);
+                    }
+                }
+                between[k * (n + 1) + j] =
+                    foresight.intrusion(&roles, (name, &tk.key), Some((other, &tj.key)));
+            }
+            if self.ctx.root && slot.boundary.is_some() {
+                for (p, line) in self.ports.iter().enumerate() {
+                    let roles = &line.seg.roles;
+                    if roles.iter().all(|r| r == DOOR || r == WINDOW) {
+                        continue;
+                    }
+                    let depth = foresight.intrusion(roles, (name, &tk.key), None);
+                    if depth > 0.0 {
+                        ports[k].push((p, depth));
+                    }
+                }
+            }
+        }
+        let deepest = (0..n)
+            .map(|k| {
+                let row = &between[k * (n + 1)..(k + 1) * (n + 1)];
+                let on_ports = ports[k].iter().map(|p: &(usize, f64)| p.1);
+                row.iter().copied().chain(on_ports).fold(0.0, f64::max)
+            })
+            .collect();
+        self.walls = Foreseen { between, ports, deepest };
+    }
+
+    /// What the walls will take from needy instance `k` on each side (bottom, right, top, left),
+    /// as `build` will work it out: the deepest wall along that side.
+    fn clear_insets(&self, k: usize, rects: &[R]) -> [f64; 4] {
+        let n = self.inst.len();
+        let row = &self.walls.between[k * (n + 1)..(k + 1) * (n + 1)];
+        let r = &rects[k];
+        let mut insets = [0.0f64; 4];
+        let mut covered = [0i32; 4];
+        for (j, s) in rects.iter().enumerate() {
+            if j == k || !s.on || self.fixture(j).is_some() {
+                continue;
+            }
+            let along_x = (r.x1().min(s.x1()) - r.x.max(s.x)).max(0);
+            let along_y = (r.y1().min(s.y1()) - r.y.max(s.y)).max(0);
+            let touch = if s.y1() == r.y && along_x > 0 {
+                Some((0, along_x))
+            } else if s.x == r.x1() && along_y > 0 {
+                Some((1, along_y))
+            } else if s.y == r.y1() && along_x > 0 {
+                Some((2, along_x))
+            } else if s.x1() == r.x && along_y > 0 {
+                Some((3, along_y))
+            } else {
+                None
+            };
+            if let Some((side, len)) = touch {
+                insets[side] = insets[side].max(row[j]);
+                covered[side] += len;
+            }
+        }
+        if self.fill.is_some() {
+            let strip = |x, y, w, h| R { x, y, w, h, on: true, f: 0 };
+            let beyond = [
+                strip(r.x, r.y - 1, r.w, 1),
+                strip(r.x1(), r.y, 1, r.h),
+                strip(r.x, r.y1(), r.w, 1),
+                strip(r.x - 1, r.y, 1, r.h),
+            ];
+            for (side, b) in beyond.iter().enumerate() {
+                if b.x >= 0 && b.y >= 0 && self.grid.inside(b) > covered[side] {
+                    insets[side] = insets[side].max(row[n]);
+                }
+            }
+        }
+        for &(p, depth) in &self.walls.ports[k] {
+            let l = &self.ports[p];
+            let (sides, from, to) = if l.horizontal {
+                ([(0, r.y), (2, r.y1())], r.x as f64, r.x1() as f64)
+            } else {
+                ([(3, r.x), (1, r.x1())], r.y as f64, r.y1() as f64)
+            };
+            if overlap(from, to, l.from, l.to) > 0.0 {
+                for (side, at) in sides {
+                    if (at as f64 - l.at).abs() <= 0.6 {
+                        insets[side] = insets[side].max(depth);
+                    }
+                }
+            }
+        }
+        insets
+    }
+
+    /// How far what the walls leave needy instance `k` is from what its plan needs, in the cost's
+    /// terms: in either orientation, like a space's own limits.
+    fn clear_miss(&self, k: usize, rects: &[R]) -> f64 {
+        let r = &rects[k];
+        let Some(c) = self.types[self.inst[k].type_index].clear.as_ref().filter(|_| r.on) else {
+            return 0.0;
+        };
+        let (dw, dh) = (r.w as f64 * self.grid.gx, r.h as f64 * self.grid.gy);
+        // Whatever the walls turn out to be, it's fine: no need to go and look (most moves).
+        let d = 2.0 * self.walls.deepest[k];
+        let (lw, lh) = ((dw - d).max(0.0), (dh - d).max(0.0));
+        let holds = |b: Bounds1, lo: f64, hi: f64| b.miss(lo) == 0.0 && b.miss(hi) == 0.0;
+        let fits = (holds(c.width, lw, dw) && holds(c.depth, lh, dh))
+            || (holds(c.width, lh, dh) && holds(c.depth, lw, dw));
+        if fits && holds(c.area, lw * lh, dw * dh) {
+            return 0.0;
+        }
+        let insets = self.clear_insets(k, rects);
+        let w = (dw - insets[1] - insets[3]).max(0.0);
+        let h = (dh - insets[0] - insets[2]).max(0.0);
+        let sides = (c.width.miss(w) + c.depth.miss(h)).min(c.width.miss(h) + c.depth.miss(w));
+        sides / self.l0 + c.area.miss(w * h) / self.a0
+    }
+
     /// Terms of one instance alone: fitting inside, its size, and its share of utilization.
     fn unary(&self, i: usize, r: &R, hard: f64) -> f64 {
         if !r.on {
@@ -2999,7 +3148,7 @@ impl Problem<'_> {
         let shape = self.shape(i, r);
         let (dw, dh) = (shape.w, shape.h);
         let area = dw * dh;
-        c += hard * t.area.miss(area) / a0;
+        c += hard * t.gross_limits().2.miss(area) / a0;
         c += hard * (t.side.miss(dw) + t.side.miss(dh)) / l0;
         c += hard * shape.miss / l0;
         let ratio = dw.max(dh) / dw.min(dh);
@@ -3235,6 +3384,9 @@ impl Problem<'_> {
                 c += self.pair(i, r, j, s, hard);
             }
         }
+        for &k in &self.needy {
+            c += hard * self.clear_miss(k, rects);
+        }
         for rule in &self.rules {
             match rule {
                 C::Apart { a, b, d, w, .. } => {
@@ -3272,6 +3424,46 @@ impl Problem<'_> {
             c += FillState::new(self, rects, hs, true).total();
         }
         c
+    }
+
+    /// Move instance `i` to `to`. Returns the change in cost, the fill's cut aside.
+    fn apply(
+        &self,
+        i: usize,
+        to: R,
+        rects: &mut [R],
+        m: &Membership,
+        hs: f64,
+        fill: &mut Option<FillState>,
+    ) -> f64 {
+        let from = rects[i];
+        // A needy space's walls depend on what it touches: this move can only change those near
+        // where `i` was and where it's going.
+        let mut near = 0u64; // a bit per instance: there are at most MAX_INSTANCES
+        if !self.needy.is_empty() && self.fixture(i).is_none() {
+            let close =
+                |a: &R, b: &R| a.on && a.x <= b.x1() && b.x <= a.x1() && a.y <= b.y1() && b.y <= a.y1();
+            for &k in &self.needy {
+                if k == i || close(&from, &rects[k]) || close(&to, &rects[k]) {
+                    near |= 1 << k;
+                }
+            }
+        }
+        let hard = HARD * hs;
+        let needs = |rects: &[R]| {
+            let (mut left, mut c) = (near, 0.0);
+            while left != 0 {
+                c += hard * self.clear_miss(left.trailing_zeros() as usize, rects);
+                left &= left - 1;
+            }
+            c
+        };
+        let before = self.contribution(i, rects, m, hs) + needs(rects);
+        if let Some(f) = fill.as_mut() {
+            f.occ.shift(&self.grid, &from, &to);
+        }
+        rects[i] = to;
+        self.contribution(i, rects, m, hs) + needs(rects) - before
     }
 
     /// Every term that depends on instance `i`: moving `i` changes the cost by the change in this.

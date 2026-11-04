@@ -944,11 +944,9 @@ impl Host {
             Some(s) if s.len() >= 2 => Engine::SpineStack,
             _ => Engine::Grid,
         });
-        // Spaces with plans are sized for the walls around them too: their plans' needs are clear.
-        let engine_plan = build::with_allowance(plan, self.units);
         let level = match engine {
-            Engine::Grid => grid::solve(&engine_plan, slot, ctx),
-            Engine::SpineStack => spine::solve(&engine_plan, slot, ctx),
+            Engine::Grid => grid::solve(plan, slot, ctx),
+            Engine::SpineStack => spine::solve(plan, slot, ctx),
         };
         let built = build::build(plan, slot, &level, self.units, ctx.root);
         let mut sub = Sub::default();
@@ -1230,8 +1228,7 @@ impl Host {
                 }
             }
         }
-        let slack = plan.assemblies.values().map(|a| a.thickness(self.units)).fold(0.0, f64::max);
-        align_doors(&mut sub, own_openings, slack);
+        align_doors(&mut sub, own_openings, build::thickest(plan, self.units));
         sub
     }
 }
@@ -1410,6 +1407,8 @@ fn context_plan(plan: &Plan, c: &serde_json::Value) -> Plan {
 /// A space whose own width or depth can't meet what its plan needs: no slot can work.
 fn needs_conflicts(plan: &Plan, units: crate::units::Units) -> Vec<Issue> {
     let mut out = Vec::new();
+    // Needs are clear sizes and a space's own are gross: its walls can take this much across it.
+    let walls = 2.0 * build::thickest(plan, units);
     for (key, space) in &plan.spaces {
         let Some(child) = space.plan.as_ref() else { continue };
         for (field, own, needs) in
@@ -1429,7 +1428,7 @@ fn needs_conflicts(plan: &Plan, units: crate::units::Units) -> Vec<Issue> {
                     )
                     .with_hint(format!("Raise {key}'s {field}.max, or lower the {field} its plan needs.")),
                 );
-            } else if needs.max < own.min - 1e-9 {
+            } else if needs.max < own.min - walls - 1e-9 {
                 out.push(
                     Issue::new(
                         format!("/spaces/{key}/plan/needs/{field}"),

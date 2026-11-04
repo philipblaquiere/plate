@@ -362,7 +362,8 @@ and power, lighting, heat or plumbing is placed on the result and connected.
 - **Assemblies** are picked by port role: a wall gets the thinnest assembly that meets what both
   sides' roles ask (`on`) and what any `plate.wall` rule asks (a fire rating, an STC, a cavity
   deep enough for a pipe). Walls take floor, so a plan inside a room is solved in the clear
-  floor its walls leave it. Boundary walls grow inward; `line = 'centre` puts a party wall on the
+  floor its walls leave it, and its `needs` are clear sizes: the room is made big enough for
+  them and for the walls it gets. Boundary walls grow inward; `line = 'centre` puts a party wall on the
   line between two plates.
 - **Services** never move a wall. They place **parts** (receptacles, switches, lights, panels,
   stacks) where the solved plan says: `plate.every` along walls, `plate.beside` doors or windows,
