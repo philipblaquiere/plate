@@ -120,6 +120,8 @@ pub struct Placed {
     pub mount: Mount,
     pub above: Option<f64>,
     pub group: Option<String>,
+    /// The network that group is in.
+    pub network: Option<String>,
     /// The scope it's in (a path prefix), for connecting.
     pub scope: String,
 }
@@ -704,6 +706,7 @@ impl Ctx<'_> {
             mount: job.part.mount,
             above: (!inside).then_some(above),
             group: None,
+            network: None,
             scope: job.inst.prefix.clone(),
         });
         true
@@ -732,6 +735,7 @@ impl Ctx<'_> {
             mount: job.part.mount,
             above: None,
             group: None,
+            network: None,
             scope: job.inst.prefix.clone(),
         });
     }
@@ -1218,6 +1222,7 @@ fn part_element(k: usize, p: Placed, instances: &[Instance], units: Units) -> El
         space: p.room,
         placed: p.how,
         group: p.group,
+        network: p.network,
         at: p.at,
     });
     e

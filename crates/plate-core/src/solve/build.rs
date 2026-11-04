@@ -109,20 +109,6 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
     let n = level.placed.len();
     let mut out = Built { insets: vec![[0.0; 4]; n], fill: vec![None; n], ..Default::default() };
     let wall_rules = wall_rules(plan);
-    if plan.assemblies.is_empty() {
-        for (ptr, rule) in &wall_rules {
-            if let Rule::Wall { assembly: Some(name), .. } = rule {
-                out.issues.push(
-                    Issue::new(
-                        format!("{ptr}/assembly"),
-                        format!("no assembly named \"{name}\": this plan has none"),
-                    )
-                    .with_hint("Add `assemblies` to the plate (or this plan), or import a set of them."),
-                );
-            }
-        }
-        return out;
-    }
     let tol = units.tolerance() * 10.0;
     let solid = |i: usize| level.placed[i].fixture.is_none();
     let index = |name: &str| level.placed.iter().position(|p| p.name == name).filter(|&j| solid(j));
@@ -215,6 +201,23 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
         rule_applies(a, b, port, &w.roles, name_of(w.owner), them)
             || w.other.is_some_and(|o| rule_applies(a, b, port, &w.roles, name_of(o), Some(name_of(w.owner))))
     };
+    if plan.assemblies.is_empty() {
+        const HINT: &str = "Add `assemblies` to the plate (or this plan), or import a set of them.";
+        for (ptr, rule) in &wall_rules {
+            let Rule::Wall { a, b, port, assembly, .. } = rule else { continue };
+            if let Some(name) = assembly {
+                let message = format!("no assembly named \"{name}\": this plan has none");
+                out.issues.push(Issue::new(format!("{ptr}/assembly"), message).with_hint(HINT));
+            } else if rule_need(rule, units) != Need::default()
+                && walls.iter().any(|w| applies(w, a, b, port))
+            {
+                let message =
+                    format!("no assembly is {}: this plan has none", rule_need(rule, units).describe());
+                out.issues.push(Issue::new(ptr.clone(), message).with_hint(HINT));
+            }
+        }
+        return out;
+    }
     let mut keep = vec![true; walls.len()];
     let mut needs: Vec<Asked> = walls
         .iter()
@@ -242,13 +245,16 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
                 .map(|(k, w)| (k, clear_run(w, level, tol)))
                 .max_by(|x, y| x.1.total_cmp(&y.1));
             match best {
-                Some((k, run)) if run + tol >= len => match assembly {
-                    Some(n) => needs[k].2 = Some((n.clone(), ptr.clone())),
-                    None => {
-                        needs[k].0 = needs[k].0.and(rule_need(rule, units));
-                        needs[k].1.push(format!("the rule at {ptr}"));
+                Some((k, run)) if run + tol >= len => {
+                    needs[k].3 = needs[k].3.and(rule_need(rule, units));
+                    match assembly {
+                        Some(n) => needs[k].2 = Some((n.clone(), ptr.clone())),
+                        None => {
+                            needs[k].0 = needs[k].0.and(rule_need(rule, units));
+                            needs[k].1.push(format!("the rule at {ptr}"));
+                        }
                     }
-                },
+                }
                 best => {
                     let had = best.map_or(0.0, |b| b.1);
                     let message = format!(
@@ -271,10 +277,23 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
 
     // The thinnest assembly that meets it all.
     for (k, w) in walls.iter_mut().enumerate() {
-        let (need, why, explicit) = &needs[k];
+        let (need, why, explicit, ruled) = &needs[k];
         if let Some((name, ptr)) = explicit {
             match plan.assemblies.get(name) {
                 Some(a) => {
+                    if !a.meets(ruled, units) {
+                        let (on, off) = (name_of(w.owner).0, w.other.map_or("the outside", |o| name_of(o).0));
+                        out.issues.push(
+                            Issue::new(
+                                format!("{ptr}/assembly"),
+                                format!(
+                                    "\"{name}\" isn't {}, as rules ask of the wall between {on} and {off}",
+                                    ruled.describe()
+                                ),
+                            )
+                            .with_hint("Name an assembly that is, or ask for less."),
+                        );
+                    }
                     w.name = name.clone();
                     w.assembly = a.clone();
                     w.because = format!("the rule at {ptr}");
@@ -523,8 +542,9 @@ fn rule_applies(
     }
 }
 
-/// What a wall must be, why, and the assembly a rule named (with the rule's pointer).
-type Asked = (Need, Vec<String>, Option<(String, String)>);
+/// What a wall must be, why, the assembly a rule named (with the rule's pointer), and what rules
+/// alone ask (naming an assembly stands in for those its roles match, not for them).
+type Asked = (Need, Vec<String>, Option<(String, String)>, Need);
 
 /// What the assemblies its roles match and the `wall` rules that apply ask of a wall.
 fn asked(
@@ -537,6 +557,7 @@ fn asked(
     let mut need = Need::default();
     let mut why = Vec::new();
     let mut explicit = None;
+    let mut ruled = Need::default();
     for (name, a) in &plan.assemblies {
         if a.matches(roles) {
             need = need.and(a.requirement(units));
@@ -548,6 +569,7 @@ fn asked(
         if !applies(a, b, port) {
             continue;
         }
+        ruled = ruled.and(rule_need(rule, units));
         match assembly {
             Some(name) => explicit = Some((name.clone(), ptr.clone())),
             None => {
@@ -556,7 +578,7 @@ fn asked(
             }
         }
     }
-    (need, why, explicit)
+    (need, why, explicit, ruled)
 }
 
 /// The thinnest assembly that meets `need`, for a wall with these roles.
@@ -614,7 +636,7 @@ impl<'a> Foresight<'a> {
             rule_applies(a, b, p, roles, me, them)
                 || them.is_some_and(|t| rule_applies(a, b, p, roles, t, Some(me)))
         };
-        let (need, why, explicit) = asked(self.plan, &self.wall_rules, roles, applies, self.units);
+        let (need, why, explicit, _) = asked(self.plan, &self.wall_rules, roles, applies, self.units);
         let assembly = match explicit {
             Some((name, _)) => self.plan.assemblies.get(&name),
             None if why.is_empty() => None,

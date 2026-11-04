@@ -150,20 +150,18 @@ impl Assembly {
     }
 
     /// Checks the format can't express. Returns (pointer, message).
-    pub fn validate(&self, at: &str, units: Units) -> Result<(), (String, String)> {
+    pub fn validate(&self, at: &str) -> Result<(), (String, String)> {
         if self.thickness.is_none() && self.layers.is_empty() {
             return Err((at.to_owned(), "an assembly needs a `thickness`, or `layers` to add up".into()));
         }
         // Plain numbers are in the plate's units, unknown here: compare only like with like.
-        let same_kind = |l: &Layer| {
-            std::mem::discriminant(&l.thickness.0)
-                == self
-                    .thickness
-                    .map_or(std::mem::discriminant(&l.thickness.0), |t| std::mem::discriminant(&t.0))
-        };
-        if let (Some(t), false, true) =
-            (self.thickness, self.layers.is_empty(), self.layers.iter().all(same_kind))
-        {
+        fn alike<'a>(mut lengths: impl Iterator<Item = &'a LengthSer>) -> bool {
+            let first = lengths.next().map(|l| std::mem::discriminant(&l.0));
+            lengths.all(|l| Some(std::mem::discriminant(&l.0)) == first)
+        }
+        let units = Units::M;
+        let sizes = || self.thickness.iter().chain(self.layers.iter().map(|l| &l.thickness));
+        if let (Some(t), false, true) = (self.thickness, self.layers.is_empty(), alike(sizes())) {
             let sum: f64 = self.layers.iter().map(|l| l.thickness.0.to(units)).sum();
             if (t.0.to(units) - sum).abs() > units.tolerance() * 10.0 {
                 return Err((
@@ -172,7 +170,9 @@ impl Assembly {
                 ));
             }
         }
-        if self.cavity(units) > self.thickness(units) + units.tolerance() {
+        if alike(sizes().chain(&self.cavity))
+            && self.cavity(units) > self.thickness(units) + units.tolerance()
+        {
             return Err((format!("{at}/cavity"), "the cavity is deeper than the wall is thick".into()));
         }
         Ok(())
@@ -282,7 +282,22 @@ mod tests {
         .unwrap();
         assert!((a.thickness(Units::M) - 0.115).abs() < 1e-9);
         assert!((a.cavity(Units::M) - 0.089).abs() < 1e-9);
-        assert!(a.validate("", Units::M).is_ok());
+        assert!(a.validate("").is_ok());
+    }
+
+    #[test]
+    fn plain_numbers_and_lengths_with_units_are_not_compared() {
+        // In a plate in millimetres, 89 is 89 mm: not a cavity deeper than the wall.
+        let mixed: Assembly =
+            serde_json::from_value(serde_json::json!({ "thickness": "115 mm", "cavity": 89 })).unwrap();
+        assert!(mixed.validate("").is_ok());
+        for alike in [
+            serde_json::json!({ "thickness": "115 mm", "cavity": "200 mm" }),
+            serde_json::json!({ "thickness": 115, "cavity": 200 }),
+        ] {
+            let a: Assembly = serde_json::from_value(alike).unwrap();
+            assert_eq!(a.validate("/a").unwrap_err().0, "/a/cavity");
+        }
     }
 
     #[test]
@@ -305,7 +320,7 @@ mod tests {
 
     #[test]
     fn needs_a_size() {
-        let (p, m) = Assembly::default().validate("/assemblies/x", Units::M).unwrap_err();
+        let (p, m) = Assembly::default().validate("/assemblies/x").unwrap_err();
         assert_eq!(p, "/assemblies/x");
         assert!(m.contains("thickness"), "{m}");
     }

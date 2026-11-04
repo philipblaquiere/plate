@@ -104,6 +104,8 @@ export interface PartInfo {
   placed: string;
   /** Its group in a network (a circuit), once connected. */
   group?: string;
+  /** The network that group is in: group numbers start over in each. */
+  network?: string;
   /** Where it stands. */
   at: Point;
 }

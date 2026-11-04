@@ -149,13 +149,15 @@ struct Files {
 /// Solve a file, with `--seed N` in `args` overriding its seed. Also gives back where its
 /// imports live, to name them in diagnostics.
 fn run_file(path: &str, args: &[String]) -> Result<(plate_server::engine::Solved, PathBuf), String> {
-    let seed = flag(args, "--seed")
-        .map(|s| s.parse::<u64>().map_err(|_| format!("invalid seed `{s}`")))
-        .transpose()?;
+    let seed = seed_flag(args)?;
     let Files { main, files, root } = with_siblings(path)?;
     plate_server::engine::run_files(&main, files, seed)
         .map(|s| (s, root.clone()))
         .map_err(|d| print_diagnostics(path, &root, &d))
+}
+
+fn seed_flag(args: &[String]) -> Result<Option<u64>, String> {
+    flag(args, "--seed").map(|s| s.parse::<u64>().map_err(|_| format!("invalid seed `{s}`"))).transpose()
 }
 
 fn print_diagnostics(path: &str, root: &std::path::Path, diagnostics: &[Diagnostic]) -> String {
@@ -187,104 +189,102 @@ fn print_diagnostics(path: &str, root: &std::path::Path, diagnostics: &[Diagnost
 fn check(args: &[String]) -> Result<(), String> {
     let path = args.first().ok_or_else(|| USAGE.to_owned())?;
     // A library (a service, a set of assemblies) is checked, not drawn.
-    let Files { main, files, .. } = with_siblings(path)?;
-    if let Ok((_, ev)) = plate_config::check_files(plate_config::Workspace { main: &main, files: &files }) {
-        let name = main.rsplit('/').next().unwrap_or(&main).trim_end_matches(".ncl");
-        let len = |k: &str| {
-            ev.value
-                .get(k)
-                .map_or(0, |v| v.as_object().map_or_else(|| v.as_array().map_or(0, Vec::len), |o| o.len()))
-        };
-        match ev.kind {
-            plate_config::schema::FileKind::Service
-                if ev.value.as_object().is_some_and(|o| o.keys().all(|k| k == "params" || k == "label")) =>
-            {
-                let names: Vec<&String> =
-                    ev.value["params"].as_object().map(|o| o.keys().collect()).unwrap_or_default();
-                println!(
-                    "ok: numbers for a service in \"{name}\": {}",
-                    names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
-                );
-                return Ok(());
-            }
-            plate_config::schema::FileKind::Service => {
-                println!(
-                    "ok: service \"{name}\": {} parts, {} placements, {} networks",
-                    len("parts"),
-                    len("place"),
-                    len("connect")
-                );
-                return Ok(());
-            }
-            plate_config::schema::FileKind::Assemblies => {
-                let names: Vec<&String> =
-                    ev.value.as_object().map(|o| o.keys().collect()).unwrap_or_default();
-                println!(
-                    "ok: {} assemblies in \"{name}\": {}",
-                    names.len(),
-                    names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
-                );
-                return Ok(());
-            }
-            _ => {}
-        }
-    }
-    match run_file(path, args).map_err(|e| vec![plate_core::Diagnostic::error(e)]) {
-        Ok((solved, root)) => {
-            use plate_core::layout::ElementKind;
-            let layout = &solved.layout;
-            let u = layout.units.symbol();
-            let count = |k: ElementKind| layout.elements.iter().filter(|e| e.kind == k).count();
-            let start = &layout.elements[0];
-            let shape = match start.kind {
-                ElementKind::Origin => {
-                    format!("origin at ({:.2}, {:.2}) {u}", start.points[0].x, start.points[0].y)
-                }
-                ElementKind::Spine => format!("spine {:.2} {u} long", start.length),
-                ElementKind::Slot => {
-                    let b = plate_core::Bounds::from_points(&start.points);
-                    format!("plan in a {:.2} × {:.2} {u} slot", b.width(), b.height())
-                }
-                _ => format!("boundary {:.2} {u}²", start.area.unwrap_or(0.0)),
-            };
-            let r = &solved.report;
-            let mut status = format!("{:?}", r.status).to_lowercase();
-            let mut why = Vec::new();
-            if r.unmet > 0 {
-                why.push(format!("{} unmet", r.unmet));
-            }
-            if r.preferences > 0 {
-                why.push(format!("{} preferences missed", r.preferences));
-            }
-            if r.leftover > 1e-9 {
-                why.push(format!("{:.2} {u}² left over", r.leftover));
-            }
-            if !why.is_empty() {
-                status = format!("{status} ({})", why.join(", "));
-            }
+    let Files { main, files, root } = with_siblings(path)?;
+    let checked =
+        plate_server::engine::check_files(&main, &files).map_err(|d| print_diagnostics(path, &root, &d))?;
+    let ev = &checked.evaluation;
+    let name = main.rsplit('/').next().unwrap_or(&main).trim_end_matches(".ncl");
+    let len = |k: &str| {
+        ev.value
+            .get(k)
+            .map_or(0, |v| v.as_object().map_or_else(|| v.as_array().map_or(0, Vec::len), |o| o.len()))
+    };
+    match ev.kind {
+        plate_config::schema::FileKind::Service
+            if ev.value.as_object().is_some_and(|o| o.keys().all(|k| k == "params" || k == "label")) =>
+        {
+            let names: Vec<&String> =
+                ev.value["params"].as_object().map(|o| o.keys().collect()).unwrap_or_default();
             println!(
-                "{status}: \"{}\": {shape}; {} spaces, {} doors, {} windows (eval {} ms, solve {} ms)",
-                layout.name,
-                count(ElementKind::Space),
-                count(ElementKind::Door),
-                count(ElementKind::Window),
-                solved.timings.eval_ms,
-                solved.timings.solve_ms,
+                "ok: numbers for a service in \"{name}\": {}",
+                names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
             );
-            if args.iter().any(|a| a == "-v" || a == "--verbose") {
-                for e in layout.elements.iter().filter(|e| e.kind == ElementKind::Space) {
-                    let info = e.space.as_ref().expect("space info");
-                    let typical = info.typical.as_ref().map(|t| format!(" [type {t}]")).unwrap_or_default();
-                    println!("  {:<24} {:>8.2} {u}²{typical}", e.id, e.area.unwrap_or(0.0));
-                }
-            }
-            if !solved.diagnostics.is_empty() {
-                println!("{}", print_diagnostics(&args[0], &root, &solved.diagnostics));
-            }
-            Ok(())
+            return Ok(());
         }
-        Err(diags) => Err(diags.into_iter().map(|d| d.message).collect::<Vec<_>>().join("\n")),
+        plate_config::schema::FileKind::Service => {
+            println!(
+                "ok: service \"{name}\": {} parts, {} placements, {} networks",
+                len("parts"),
+                len("place"),
+                len("connect")
+            );
+            return Ok(());
+        }
+        plate_config::schema::FileKind::Assemblies => {
+            let names: Vec<&String> = ev.value.as_object().map(|o| o.keys().collect()).unwrap_or_default();
+            println!(
+                "ok: {} assemblies in \"{name}\": {}",
+                names.len(),
+                names.iter().map(|s| s.as_str()).collect::<Vec<_>>().join(", ")
+            );
+            return Ok(());
+        }
+        _ => {}
     }
+    let seed = seed_flag(args)?;
+    let solved =
+        checked.solve(plate_core::View::Default, seed).map_err(|d| print_diagnostics(path, &root, &d))?;
+    use plate_core::layout::ElementKind;
+    let layout = &solved.layout;
+    let u = layout.units.symbol();
+    let count = |k: ElementKind| layout.elements.iter().filter(|e| e.kind == k).count();
+    let start = &layout.elements[0];
+    let shape = match start.kind {
+        ElementKind::Origin => {
+            format!("origin at ({:.2}, {:.2}) {u}", start.points[0].x, start.points[0].y)
+        }
+        ElementKind::Spine => format!("spine {:.2} {u} long", start.length),
+        ElementKind::Slot => {
+            let b = plate_core::Bounds::from_points(&start.points);
+            format!("plan in a {:.2} × {:.2} {u} slot", b.width(), b.height())
+        }
+        _ => format!("boundary {:.2} {u}²", start.area.unwrap_or(0.0)),
+    };
+    let r = &solved.report;
+    let mut status = format!("{:?}", r.status).to_lowercase();
+    let mut why = Vec::new();
+    if r.unmet > 0 {
+        why.push(format!("{} unmet", r.unmet));
+    }
+    if r.preferences > 0 {
+        why.push(format!("{} preferences missed", r.preferences));
+    }
+    if r.leftover > 1e-9 {
+        why.push(format!("{:.2} {u}² left over", r.leftover));
+    }
+    if !why.is_empty() {
+        status = format!("{status} ({})", why.join(", "));
+    }
+    println!(
+        "{status}: \"{}\": {shape}; {} spaces, {} doors, {} windows (eval {} ms, solve {} ms)",
+        layout.name,
+        count(ElementKind::Space),
+        count(ElementKind::Door),
+        count(ElementKind::Window),
+        solved.timings.eval_ms,
+        solved.timings.solve_ms,
+    );
+    if args.iter().any(|a| a == "-v" || a == "--verbose") {
+        for e in layout.elements.iter().filter(|e| e.kind == ElementKind::Space) {
+            let info = e.space.as_ref().expect("space info");
+            let typical = info.typical.as_ref().map(|t| format!(" [type {t}]")).unwrap_or_default();
+            println!("  {:<24} {:>8.2} {u}²{typical}", e.id, e.area.unwrap_or(0.0));
+        }
+    }
+    if !solved.diagnostics.is_empty() {
+        println!("{}", print_diagnostics(&args[0], &root, &solved.diagnostics));
+    }
+    Ok(())
 }
 
 fn eval(args: &[String]) -> Result<(), String> {

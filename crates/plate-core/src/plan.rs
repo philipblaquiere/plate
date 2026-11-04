@@ -766,6 +766,33 @@ impl Rule {
 }
 
 impl Rule {
+    /// Checks of the rule on its own, whatever plan it ends up in: touch/door with neither or both
+    /// of `b` and `port`. `here` is its pointer. Returns (pointer, message).
+    pub fn validate(&self, here: &str) -> Result<(), (String, String)> {
+        match self {
+            Rule::Touch { b, port, .. }
+            | Rule::Door { b, port, .. }
+            | Rule::Apart { b, port, .. }
+            | Rule::Wall { b, port, .. } => {
+                if b.is_some() == port.is_some() {
+                    return Err((
+                        here.to_owned(),
+                        format!("a {} rule needs either `b` (a space) or `port`, not both", self.name()),
+                    ));
+                }
+                if let Rule::Apart { wall: true, port: None, .. } = self {
+                    return Err((
+                        format!("{here}/wall"),
+                        "`wall` is for a port: `plate.apart \"bed\" 'window & { wall = true }`".into(),
+                    ));
+                }
+            }
+            Rule::Instance { plan, .. } => plan.validate(&format!("{here}/plan"))?,
+            _ => {}
+        }
+        Ok(())
+    }
+
     /// Every selector in the rule, to rewrite (tags into names).
     pub fn selectors_mut(&mut self) -> Vec<&mut Selector> {
         let mut out = Vec::new();
@@ -803,7 +830,8 @@ pub enum RuleItem {
 }
 
 impl Plan {
-    /// Every rule with its JSON pointer relative to the plan (`/rules/3` or `/rules/3/1`).
+    /// Every rule with its JSON pointer relative to the plan (`/rules/3` or `/rules/3/1`). A rule
+    /// with a selector that selects nothing (a tag no space has) asks for nothing: it's left out.
     pub fn rules(&self) -> Vec<(String, &Rule)> {
         let mut out = Vec::new();
         for (i, item) in self.rules.iter().enumerate() {
@@ -816,6 +844,7 @@ impl Plan {
                 }
             }
         }
+        out.retain(|(_, rule)| rule.selectors().iter().all(|(_, s)| !s.items().is_empty()));
         out
     }
 
@@ -973,30 +1002,10 @@ impl Plan {
                     }
                 }
             }
-            match rule {
-                Rule::Touch { b, port, .. }
-                | Rule::Door { b, port, .. }
-                | Rule::Apart { b, port, .. }
-                | Rule::Wall { b, port, .. } => {
-                    if b.is_some() == port.is_some() {
-                        return Err((
-                            here,
-                            format!("a {} rule needs either `b` (a space) or `port`, not both", rule.name()),
-                        ));
-                    }
-                    if let Rule::Apart { wall: true, port: None, .. } = rule {
-                        return Err((
-                            format!("{here}/wall"),
-                            "`wall` is for a port: `plate.apart \"bed\" 'window & { wall = true }`".into(),
-                        ));
-                    }
-                }
-                Rule::Instance { plan, .. } => plan.validate(&format!("{here}/plan"))?,
-                _ => {}
-            }
+            rule.validate(&here)?;
         }
         for (name, assembly) in &self.assemblies {
-            assembly.validate(&format!("{at}/assemblies/{}", escape_pointer(name)), Units::M)?;
+            assembly.validate(&format!("{at}/assemblies/{}", escape_pointer(name)))?;
         }
         for (name, service) in &self.services {
             service.validate(&format!("{at}/services/{}", escape_pointer(name)))?;

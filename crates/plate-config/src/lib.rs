@@ -219,9 +219,7 @@ pub fn check_files(ws: Workspace) -> Result<(Config, Evaluation), Vec<Diagnostic
         >(evaluation.value.clone())
         .map_err(|e| ("".to_owned(), e.to_string()))
         .and_then(|all| {
-            all.iter().try_for_each(|(k, a)| {
-                a.validate(&format!("/{}", plate_core::plan::escape_pointer(k)), plate_core::Units::M)
-            })
+            all.iter().try_for_each(|(k, a)| a.validate(&format!("/{}", plate_core::plan::escape_pointer(k))))
         }),
         _ => Ok(()),
     };
@@ -233,7 +231,12 @@ pub fn check_files(ws: Workspace) -> Result<(Config, Evaluation), Vec<Diagnostic
         }
         return Err(vec![d]);
     }
-    match Config::from_value(evaluation.value.clone()) {
+    // A library has no plate fields: its keys are its own (an assembly can be called `name`).
+    let value = match evaluation.kind {
+        schema::FileKind::Service | schema::FileKind::Assemblies => serde_json::json!({}),
+        _ => evaluation.value.clone(),
+    };
+    match Config::from_value(value) {
         Ok(config) => Ok((config, evaluation)),
         Err(err) => {
             let main = &ws.files[ws.main];
@@ -836,6 +839,13 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
 
     const ROOM: &str = "# a plan in its own file\n{\n  spaces = { sleep = { area.min = 14 } },\n  rules = [plate.window \"sleep\"],\n}\n";
     const HOTEL: &str = "let room_plan = import \"plans/room.ncl\" in\n{\n  start = { mode = 'spine, points = [[0, 0], [30, 0]] },\n  spaces = {\n    corridor = { kind = 'circulation, width = 1.8 },\n    room = { count.min = 1, plan = room_plan },\n  },\n  rules = [plate.along \"room\" \"corridor\"],\n}\n";
+
+    #[test]
+    fn an_assembly_can_be_called_what_a_plate_field_is() {
+        let (_, evaluation) =
+            check(r#"{ name = { thickness = "100 mm" }, seed = { thickness = 0.1 } }"#).unwrap();
+        assert_eq!(evaluation.kind, schema::FileKind::Assemblies);
+    }
 
     #[test]
     fn imports_plans_from_other_files() {
