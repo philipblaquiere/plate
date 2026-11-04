@@ -2772,10 +2772,31 @@ button {
   stroke-width: 4;
 }
 
-.door {
+/* A door in plan: jambs, the open leaf (a solid panel), its swing as a thin arc over a faint
+   wash of the floor it sweeps. */
+.door-sweep {
+  fill: rgba(31, 35, 40, 0.05);
+  stroke: none;
+}
+
+.door-swing {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 0.7;
+}
+
+.door-jamb {
   fill: none;
   stroke: var(--ink);
-  stroke-width: 0.9;
+  stroke-width: 1.2;
+  stroke-linecap: butt;
+}
+
+.door-leaf {
+  fill: var(--sheet-raised);
+  stroke: var(--ink);
+  stroke-width: 1;
+  stroke-linejoin: miter;
 }
 
 .window {
