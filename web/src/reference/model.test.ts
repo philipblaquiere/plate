@@ -15,7 +15,7 @@ describe("the reference, generated from the schema, helpers and guides", () => {
     );
     expect(entry("def:Start").variants).toEqual(["def:BoundaryStart", "def:SpineStart"]);
     expect(entry("def:BoundaryStart")).toMatchObject({ title: "Boundary", subtitle: "mode = 'boundary" });
-    expect(entry("def:Rules").variants).toHaveLength(10);
+    expect(entry("def:Rules").variants).toHaveLength(11);
     expect(entry("def:RuleDoor").section).toBe("Rules");
     expect(
       entry("def:Space")
@@ -44,6 +44,10 @@ describe("the reference, generated from the schema, helpers and guides", () => {
   it("connects rule kinds and the helpers that write them", () => {
     expect(entry("def:RuleTouch").helpers).toEqual(["helper:touches", "helper:between"]);
     expect(entry("helper:between").rules).toEqual(["def:RuleTouch", "def:RuleApart"]);
+    // A service's placements are written with helpers too.
+    expect(entry("helper:every").rules).toEqual(["def:PlaceEvery"]);
+    expect(entry("def:PlaceEvery").template).toMatch(/^plate\.every /);
+    expect(entry("helper:wall").rules).toEqual(["def:RuleWall"]);
     expect(entry("def:RuleReach").template).toBe('plate.reach "${1:a}" "${2:b}" "${3:via}"');
     expect(entry("helper:door")).toMatchObject({ title: "plate.door", subtitle: "plate.door a b" });
     expect(entry("helper:door").examples[0].code).toBe('plate.door "bedroom" "hall"');

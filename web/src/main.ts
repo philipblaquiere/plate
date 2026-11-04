@@ -11,10 +11,12 @@ import { defaultUnits, modeOf, template, type StartMode } from "./editor/templat
 import { ConfigEngine } from "./engine/engine";
 import { download, pickFile, takeLegacyDraft } from "./files";
 import { openMenu, type MenuItem } from "./menu";
+import { libraryCard } from "./library";
+import { nextView, summarize, type ServiceSummary } from "./services";
 import { place } from "./reference/insert";
 import type { Cursor } from "./reference/locate";
 import { ReferencePanel } from "./reference/panel";
-import { catalog, suggest } from "./symbols";
+import { catalog, suggest, thumbnail } from "./symbols";
 import { caseLabel, caseLiteral, casePointer, previewCases, sidesOf } from "./preview";
 import type {
   Diagnostic,
@@ -31,7 +33,7 @@ import type {
 import { Lengths } from "./viewer/format";
 import { Viewer, type ContextTarget } from "./viewer/viewer";
 import { Workbench } from "./workbench";
-import { importersOf, retargetImports } from "./plates";
+import { importersOf, libraryKind, retargetImports } from "./plates";
 import { importsOf, isPlan, isPlate, WorkspaceStore } from "./workspace";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -94,7 +96,8 @@ const workbench = new Workbench(
       // the plan (so editing the plan re-solves it there), and otherwise shows the plan on its own.
       if (ready && path && path !== mainPath() && !drawing) {
         const text = store.get(path)?.text.value ?? "";
-        if (isPlate(text) || (isPlan(text) && !mainFiles.has(path))) showPlate(path);
+        const own = isPlan(text) || libraryKind(text) !== null;
+        if (isPlate(text) || (own && !mainFiles.has(path))) showPlate(path);
       }
       updateTitle();
       referencePanel.follow();
@@ -291,6 +294,12 @@ async function runSolve(): Promise<void> {
     }
     lastConfig = evaluated.config;
     const plate = "start" in evaluated.config;
+    // A library (a service, a set of assemblies) has nothing to draw: say what it is.
+    if (evaluated.kind === "service" || evaluated.kind === "assemblies") {
+      showLibrary(evaluated.kind, main, evaluated.config, files);
+      return;
+    }
+    $("library").hidden = true;
     lastEval = { files, sources: evaluated.sources, config: evaluated.config, plate };
     referencePanel.follow();
 
@@ -318,6 +327,7 @@ async function runSolve(): Promise<void> {
       // A plan's preview bar sits under the file chip: keep the drawing clear of it.
       viewer.insets.top = plate ? 84 : 120;
       viewer.setLayout(res.layout);
+      updateViews(res.layout, located);
       setStale(null);
       const ms = evaluated.ms + res.timings.solveMs;
       const took = `${ms < 1 ? "<1" : Math.round(ms)} ms`;
@@ -352,6 +362,105 @@ async function runSolve(): Promise<void> {
     updateSheetFile();
     updatePreviewBar();
   }
+}
+
+// ------------------------------------------------------------------ views and libraries
+
+/** The service shown over the plan (S cycles), or none: the plan on its own. */
+let serviceView: string | null = null;
+let services: ServiceSummary[] = [];
+
+/** The views a solved plate has (the plan, and each of its services), with their problems. */
+function updateViews(layout: Layout | null, diagnostics: Diagnostic[]): void {
+  const declared = (lastConfig?.services ?? {}) as Record<string, { label?: string }>;
+  const labels = Object.fromEntries(
+    Object.entries(declared)
+      .map(([k, v]) => [k, v?.label ?? ""])
+      .filter(([, v]) => v),
+  );
+  services = layout ? summarize(layout, diagnostics, labels) : [];
+  if (serviceView && !services.some((s) => s.name === serviceView)) serviceView = null;
+  $("views").hidden = services.length === 0;
+  const bar = $("views-bar");
+  bar.replaceChildren();
+  const chip = (name: string | null, label: string, issues = 0) => {
+    const b = document.createElement("button");
+    b.className = "view-chip";
+    b.setAttribute("aria-pressed", String(serviceView === name));
+    b.textContent = label;
+    b.title = name ? `Show ${label} over the plan (S)` : "The plan on its own (S)";
+    if (issues) {
+      const badge = document.createElement("span");
+      badge.className = "view-badge";
+      badge.textContent = String(issues);
+      badge.title = `${issues} not met`;
+      b.append(badge);
+    }
+    b.onclick = () => setServiceView(name);
+    bar.append(b);
+  };
+  chip(null, "Plan");
+  for (const s of services) chip(s.name, s.label, s.issues);
+  viewer.setServiceView(serviceView);
+  renderLegend();
+}
+
+function setServiceView(name: string | null): void {
+  serviceView = name;
+  updateViews(lastLayout, lastDiagnostics());
+}
+
+viewer.onCycleView = () =>
+  setServiceView(
+    nextView(
+      serviceView,
+      services.map((s) => s.name),
+    ),
+  );
+
+/** What the shown service placed, and how it's connected. */
+function renderLegend(): void {
+  const legend = $("legend");
+  const s = services.find((x) => x.name === serviceView);
+  legend.hidden = !s;
+  if (!s) return;
+  const esc = (t: string) => t.replace(/[&<>"]/g, (c) => `&#${c.charCodeAt(0)};`);
+  const parts = s.parts
+    .map((p) => {
+      const thumb = p.symbol ? (thumbnail(p.symbol, 18) ?? "") : "";
+      return `<li><span class="legend-thumb">${thumb}</span>${esc(p.label)}<span class="legend-count">${p.count}</span></li>`;
+    })
+    .join("");
+  const nets = s.networks
+    .map(
+      (n) =>
+        `<div class="legend-net">${esc(n.name)}${n.groups ? ` · ${n.groups} group${n.groups > 1 ? "s" : ""}` : ""}</div>`,
+    )
+    .join("");
+  legend.innerHTML = `<ul>${parts || "<li>Nothing placed</li>"}</ul>${nets}`;
+}
+
+/** A library file: what it is, and which plates use it, instead of a drawing. */
+function showLibrary(
+  kind: "service" | "assemblies",
+  main: string,
+  config: Record<string, unknown>,
+  files: Record<string, string>,
+): void {
+  resetSheet();
+  lastConfig = config;
+  viewer.setLayout(null);
+  const name = main
+    .split("/")
+    .pop()!
+    .replace(/\.ncl$/, "");
+  const card = $("library");
+  card.innerHTML = libraryCard(kind, name, config, {
+    usedBy: importersOf(main, files),
+    thumbnail: (symbol) => thumbnail(symbol, 36),
+  });
+  card.hidden = false;
+  setStatus("ok", kind === "service" ? "A service, to use in a plate" : "Assemblies, to use in a plate");
 }
 
 /** The configuration and view a plan file in the drawing is solved with. */
@@ -392,7 +501,9 @@ function resetSheet(): void {
   setStale(null);
   $("empty").hidden = true;
   $("titleblock").hidden = true;
+  $("library").hidden = true;
   $("sb-engine").textContent = "";
+  updateViews(null, []);
   showVerdict(null, null);
   updateSheetFile();
   updatePreviewBar();
@@ -527,7 +638,12 @@ function setStatus(
 const fileOf = (d: Diagnostic) => d.file ?? mainPath() ?? "";
 
 /** Squiggles in each file, and the problems list under the editors. */
+/** The problems last shown. */
+let shown: Diagnostic[] = [];
+const lastDiagnostics = () => shown;
+
 function setDiagnostics(diagnostics: Diagnostic[]): void {
+  shown = diagnostics;
   const byFile = new Map<string, Diagnostic[]>();
   for (const d of diagnostics) byFile.set(fileOf(d), [...(byFile.get(fileOf(d)) ?? []), d]);
   for (const [path, doc] of store.docs) doc.text.setDiagnostics(byFile.get(path) ?? []);
@@ -1234,6 +1350,36 @@ function showInFile(pointer: string): void {
 }
 
 viewer.onContextMenu = (target: ContextTarget, x: number, y: number) => {
+  if (target.type === "wall") {
+    const w = target.element.wall!;
+    const source = target.element.source;
+    openMenu(
+      `${w.label} between ${w.between.join(" and ")}`,
+      source
+        ? [
+            {
+              label: `Show ${w.assembly} in the file`,
+              note: "Its assembly",
+              action: () => showInFile(source),
+            },
+          ]
+        : [{ label: "Its assembly isn't in a file here", disabled: true, action: () => {} }],
+      x,
+      y,
+    );
+    return;
+  }
+  if (target.type === "part") {
+    const p = target.element.part!;
+    const source = target.element.source;
+    const service = source?.match(/^(.*\/services\/[^/]+)/)?.[1];
+    const items: MenuItem[] = [];
+    if (source)
+      items.push({ label: `Show where ${p.label}s go`, note: p.placed, action: () => showInFile(source) });
+    if (service) items.push({ label: `Show the ${p.service} service`, action: () => showInFile(service) });
+    openMenu(`${p.label} in ${p.space}`, items, x, y);
+    return;
+  }
   if (target.type === "edge") {
     const current = edgeRoles(lastConfig)[target.index] ?? ["facade"];
     const n = target.element.points.length;

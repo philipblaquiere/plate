@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { importPath, importsOf, isPlan, isPlate, retargetImports } from "./plates";
+import { importPath, importsOf, isPlan, isPlate, libraryKind, retargetImports } from "./plates";
 
 describe("workspace files", () => {
   it("tells plates from plans", () => {
@@ -81,5 +81,15 @@ describe("moving files", () => {
         exists,
       ),
     ).toBe('import "room.ncl"');
+  });
+
+  it("knows a library from a plan", () => {
+    expect(libraryKind('{\n  label = "Lighting",\n  parts = { light = {} },\n}')).toBe("service");
+    expect(libraryKind("fun x => {\n  place = [],\n}")).toBe("service");
+    expect(libraryKind("{\n  partition = { on = 'partition, thickness = 0.1 },\n}")).toBe("assemblies");
+    expect(libraryKind("let g = 1 in\n{\n  wet = {\n    layers = [g],\n  },\n}")).toBe("assemblies");
+    expect(libraryKind("{\n  spaces = { a = {} },\n}")).toBeNull();
+    expect(libraryKind("{ start = { mode = 'boundary } }")).toBeNull();
+    expect(libraryKind("let helper = fun x => x in helper")).toBeNull();
   });
 });

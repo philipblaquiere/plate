@@ -8,8 +8,12 @@ export interface EvalInput {
 
 export type EvalRequest = { id: number; type: "evaluate"; input: EvalInput } | { id: number; type: "schema" };
 
+/** What a file is: something to draw (a plate, a plan), or a library to import (a service, a
+ * set of assemblies). */
+export type FileKind = "plate" | "plan" | "service" | "assemblies";
+
 export type EvalResult =
-  | { ok: true; config: Record<string, unknown>; sources: SourceSpan[]; ms: number }
+  | { ok: true; config: Record<string, unknown>; sources: SourceSpan[]; kind?: FileKind; ms: number }
   | { ok: false; diagnostics: Diagnostic[]; ms: number };
 
 export type EvalResponse =

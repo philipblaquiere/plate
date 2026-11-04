@@ -64,6 +64,30 @@ in
     | doc "Give particular instances a different plan. `plate.instance \"room_1\" accessible_room`"
     = fun x p => { rule = 'instance, a = x, plan = p },
 
+  wall
+    | doc "The walls between `a` and `b` are built as an assembly, or at least to what the rule asks. `plate.wall \"bath\" \"bedroom\" & { acoustic = 50 }`; every wall of a space: `plate.wall \"#corridor\" 'wall & { fire = 1 }`; one stretch is enough: `& { cavity = \"140 mm\", length = 1.2 }`; by name: `& { assembly = 'quiet }`"
+    = fun x y => { rule = 'wall, a = x } & side "b" y,
+
+  every
+    | doc "A service places a part along the walls of these spaces (their perimeter, cut at doorways), at most `spacing` apart; on fixtures, along their backs. `plate.every \"outlet\" \"#room\" \"3.6 m\"`; skip short walls: `& { min_run = \"900 mm\" }`"
+    = fun p s d => { place = 'every, part = p, spaces = s, spacing = d },
+
+  beside
+    | doc "A service places a part beside each door (on its latch side) or under each window. `plate.beside \"switch\" 'door`, `plate.beside \"baseboard\" 'window`; only some spaces: `& { spaces = \"#room\" }`; the other side: `& { side = 'hinge }`"
+    = fun p o => { place = 'beside, part = p, opening = o },
+
+  over
+    | doc "A service places a part in the middle of each of these spaces (on the ceiling or floor), or a grid of them. `plate.over \"light\" \"#room\"`; one per 4 m²: `& { per = 4 }`; every 2.4 m: `& { spacing = 2.4 }`"
+    = fun p s => { place = 'over, part = p, spaces = s },
+
+  on
+    | doc "A service places a part at the back of each of these fixtures. `plate.on \"dedicated\" [\"fridge\", \"#laundry\"]`"
+    = fun p f => { place = 'on, part = p, fixtures = f },
+
+  one
+    | doc "A service places one part in each of these spaces, in the best place on its walls. `plate.one \"panel\" \"#utility\" & { near = 'entrance }`; `plate.one \"thermostat\" \"#room\" & { near = 'door, apart = ['window, 'facade] }`; on a wall that can take it: `& { wall.cavity = \"140 mm\" }`"
+    = fun p s => { place = 'one, part = p, spaces = s },
+
   prefer
     | doc "Make rules preferences rather than requirements. `plate.prefer (plate.touches \"bath\" \"bedroom\")`; weigh it: `plate.prefer_by 3 (...)`"
     = fun r => if std.is_array r then std.array.map (fun x => x & { weight = 1 }) r else r & { weight = 1 },

@@ -79,7 +79,7 @@ pub fn evaluate_json(input: &str) -> serde_json::Value {
     };
     match checked {
         Ok((_, evaluation)) => {
-            json!({ "ok": true, "config": evaluation.value, "sources": evaluation.sources })
+            json!({ "ok": true, "config": evaluation.value, "sources": evaluation.sources, "kind": evaluation.kind })
         }
         Err(diagnostics) => json!({ "ok": false, "diagnostics": diagnostics }),
     }

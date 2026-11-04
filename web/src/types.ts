@@ -26,7 +26,10 @@ export type ElementKind =
   | "port"
   | "clearance"
   | "symbol"
-  | "leftover";
+  | "leftover"
+  | "wall"
+  | "part"
+  | "run";
 
 export type SpaceKind = "room" | "zone" | "circulation" | "void" | "vertical" | "fixture";
 
@@ -60,6 +63,59 @@ export interface SpaceInfo {
   fill?: boolean;
   /** A fill drawn as a material (its symbol's tone) rather than a symbol. */
   tone?: "water" | "plant" | "sand" | "dark";
+  /** Its tags (`tags`): what services and rules select it by. */
+  tags?: string[];
+  /** Floor area to its walls' centrelines, when walls take some of it (`area` is then its clear
+   * floor). */
+  gross?: number;
+}
+
+/** What a wall is built as (elements of kind "wall"). */
+export interface WallInfo {
+  assembly: string;
+  label: string;
+  thickness: number;
+  cavity: number;
+  fire?: number;
+  acoustic?: number;
+  bearing?: boolean;
+  layers?: { material: string; thickness: number; cavity?: boolean }[];
+  pattern: "solid" | "hatch" | "cross" | "light";
+  /** The port roles either side sees. */
+  roles: string[];
+  /** The spaces either side; one may be a port role such as `'facade`. */
+  between: string[];
+  /** Why it's built so. */
+  because: string;
+  /** Its centreline. */
+  line: [Point, Point];
+}
+
+/** A part a service placed (elements of kind "part"). */
+export interface PartInfo {
+  service: string;
+  part: string;
+  label: string;
+  mount: "wall" | "ceiling" | "floor" | "cavity";
+  above?: number;
+  /** The space it's in. */
+  space: string;
+  /** How it got there, in words. */
+  placed: string;
+  /** Its group in a network (a circuit), once connected. */
+  group?: string;
+  /** Where it stands. */
+  at: Point;
+}
+
+/** A run of a service's network (elements of kind "run"). */
+export interface RunInfo {
+  service: string;
+  network: string;
+  group?: string;
+  /** The last leg toward the source: drawn with an arrow. */
+  home?: boolean;
+  draw: "arcs" | "routed";
 }
 
 /** A symbol drawn in a space: flattened paths in drawing units. */
@@ -80,6 +136,8 @@ export interface SlotInfo {
   unique?: string;
   /** Fingerprint of the plan as the plate used it. */
   plan: string;
+  /** What the plate gave the plan besides its slot (assemblies, services): sent back as is. */
+  context?: unknown;
 }
 
 /** What a plan file (no `start`) is shown in. Plates ignore it. */
@@ -89,6 +147,8 @@ export interface OpeningInfo {
   /** Full names of the spaces on each side; a port role such as `'facade` for the outside. */
   between: string[];
   width: number;
+  /** The thickness of the wall it's in, if walls are built. */
+  depth?: number;
 }
 
 export interface Element {
@@ -115,6 +175,9 @@ export interface Element {
   holes?: Point[][];
   /** Where its label goes, for a shape whose middle may be outside it. */
   labelAt?: Point;
+  wall?: WallInfo;
+  part?: PartInfo;
+  run?: RunInfo;
 }
 
 export interface Layout {

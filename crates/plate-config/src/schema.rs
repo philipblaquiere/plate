@@ -75,10 +75,28 @@ const PRELUDE: &str = r#"{
           let result = std.contract.check (either others msg) label value in
           result |> match { 'Ok _ => result, _ => 'Error { message = msg } }
       ),
-    plate_or_plan = fun plate_c plan_c =>
+    service_fields = ["parts", "place", "connect", "claims", "scope", "params"],
+    plan_fields = ["start", "spaces", "rules", "needs", "preview", "goals", "engine", "grid", "assemblies", "services"],
+    is_library = fun v =>
+      std.is_record v && !(std.array.any (fun f => std.record.has_field f v) plan_fields),
+    is_service = fun v => is_library v && std.array.any (fun f => std.record.has_field f v) service_fields,
+    is_assemblies = fun v =>
+      is_library v
+      && std.array.length (std.record.fields v) > 0
+      && std.array.all
+        (fun f =>
+          let x = std.record.get f v in
+          std.is_record x && (std.record.has_field "thickness" x || std.record.has_field "layers" x)
+        )
+        (std.record.fields v),
+    by_shape = fun plate_c plan_c service_c assemblies_c =>
       std.contract.custom (fun label value =>
         if std.is_record value && std.record.has_field "start" value then
           'Ok (std.contract.apply plate_c label value)
+        else if is_service value then
+          'Ok (std.contract.apply service_c label value)
+        else if is_assemblies value then
+          'Ok (std.contract.apply assemblies_c label value)
         else
           'Ok (std.contract.apply plan_c label value)
       ),
@@ -107,15 +125,69 @@ pub fn compile(schema: &Value) -> Result<CompiledSchema, String> {
     Ok(c.finish(&root))
 }
 
-/// The contract for a user's main file: the schema's root (a plate) when the file has a
-/// `start`, else the definition `plan` (a plan file, shown on its own). Both share one set of
-/// compiled definitions.
+/// The contract for a user's main file, by its shape: the schema's root (a plate) when the file
+/// has a `start`; a `Service` or `Assemblies` for a library file that is one (it has a service's
+/// fields, or every field is an assembly); else the definition `plan` (a plan file, shown on its
+/// own). They share one set of compiled definitions. See [`FileKind`].
 pub fn compile_file(schema: &Value, plan: &str) -> Result<CompiledSchema, String> {
     let mut c = Compiler { root: schema, contracts: Vec::new(), refs: BTreeMap::new() };
     let plate = c.contract(schema, "#")?;
-    let reference = format!("#/$defs/{plan}");
-    let plan = c.contract(&serde_json::json!({ "$ref": reference }), &reference)?;
-    Ok(c.finish(&format!("__plate.plate_or_plan {plate} {plan}")))
+    let mut def = |name: &str| {
+        let reference = format!("#/$defs/{name}");
+        c.contract(&serde_json::json!({ "$ref": reference }), &reference)
+    };
+    let (plan, service, assemblies) = (def(plan)?, def("Service")?, def("Assemblies")?);
+    Ok(c.finish(&format!("__plate.by_shape {plate} {plan} {service} {assemblies}")))
+}
+
+/// What a main file is, by the shape of its value (the same tests as the `by_shape` contract).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FileKind {
+    /// It has a `start`: something to draw.
+    Plate,
+    /// A plan, to import into a space; drawn on its own in a slot.
+    Plan,
+    /// A service, to put in a plate's `services`.
+    Service,
+    /// A set of assemblies, for a plate's `assemblies`.
+    Assemblies,
+}
+
+const SERVICE_FIELDS: &[&str] = &["parts", "place", "connect", "claims", "scope", "params"];
+const PLAN_FIELDS: &[&str] =
+    &["start", "spaces", "rules", "needs", "preview", "goals", "engine", "grid", "assemblies", "services"];
+
+impl FileKind {
+    pub fn of(value: &Value) -> FileKind {
+        let Some(obj) = value.as_object() else { return FileKind::Plan };
+        if obj.contains_key("start") {
+            return FileKind::Plate;
+        }
+        if PLAN_FIELDS.iter().any(|f| obj.contains_key(*f)) {
+            return FileKind::Plan;
+        }
+        if SERVICE_FIELDS.iter().any(|f| obj.contains_key(*f)) {
+            return FileKind::Service;
+        }
+        let assemblies = !obj.is_empty()
+            && obj.values().all(|v| v.get("thickness").is_some() || v.get("layers").is_some());
+        if assemblies {
+            FileKind::Assemblies
+        } else {
+            FileKind::Plan
+        }
+    }
+
+    /// The schema definition its value is checked against (the root for a plate).
+    pub fn definition(self) -> Option<&'static str> {
+        match self {
+            FileKind::Plate => None,
+            FileKind::Plan => Some("Plan"),
+            FileKind::Service => Some("Service"),
+            FileKind::Assemblies => Some("Assemblies"),
+        }
+    }
 }
 
 impl Compiler<'_> {

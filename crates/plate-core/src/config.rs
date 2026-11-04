@@ -10,8 +10,10 @@ use std::collections::BTreeMap;
 
 use serde::Deserialize;
 
+use crate::assembly::Assembly;
 use crate::geometry::{segments_cross, Point, Polygon};
 use crate::plan::{Engine, Goals, LengthSer, Needs, Plan, Previews, RuleItem, Space};
+use crate::service::Service;
 use crate::units::{Length, System, Units};
 
 #[derive(Debug, Clone, Deserialize)]
@@ -50,6 +52,10 @@ pub struct Config {
     pub rules: Vec<RuleItem>,
     #[serde(default)]
     pub goals: Goals,
+    #[serde(default)]
+    pub assemblies: BTreeMap<String, Assembly>,
+    #[serde(default)]
+    pub services: BTreeMap<String, Service>,
 
     /// A plan file's own fields: what it needs from its space, and how to preview it.
     #[serde(default)]
@@ -201,6 +207,9 @@ impl Config {
             rules: self.rules.clone(),
             goals: self.goals,
             preview: self.preview.clone(),
+            assemblies: self.assemblies.clone(),
+            services: self.services.clone(),
+            origins: Vec::new(),
         }
     }
 

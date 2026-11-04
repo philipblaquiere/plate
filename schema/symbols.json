@@ -1317,6 +1317,182 @@
         {"line": [2710, 4620, 2800, 4500, 2890, 4620]},
         {"line": [4210, 4420, 4300, 4300, 4390, 4420]}
       ]
+    },
+    "receptacle": {
+      "label": "Receptacle",
+      "category": "Services",
+      "tags": ["outlet", "plug", "power"],
+      "size": [150, 100],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [75, 45, 32]},
+        {"line": [47, 35, 103, 35]},
+        {"line": [47, 55, 103, 55]},
+        {"line": [75, 77, 75, 100]}
+      ]
+    },
+    "receptacle_gfci": {
+      "label": "GFCI receptacle",
+      "category": "Services",
+      "tags": ["outlet", "plug", "ground fault", "counter"],
+      "size": [150, 100],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [75, 45, 32]},
+        {"circle": [75, 45, 22]},
+        {"line": [47, 35, 103, 35]},
+        {"line": [47, 55, 103, 55]},
+        {"line": [75, 77, 75, 100]}
+      ]
+    },
+    "switch": {
+      "label": "Switch",
+      "category": "Services",
+      "tags": ["light switch", "toggle"],
+      "size": [150, 100],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [75, 82, 12], "tone": "dark"},
+        {"line": [75, 82, 38, 22]},
+        {"line": [38, 22, 58, 16]}
+      ]
+    },
+    "thermostat": {
+      "label": "Thermostat",
+      "category": "Services",
+      "tags": ["heat", "control"],
+      "size": [150, 100],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [75, 48, 36]},
+        {"line": [55, 64, 95, 64]},
+        {"line": [75, 64, 75, 30]}
+      ]
+    },
+    "light": {
+      "label": "Ceiling light",
+      "category": "Services",
+      "tags": ["lamp", "fixture", "lighting"],
+      "size": [300, 300],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [150, 150, 110]},
+        {"line": [72, 72, 228, 228]},
+        {"line": [72, 228, 228, 72]}
+      ]
+    },
+    "downlight": {
+      "label": "Downlight",
+      "category": "Services",
+      "tags": ["pot light", "recessed", "lighting"],
+      "size": [200, 200],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [100, 100, 90]},
+        {"circle": [100, 100, 45], "tone": "dark"}
+      ]
+    },
+    "smoke_alarm": {
+      "label": "Smoke alarm",
+      "category": "Services",
+      "tags": ["detector", "fire", "safety"],
+      "size": [250, 250],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [125, 125, 110]},
+        {"circle": [125, 125, 60]},
+        {"circle": [125, 125, 18], "tone": "dark"}
+      ]
+    },
+    "panel": {
+      "label": "Electrical panel",
+      "category": "Services",
+      "tags": ["breaker", "distribution", "power"],
+      "size": [400, 160],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 400, 160]},
+        {"rect": [0, 110, 400, 50], "tone": "dark"},
+        {"line": [0, 0, 400, 110]}
+      ]
+    },
+    "baseboard": {
+      "label": "Baseboard heater",
+      "category": "Services",
+      "tags": ["heat", "heater", "radiator", "convector"],
+      "size": [1000, 90],
+      "fit": "stretch",
+      "shapes": [
+        {"rect": [0, 0, 1000, 90]},
+        {"line": [40, 20, 100, 70, 160, 20, 220, 70, 280, 20, 340, 70, 400, 20, 460, 70, 520, 20, 580, 70, 640, 20, 700, 70, 760, 20, 820, 70, 880, 20, 940, 70, 960, 45]}
+      ]
+    },
+    "register": {
+      "label": "Floor register",
+      "category": "Services",
+      "tags": ["supply", "vent", "air", "hvac"],
+      "size": [300, 100],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 300, 100]},
+        {"line": [50, 15, 50, 85]},
+        {"line": [100, 15, 100, 85]},
+        {"line": [150, 15, 150, 85]},
+        {"line": [200, 15, 200, 85]},
+        {"line": [250, 15, 250, 85]}
+      ]
+    },
+    "return_grille": {
+      "label": "Return grille",
+      "category": "Services",
+      "tags": ["return air", "vent", "air", "hvac"],
+      "size": [400, 70],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 400, 70]},
+        {"line": [0, 70, 70, 0]},
+        {"line": [80, 70, 150, 0]},
+        {"line": [160, 70, 230, 0]},
+        {"line": [240, 70, 310, 0]},
+        {"line": [320, 70, 390, 0]}
+      ]
+    },
+    "diffuser": {
+      "label": "Ceiling diffuser",
+      "category": "Services",
+      "tags": ["supply", "air", "hvac", "vent"],
+      "size": [600, 600],
+      "fit": "contain",
+      "shapes": [
+        {"rect": [0, 0, 600, 600]},
+        {"rect": [150, 150, 300, 300]},
+        {"line": [0, 0, 150, 150]},
+        {"line": [600, 0, 450, 150]},
+        {"line": [600, 600, 450, 450]},
+        {"line": [0, 600, 150, 450]}
+      ]
+    },
+    "stack": {
+      "label": "Plumbing stack",
+      "category": "Services",
+      "tags": ["drain", "vent", "soil", "pipe"],
+      "size": [110, 110],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [55, 55, 50]},
+        {"circle": [55, 55, 30], "tone": "dark"}
+      ]
+    },
+    "data_outlet": {
+      "label": "Data outlet",
+      "category": "Services",
+      "tags": ["network", "ethernet", "telecom"],
+      "size": [150, 100],
+      "fit": "contain",
+      "shapes": [
+        {"poly": [75, 10, 110, 70, 40, 70]},
+        {"line": [75, 70, 75, 100]}
+      ]
     }
   }
 }

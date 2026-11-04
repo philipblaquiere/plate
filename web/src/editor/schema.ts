@@ -206,6 +206,8 @@ export interface Helper {
   params: string[];
   /** The `rule` kinds it writes (`door`); empty for helpers that wrap other rules (`prefer`). */
   rules: string[];
+  /** The `place` kinds it writes (`every`): a service's placements. */
+  places: string[];
   /** It returns a list of rules rather than one. */
   list: boolean;
 }
@@ -225,6 +227,12 @@ const PARAMS: Record<string, string[]> = {
   instance: ['"a"', "plan"],
   prefer: ["rule"],
   prefer_by: ["weight", "rule"],
+  wall: ['"a"', '"b"'],
+  every: ['"part"', '"spaces"', "spacing"],
+  beside: ['"part"', "opening"],
+  over: ['"part"', '"spaces"'],
+  on: ['"part"', '"fixtures"'],
+  one: ['"part"', '"spaces"'],
 };
 
 export function helpers(source: string): Helper[] {
@@ -238,6 +246,7 @@ export function helpers(source: string): Helper[] {
     const body = source.slice(m.index! + m[0].length, found[k + 1]?.index ?? source.length);
     const value = body.slice(body.indexOf("=>") + 2).trimStart();
     const rules = [...new Set([...body.matchAll(/rule = '(\w+)/g)].map((r) => r[1]))];
+    const places = [...new Set([...body.matchAll(/place = '(\w+)/g)].map((r) => r[1]))];
     const params = PARAMS[name] ?? [];
     let i = 1;
     const args = params.map((p) =>
@@ -249,6 +258,7 @@ export function helpers(source: string): Helper[] {
       snippet: [name, ...args].join(" "),
       params: params.map((p) => p.replace(/"/g, "")),
       rules,
+      places,
       list: value.startsWith("["),
     });
   });

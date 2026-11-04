@@ -80,6 +80,12 @@
     },
     "goals": {
       "$ref": "#/$defs/Goals"
+    },
+    "assemblies": {
+      "$ref": "#/$defs/Assemblies"
+    },
+    "services": {
+      "$ref": "#/$defs/Services"
     }
   },
   "$defs": {
@@ -273,6 +279,12 @@
         },
         "preview": {
           "$ref": "#/$defs/Preview"
+        },
+        "assemblies": {
+          "$ref": "#/$defs/Assemblies"
+        },
+        "services": {
+          "$ref": "#/$defs/Services"
         }
       },
       "x-docs": [
@@ -449,6 +461,18 @@
           "type": "boolean",
           "default": true,
           "x-docs": "typicals"
+        },
+        "tags": {
+          "description": "Labels that rules and services pick it by, whatever it's called: `tags = ['sleep]` and `\"#sleep\"` selects it. Dotted like port roles: `'wet.shower` is a kind of `'wet`. Its `kind` counts as a tag too (`\"#room\"`, `\"#circulation\"`, `\"#fixture\"`).",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Tag"
+          },
+          "x-docs": "tags",
+          "x-examples": [
+            "tags = ['sleep],",
+            "tags = ['water, 'drain],  # a toilet, for the plumbing"
+          ]
         }
       },
       "x-examples": [
@@ -573,7 +597,21 @@
         "shrub",
         "flower_bed",
         "garden_bed",
-        "lawn"
+        "lawn",
+        "receptacle",
+        "receptacle_gfci",
+        "switch",
+        "thermostat",
+        "light",
+        "downlight",
+        "smoke_alarm",
+        "panel",
+        "baseboard",
+        "register",
+        "return_grille",
+        "diffuser",
+        "stack",
+        "data_outlet"
       ],
       "x-enumDescriptions": {
         "bed_single": "Single bed (bedroom), 990 × 1910 mm",
@@ -656,7 +694,21 @@
         "shrub": "Shrub (planting), 1200 × 1200 mm",
         "flower_bed": "Flower bed (planting), 2400 × 800 mm",
         "garden_bed": "Vegetable bed (planting), 2400 × 1200 mm",
-        "lawn": "Lawn (planting), 5000 × 5000 mm"
+        "lawn": "Lawn (planting), 5000 × 5000 mm",
+        "receptacle": "Receptacle (services), 150 × 100 mm",
+        "receptacle_gfci": "GFCI receptacle (services), 150 × 100 mm",
+        "switch": "Switch (services), 150 × 100 mm",
+        "thermostat": "Thermostat (services), 150 × 100 mm",
+        "light": "Ceiling light (services), 300 × 300 mm",
+        "downlight": "Downlight (services), 200 × 200 mm",
+        "smoke_alarm": "Smoke alarm (services), 250 × 250 mm",
+        "panel": "Electrical panel (services), 400 × 160 mm",
+        "baseboard": "Baseboard heater (services), 1000 × 90 mm",
+        "register": "Floor register (services), 300 × 100 mm",
+        "return_grille": "Return grille (services), 400 × 70 mm",
+        "diffuser": "Ceiling diffuser (services), 600 × 600 mm",
+        "stack": "Plumbing stack (services), 110 × 110 mm",
+        "data_outlet": "Data outlet (services), 150 × 100 mm"
       },
       "errorMessage": "expected a symbol from the catalog, such as 'bed_queen, 'sofa or 'car",
       "x-docs": "symbols"
@@ -923,7 +975,7 @@
       ]
     },
     "Selector": {
-      "description": "Which spaces: a name (`\"kitchen\"`), a space type (`\"bedroom\"` matches every bedroom), a pattern (`\"bed*\"`), or a list of these.",
+      "description": "Which spaces: a name (`\"kitchen\"`), a space type (`\"bedroom\"` matches every bedroom), a pattern (`\"bed*\"`), a tag (`\"#sleep\"`), or a list of these.",
       "anyOf": [
         {
           "type": "string"
@@ -973,6 +1025,9 @@
         },
         {
           "$ref": "#/$defs/RuleInstance"
+        },
+        {
+          "$ref": "#/$defs/RuleWall"
         }
       ]
     },
@@ -1307,6 +1362,636 @@
         }
       },
       "x-docs": "typicals"
+    },
+    "Tag": {
+      "description": "A tag: a label rules and services select spaces by, as `\"#tag\"`.",
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)*$",
+      "errorMessage": "expected a tag such as 'sleep or 'wet.shower"
+    },
+    "Assemblies": {
+      "description": "What the edges between spaces are built as, by name. Each wall gets the thinnest assembly that meets every requirement on it: those of the assemblies its port roles call for (`on`), and those of `wall` rules. An assembly takes floor: the spaces either side are what its thickness leaves them, and the plans inside them are solved in that. Plans inside inherit these; a plan that names one the same replaces it for itself.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Assembly"
+      },
+      "x-docs": "assemblies",
+      "x-examples": [
+        "assemblies = {\n  exterior = { on = 'facade, thickness = \"300 mm\" },\n  partition = { on = 'partition, thickness = \"115 mm\", cavity = \"89 mm\" },\n},",
+        "assemblies = import \"build/assemblies/wood-frame.ncl\","
+      ]
+    },
+    "Assembly": {
+      "description": "A wall type: how thick it is, what it holds, how it's rated.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Display name, e.g. \"Exterior wall\". Defaults to its name.",
+          "type": "string"
+        },
+        "on": {
+          "description": "The port roles it's for: walls with any of them call for it. Leave out for one that's only used when a `wall` rule asks for it (by name, or because it's the thinnest that meets what the rule asks).",
+          "$ref": "#/$defs/EdgeRoles"
+        },
+        "thickness": {
+          "description": "Overall thickness. Leave out to add up `layers`.",
+          "$ref": "#/$defs/Length"
+        },
+        "cavity": {
+          "description": "Depth inside it that services can run in (a stud bay). Defaults to the `layers` marked `cavity`, else none.",
+          "$ref": "#/$defs/Length"
+        },
+        "layers": {
+          "description": "Its build-up, from one face to the other. Thickness and cavity add up from it.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Layer"
+          }
+        },
+        "fire": {
+          "description": "Fire resistance, in hours.",
+          "type": "number",
+          "minimum": 0
+        },
+        "acoustic": {
+          "description": "Sound transmission class (STC).",
+          "type": "number",
+          "minimum": 0
+        },
+        "bearing": {
+          "description": "Carries load.",
+          "type": "boolean",
+          "default": false
+        },
+        "line": {
+          "description": "Where the edge runs through it, on the plate's boundary: `'inside` (the default) puts the boundary on its outside face, so it grows inward; `'centre` straddles it (a party wall on a lot line). Between spaces a wall is always centred.",
+          "enum": [
+            "inside",
+            "centre"
+          ],
+          "x-enumDescriptions": {
+            "inside": "The boundary is its outside face.",
+            "centre": "The boundary runs down its middle."
+          }
+        },
+        "pattern": {
+          "description": "How it's hatched in the drawing. Only how it's drawn.",
+          "enum": [
+            "solid",
+            "hatch",
+            "cross",
+            "light"
+          ],
+          "default": "solid",
+          "x-enumDescriptions": {
+            "solid": "Filled dark: the usual poché.",
+            "hatch": "Diagonal lines: a stud wall, insulation.",
+            "cross": "Cross-hatched: masonry, concrete.",
+            "light": "Filled light: a thin or glazed partition."
+          }
+        },
+        "layer": {
+          "description": "CAD layer it's exported on. Defaults to `A-WALL-` and its name.",
+          "type": "string"
+        }
+      },
+      "x-docs": "assemblies",
+      "x-examples": [
+        "partition = { on = 'partition, thickness = \"115 mm\", cavity = \"89 mm\" },",
+        "party = {\n  on = ['party, 'blank],\n  line = 'centre,\n  fire = 1,\n  acoustic = 55,\n  layers = [\n    { material = \"gypsum\", thickness = \"16 mm\" },\n    { material = \"stud\", thickness = \"89 mm\", cavity = true },\n    { material = \"air\", thickness = \"25 mm\" },\n    { material = \"stud\", thickness = \"89 mm\", cavity = true },\n    { material = \"gypsum\", thickness = \"16 mm\" },\n  ],\n  pattern = 'hatch,\n},"
+      ]
+    },
+    "Layer": {
+      "description": "One layer of an assembly's build-up.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "material",
+        "thickness"
+      ],
+      "properties": {
+        "material": {
+          "description": "What it is: \"gypsum\", \"stud\", \"concrete\"…",
+          "type": "string"
+        },
+        "thickness": {
+          "description": "How thick.",
+          "$ref": "#/$defs/Length"
+        },
+        "cavity": {
+          "description": "Open space services can run in.",
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "Services": {
+      "description": "Services that run through the spaces and their walls (power, lighting, heat, plumbing, air), by name. A service never builds anything: it claims what it needs (rules and spaces the solver makes room for), places its parts on the solved walls, floors and ceilings, and connects them. Plans inside inherit these; a plan that names one the same replaces it for itself.",
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/Service"
+      },
+      "x-docs": "services",
+      "x-examples": [
+        "services = {\n  lighting = import \"build/services/lighting.ncl\",\n  power = (import \"build/services/power.ncl\") (import \"build/codes/cec.ncl\"),\n},"
+      ]
+    },
+    "Service": {
+      "description": "A service: its parts, what it claims, where its parts go and how they connect.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Display name, e.g. \"Power\". Defaults to its name.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "The spaces it lives in, one network each (`\"#dwelling\"`: a panel per flat). Its claims apply inside them. Leave out for the whole plan it's declared in.",
+          "$ref": "#/$defs/Selector"
+        },
+        "params": {
+          "description": "Values the service is written in terms of, such as a code's numbers. Refer to them in the service (`params.wall_spacing`) and override them by merging: `(import \"build/services/power.ncl\") & (import \"build/codes/nec.ncl\")`. Give them `| default` so a merge can replace them. The solver doesn't read them.",
+          "type": "object"
+        },
+        "parts": {
+          "description": "What it places, by name: outlets, lights, registers…",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Part"
+          }
+        },
+        "claims": {
+          "$ref": "#/$defs/Claims"
+        },
+        "place": {
+          "description": "Where its parts go. Write them with the `plate` helpers: `plate.every`, `plate.beside`, `plate.over`, `plate.on`, `plate.one`. Only how parts are drawn: never changes the layout.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Placement"
+          }
+        },
+        "connect": {
+          "description": "Networks joining its parts back to a source: circuits, ducts, drains.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Network"
+          }
+        }
+      },
+      "x-docs": "services",
+      "x-examples": [
+        "{\n  parts = {\n    light = { mount = 'ceiling, symbol = 'light },\n    switch = { above = \"1100 mm\", symbol = 'switch },\n  },\n  place = [\n    plate.over \"light\" \"#room\",\n    plate.beside \"switch\" 'door,\n  ],\n}"
+      ]
+    },
+    "Part": {
+      "description": "Something a service places: on a wall, a ceiling or a floor. It takes no floor (a furnace that does is a fixture: claim it).",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "label": {
+          "description": "Display name. Defaults to its name.",
+          "type": "string"
+        },
+        "mount": {
+          "description": "Where it goes.",
+          "enum": [
+            "wall",
+            "ceiling",
+            "floor",
+            "cavity"
+          ],
+          "default": "wall",
+          "x-enumDescriptions": {
+            "wall": "On the face of a wall, `above` the floor.",
+            "ceiling": "On the ceiling: a light, a diffuser.",
+            "floor": "On the floor: a register. Kept off fixtures.",
+            "cavity": "Inside a wall: a stack, a riser. Fixtures can stand in front of it; the wall's cavity must be as deep as it."
+          }
+        },
+        "width": {
+          "description": "Along the wall (or across). Defaults to its symbol's size.",
+          "$ref": "#/$defs/Length"
+        },
+        "depth": {
+          "description": "Out from the wall. Defaults to its symbol's size.",
+          "$ref": "#/$defs/Length"
+        },
+        "above": {
+          "description": "Height of its middle above the floor, for wall parts. Defaults to 300 mm. Parts at heights at least 300 mm apart can share a stretch of wall.",
+          "$ref": "#/$defs/Length"
+        },
+        "symbol": {
+          "description": "How it's drawn, from the symbol catalog (its Services drawings).",
+          "$ref": "#/$defs/Symbol"
+        }
+      }
+    },
+    "Claims": {
+      "description": "What the service needs the layout to make room for. Claims are solved: the solver treats them like rules written in each plan.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rules": {
+          "description": "Rules added to every plan in the service's scope. Name spaces by tag (`\"#wet\"`): a tag no space has is simply not there.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/RuleItem"
+          }
+        },
+        "inside": {
+          "description": "Plan pieces merged into the plan of each space a key selects: spaces (a furnace), rules, needs. A space without a plan gets one.",
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/Plan"
+          }
+        }
+      },
+      "x-examples": [
+        "claims = {\n  rules = [plate.wall \"#wet\" 'wall & { assembly = 'wet, length = 1.5 }],\n  inside.\"#utility\".spaces.heater = { kind = 'fixture, width = 0.6, depth = 0.6, against = 'wall },\n},"
+      ]
+    },
+    "PlaceEvery": {
+      "description": "Along each wall run of the spaces (their perimeter, cut at doorways): at most `spacing` apart, and half that from each end. When it names fixtures, along their backs.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "place",
+        "part",
+        "spaces",
+        "spacing"
+      ],
+      "properties": {
+        "place": {
+          "description": "How it's placed.",
+          "const": "every"
+        },
+        "part": {
+          "description": "The part to place, by name.",
+          "type": "string"
+        },
+        "spaces": {
+          "description": "The spaces (or fixtures) whose walls it lines.",
+          "$ref": "#/$defs/Selector"
+        },
+        "spacing": {
+          "description": "Largest gap between two.",
+          "$ref": "#/$defs/Length"
+        },
+        "min_run": {
+          "description": "Runs shorter than this get none.",
+          "$ref": "#/$defs/Length"
+        }
+      },
+      "x-docs": "services",
+      "x-examples": [
+        "plate.every \"outlet\" \"#room\" \"3.6 m\" & { min_run = \"900 mm\" },",
+        "plate.every \"counter_outlet\" \"#counter\" \"1.8 m\",  # along fixtures' backs"
+      ]
+    },
+    "PlaceBeside": {
+      "description": "Beside each door of the spaces (by its latch, or its hinges), or under each window.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "place",
+        "part",
+        "opening"
+      ],
+      "properties": {
+        "place": {
+          "description": "How it's placed.",
+          "const": "beside"
+        },
+        "part": {
+          "description": "The part to place, by name.",
+          "type": "string"
+        },
+        "opening": {
+          "description": "Doors or windows.",
+          "enum": [
+            "door",
+            "window"
+          ]
+        },
+        "spaces": {
+          "description": "The spaces whose openings it's by. Leave out for every space.",
+          "$ref": "#/$defs/Selector"
+        },
+        "side": {
+          "description": "Which side. Defaults to `'latch` for a door and `'under` for a window.",
+          "enum": [
+            "latch",
+            "hinge",
+            "under"
+          ],
+          "x-enumDescriptions": {
+            "latch": "Beside a door, on the side it opens from.",
+            "hinge": "Beside a door, on its hinge side.",
+            "under": "Under it, centred, as wide as it unless the part has a width."
+          }
+        },
+        "offset": {
+          "description": "Gap from the opening's edge. Defaults to 150 mm.",
+          "$ref": "#/$defs/Length"
+        }
+      },
+      "x-docs": "services",
+      "x-examples": [
+        "plate.beside \"switch\" 'door,",
+        "plate.beside \"baseboard\" 'window & { spaces = \"#room\" },"
+      ]
+    },
+    "PlaceOver": {
+      "description": "In the spaces, on the floor or ceiling: one in the middle, or a grid of them.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "place",
+        "part",
+        "spaces"
+      ],
+      "properties": {
+        "place": {
+          "description": "How it's placed.",
+          "const": "over"
+        },
+        "part": {
+          "description": "The part to place, by name.",
+          "type": "string"
+        },
+        "spaces": {
+          "description": "The spaces.",
+          "$ref": "#/$defs/Selector"
+        },
+        "per": {
+          "description": "Floor area each covers (m² or ft²): a grid of as many as that takes.",
+          "type": "number",
+          "exclusiveMinimum": 0
+        },
+        "spacing": {
+          "description": "A grid this far apart.",
+          "$ref": "#/$defs/Length"
+        }
+      },
+      "x-docs": "services",
+      "x-examples": [
+        "plate.over \"light\" \"#room\",",
+        "plate.over \"downlight\" \"#living\" & { per = 4 },"
+      ]
+    },
+    "PlaceOn": {
+      "description": "One at the back of each fixture: a dedicated outlet, a supply.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "place",
+        "part",
+        "fixtures"
+      ],
+      "properties": {
+        "place": {
+          "description": "How it's placed.",
+          "const": "on"
+        },
+        "part": {
+          "description": "The part to place, by name.",
+          "type": "string"
+        },
+        "fixtures": {
+          "description": "The fixtures.",
+          "$ref": "#/$defs/Selector"
+        }
+      },
+      "x-docs": "services",
+      "x-examples": [
+        "plate.on \"dedicated\" [\"fridge\", \"#laundry\"],"
+      ]
+    },
+    "PlaceOne": {
+      "description": "The best single place in each space, on its walls: as near as can be to `near`, away from `apart`.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "place",
+        "part",
+        "spaces"
+      ],
+      "properties": {
+        "place": {
+          "description": "How it's placed.",
+          "const": "one"
+        },
+        "part": {
+          "description": "The part to place, by name.",
+          "type": "string"
+        },
+        "spaces": {
+          "description": "The spaces.",
+          "$ref": "#/$defs/Selector"
+        },
+        "near": {
+          "description": "As close as can be to these: a port role (`'entrance`), `'door`, `'window`, or a tag of a fixture (`\"#drain\"`).",
+          "$ref": "#/$defs/Selector"
+        },
+        "apart": {
+          "description": "Away from these (600 mm or more), and never on a wall with one of these port roles (`'facade`).",
+          "$ref": "#/$defs/Selector"
+        },
+        "wall": {
+          "description": "What the wall it goes on must be.",
+          "$ref": "#/$defs/Requirement"
+        }
+      },
+      "x-docs": "services",
+      "x-examples": [
+        "plate.one \"panel\" \"#utility\" & { near = 'entrance },",
+        "plate.one \"thermostat\" \"#room\" & { near = 'door, apart = ['window, 'facade] },"
+      ]
+    },
+    "Placement": {
+      "description": "Where a service's parts go.",
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PlaceEvery"
+        },
+        {
+          "$ref": "#/$defs/PlaceBeside"
+        },
+        {
+          "$ref": "#/$defs/PlaceOver"
+        },
+        {
+          "$ref": "#/$defs/PlaceOn"
+        },
+        {
+          "$ref": "#/$defs/PlaceOne"
+        }
+      ]
+    },
+    "Requirement": {
+      "description": "What a wall must at least be.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "thickness": {
+          "description": "At least this thick.",
+          "$ref": "#/$defs/Length"
+        },
+        "cavity": {
+          "description": "A cavity at least this deep.",
+          "$ref": "#/$defs/Length"
+        },
+        "fire": {
+          "description": "At least this many hours' fire resistance.",
+          "type": "number",
+          "minimum": 0
+        },
+        "acoustic": {
+          "description": "At least this STC.",
+          "type": "number",
+          "minimum": 0
+        },
+        "bearing": {
+          "description": "Bearing.",
+          "type": "boolean"
+        }
+      }
+    },
+    "Network": {
+      "description": "A network: parts joined back to a source, in groups (circuits), drawn as arcs or along the walls it runs in.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "label": {
+          "description": "Display name, e.g. \"Circuits\".",
+          "type": "string"
+        },
+        "from": {
+          "description": "The source: a part of this service (`\"panel\"`), or a tagged fixture (`\"#air\"`). One per scope.",
+          "$ref": "#/$defs/Selector"
+        },
+        "to": {
+          "description": "What it joins: parts of this service (`\"outlet\"`), of another (`\"heat.baseboard\"`), or tagged fixtures (`\"#drain\"`).",
+          "$ref": "#/$defs/Selector"
+        },
+        "via": {
+          "$ref": "#/$defs/Via"
+        },
+        "max": {
+          "description": "Most in one group (a circuit). Leave out for one group.",
+          "type": "integer",
+          "minimum": 1
+        },
+        "limit": {
+          "description": "Longest run from the source (a drain to its stack, a duct).",
+          "$ref": "#/$defs/Length"
+        },
+        "draw": {
+          "description": "How it's drawn.",
+          "enum": [
+            "arcs",
+            "routed"
+          ],
+          "default": "arcs",
+          "x-enumDescriptions": {
+            "arcs": "The electrical convention: an arc from part to part, a numbered home run toward the source.",
+            "routed": "Along the walls and ceilings it runs in, by the shortest way."
+          }
+        }
+      },
+      "x-docs": "services",
+      "x-examples": [
+        "{ from = \"panel\", to = [\"outlet\", \"light\"], max = 12, via.cavity = \"89 mm\" },",
+        "{ from = \"stack\", to = \"#drain\", via.cavity = \"140 mm\", limit = \"3 m\", draw = 'routed },"
+      ]
+    },
+    "Via": {
+      "description": "Where a network can run.",
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "cavity": {
+          "description": "In walls with a cavity at least this deep. Leave out for any wall.",
+          "$ref": "#/$defs/Length"
+        },
+        "ceilings": {
+          "description": "Across the ceilings of these spaces (a hall).",
+          "$ref": "#/$defs/Selector"
+        }
+      }
+    },
+    "RuleWall": {
+      "description": "The walls between `a` and `b` (or `a`'s walls with a port role: `'wall` is all of them) are built as `assembly`, or at least to what the rule asks. With `length`, one stretch that long and clear of doors is enough.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rule",
+        "a"
+      ],
+      "properties": {
+        "rule": {
+          "description": "The kind of rule.",
+          "const": "wall"
+        },
+        "a": {
+          "description": "The spaces the rule applies to; each of them must satisfy it.",
+          "$ref": "#/$defs/Selector"
+        },
+        "b": {
+          "description": "The spaces on the other side.",
+          "$ref": "#/$defs/Selector"
+        },
+        "port": {
+          "description": "Instead of `b`: the walls of `a` with this port role, `'wall` for all of them.",
+          "$ref": "#/$defs/Port"
+        },
+        "assembly": {
+          "description": "Build them as this assembly.",
+          "type": "string"
+        },
+        "thickness": {
+          "description": "At least this thick.",
+          "$ref": "#/$defs/Length"
+        },
+        "cavity": {
+          "description": "With a cavity at least this deep.",
+          "$ref": "#/$defs/Length"
+        },
+        "fire": {
+          "description": "At least this many hours' fire resistance.",
+          "type": "number",
+          "minimum": 0
+        },
+        "acoustic": {
+          "description": "At least this STC.",
+          "type": "number",
+          "minimum": 0
+        },
+        "bearing": {
+          "description": "Bearing.",
+          "type": "boolean"
+        },
+        "length": {
+          "description": "One stretch this long, clear of doors, is enough (a duct's stud bay).",
+          "$ref": "#/$defs/Length"
+        },
+        "weight": {
+          "description": "Makes the rule a preference: how much it matters compared with the goals. Leave out for a required rule.",
+          "type": "number",
+          "minimum": 0
+        }
+      },
+      "x-docs": "assemblies",
+      "x-examples": [
+        "plate.wall \"bedroom\" \"bath\" & { acoustic = 50 },",
+        "plate.wall \"#corridor\" 'wall & { fire = 1 },",
+        "plate.wall \"#room\" 'wall & { cavity = \"140 mm\", length = 1.2 },"
+      ]
     }
   }
 }

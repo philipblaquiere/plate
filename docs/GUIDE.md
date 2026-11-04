@@ -183,8 +183,13 @@ A new workspace starts with these (`examples/`):
 | `scenarios/mansion.ncl`            | Three pinned wings round a courtyard, suites, galleries meeting at their doors |
 | `scenarios/office-building.ncl`    | A small office floor: core, meeting rooms, benches of desks                    |
 | `scenarios/office-tower-floor.ncl` | A tower floor round a pinned core, team zones in an open floor                 |
+| `4-walls.ncl`                      | Walls with thickness: two assemblies, rooms drawn to their faces, lighting     |
+| `5-duplex.ncl`                     | Two flats on wood-frame assemblies, with power, heat, plumbing and lighting    |
 
 The plans they share are in `plans/` and `plans/rooms/` (bedroom, kitchen, living room).
+`build/` has what plates are built with: wall types in `build/assemblies/` (`basic.ncl` and a
+layered `wood-frame.ncl`), services in `build/services/` (`lighting.ncl`, the simplest; `power.ncl`,
+written in terms of a code's numbers), and the codes' numbers in `build/codes/`.
 
 ## Files, tabs and imports
 
@@ -336,6 +341,48 @@ Engines: `'grid` (default) packs rectangles on a grid inside the space; `'spine_
 in spine mode) lines spaces up along a corridor. Rectangles only, for now. The same file and
 `seed` always give the same layout.
 
+## Walls and services
+
+So far edges are lines. Give a plate **assemblies** and they're built: each edge becomes a wall
+of a type, with a thickness, and every space is drawn to its walls' faces. Give it **services**
+and power, lighting, heat or plumbing is placed on the result and connected.
+
+```nickel
+{
+  start = { ... },
+  assemblies = import "build/assemblies/wood-frame.ncl",
+  services = {
+    lighting = import "build/services/lighting.ncl",
+    power = (import "build/services/power.ncl") & (import "build/codes/nec.ncl"),
+  },
+  spaces = { bath = { walls = 'wet, tags = ['wet], ... }, ... },
+}
+```
+
+- **Assemblies** are picked by port role: a wall gets the thinnest assembly that meets what both
+  sides' roles ask (`on`) and what any `plate.wall` rule asks (a fire rating, an STC, a cavity
+  deep enough for a pipe). Walls take floor, so a plan inside a room is solved in the clear
+  floor its walls leave it. Boundary walls grow inward; `line = 'centre` puts a party wall on the
+  line between two plates.
+- **Services** never move a wall. They place **parts** (receptacles, switches, lights, panels,
+  stacks) where the solved plan says: `plate.every` along walls, `plate.beside` doors or windows,
+  `plate.over` a room's floor or ceiling, `plate.on` the back of a fixture, `plate.one` in the
+  best place. **Networks** connect them: circuits drawn the electrical way (arcs and numbered
+  home runs) or runs routed through walls with a deep enough cavity. What a service needs from
+  the layout (a stretch of wall for the panel, a drain in each bath) it **claims**, and the
+  solver makes room for it like any rule.
+- **Tags** let a service fit any plan: it names `"#wet"` or `"#dwelling"`, and each plan tags its
+  spaces (`tags = ['wet]`). A space's kind is a tag too: `"#room"`, `"#circulation"`.
+
+In the drawing, walls are drawn with their hatch; hover one for its assembly and why it's that
+one. A **views bar** at the top left switches between the plan and each service (`S` cycles):
+in a service's view the plan is faded, its parts and runs are drawn with a legend, and the
+service's unmet requirements are counted on its chip. Hover a part for what it is and how it got
+there; right-click a wall or a part for **Show in file**. Opening an assemblies or service file
+on its own shows a card of what's in it, and which plates use it.
+
+See the reference guides _Assemblies_, _Services_ and _Tags_.
+
 ## Using it
 
 | Where   | What                                                  | How                                                    |
@@ -351,6 +398,8 @@ in spine mode) lines spaces up along a corridor. Rectangles only, for now. The s
 | Drawing | Pan / zoom                                            | Drag, scroll, pinch. `F` or double-click fits.         |
 |         | Inspect                                               | Hover an edge, corner, space or face                   |
 |         | Make unique / port roles                              | Right-click a space / a boundary edge                  |
+|         | Plan or a service's view                              | Views bar, top left; `S` cycles                        |
+|         | Where a wall or part comes from                       | Hover it; right-click → Show in file                   |
 |         | Measure                                               | `M`, click two points (snaps to corners and midpoints) |
 |         | Dimensions / grid                                     | `D` / `G`                                              |
 | Export  | DXF (AutoCAD 2000), SVG (1:100 or 1/8" = 1'-0"), JSON | Export menu                                            |

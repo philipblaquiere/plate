@@ -418,24 +418,25 @@ export function buildReference(
   // Each rule kind knows its helpers, and each helper the rule kinds it writes.
   for (const h of helperList) {
     const he = entries.get(helperId(h.name))!;
-    for (const kind of h.rules) {
+    const written = [...h.rules.map((k) => ["rule", k]), ...h.places.map((k) => ["place", k])];
+    for (const [prop, kind] of written) {
       const ruleEntry = [...entries.values()].find(
-        (x) => x.kind === "variant" && x.subtitle === `rule = '${kind}`,
+        (x) => x.kind === "variant" && x.subtitle === `${prop} = '${kind}`,
       );
       if (!ruleEntry) continue;
       he.rules.push(ruleEntry.id);
       ruleEntry.helpers.push(he.id);
-      if (!ruleEntry.examples.length || h.rules.length === 1)
+      if (!ruleEntry.examples.length || written.length === 1)
         ruleEntry.examples.push(
           ...he.examples.filter((x) => !ruleEntry.examples.some((y) => y.code === x.code)),
         );
       // Written with the helper of the same name when there is one (`reach`, not `through`).
-      if (h.rules.length === 1 && (!ruleEntry.template?.startsWith("plate.") || h.name === kind))
+      if (written.length === 1 && (!ruleEntry.template?.startsWith("plate.") || h.name === kind))
         ruleEntry.template = he.template;
     }
   }
   // Helpers that wrap other rules (`prefer`) belong with every rule kind's options.
-  for (const h of helperList.filter((x) => !x.rules.length)) {
+  for (const h of helperList.filter((x) => !x.rules.length && !x.places.length)) {
     const rules = entries.get(defId("Rules"));
     if (rules && !rules.helpers.includes(helperId(h.name))) rules.helpers.push(helperId(h.name));
   }

@@ -1072,7 +1072,8 @@ impl Problem<'_> {
                         "Add engine = 'spine_stack to this plan, or use plate.door / plate.touches.",
                     ))
                 }
-                Rule::Reach { .. } | Rule::Unique { .. } | Rule::Instance { .. } => {}
+                // Walls are built by the host once the level is placed.
+                Rule::Reach { .. } | Rule::Unique { .. } | Rule::Instance { .. } | Rule::Wall { .. } => {}
             }
         }
         self.ordered = ordered;

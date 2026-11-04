@@ -50,6 +50,8 @@ needs to run in the browser.
 | `src/reference/panel.ts`      | The reference view: follows the cursor, search, pages, Insert and Copy             |
 | `src/plates.ts`               | Plate or plan? What a file imports, who imports it; rewriting imports on moves     |
 | `src/symbols.ts`              | The symbol catalog: thumbnails for the reference, symbols that suit a space        |
+| `src/services.ts`             | Which service an element belongs to, the views bar's chips and counts              |
+| `src/library.ts`              | The card shown for a service or assemblies file opened on its own                  |
 | `src/preview.ts`              | Plan previews: cases in a file, a plate's slot as sides, a case written as Nickel  |
 | `src/menu.ts`                 | Right-click menus                                                                  |
 | `src/api.ts`                  | Typed client for `/api/*`                                                          |
@@ -60,7 +62,7 @@ needs to run in the browser.
 | `src/editor/templates.ts`     | The file written for a newly drawn boundary, spine or free origin                  |
 | `src/editor/geometryEdits.ts` | Drawing → text: rewrites dragged coordinates, inserts and removes points           |
 | `src/engine/`                 | Runs `plate-wasm` in a Web Worker: `ConfigEngine.evaluate({ main, files })`        |
-| `src/viewer/viewer.ts`        | The drawing: pan/zoom, grid, dimensions, spaces, openings, inspection, draw, edits |
+| `src/viewer/viewer.ts`        | The drawing: pan/zoom, grid, dimensions, spaces, walls, parts, views, edits        |
 | `src/editor/sources.ts`       | Pointer → text lookups (for solver warnings and "show in file")                    |
 | `src/viewer/format.ts`        | `Lengths`: metric decimals or feet-and-inches, areas, grid and scale-bar steps     |
 | `src/editor/system.ts`        | Source edit behind the Metric/Imperial switch                                      |
@@ -262,6 +264,45 @@ The file stays the single source of truth: the drawing never holds state the tex
   rewriting `preview.width` / `depth` (`geometryEdits.ts`).
 - **Determinism**: a seeded xorshift generator; the seed of each child solve is derived from
   the root `seed` and the typical's description, so the same file always gives the same layout.
+
+### Assemblies and services
+
+Three more passes, around the solve above. Types are in `assembly.rs` and `service.rs`.
+
+- **Context** (`context.rs`), before a level is solved: `prepare` gives a plan what it inherits
+  (assemblies, services, from its parent), merges the plan fragments services claim `inside`
+  matching spaces, appends their claimed rules, and resolves tags (`"#wet"`) to the space types
+  that have them (a space's kind counts). Injected rules and spaces point at the claim that put
+  them there through `Plan.origins`, with absolute pointers written `@/services/…` (`under`
+  leaves them alone, `resolved` strips the `@`). The prepared plan is what's fingerprinted, so
+  a claim changes the solve; a slot carries its `context` so a plan file opened in that slot is
+  prepared the same way and gets the same solution.
+- **Build** (`build.rs`), after a level is solved and before its children are: each shared edge
+  becomes a `BuiltWall` with the roles both sides see (plus the assembly names already built
+  around it, so a child's port can be `'wet` because its wall is). Each wall gets the thinnest
+  assembly meeting every `Need` (from roles' `on` and from `wall` rules; a rule with `length`
+  picks the one wall with the longest run clear of doors). Walls are inset into the rectangles
+  they bound (boundary walls inward, unless `line = 'centre`), ends extended to meet at corners,
+  and each child's slot is the clear rectangle left, so plans inside are solved in clear floor.
+  Openings snap to their wall's centreline and take its depth (`in_wall`).
+- **Fit** (`fit.rs`, `connect.rs`), once everything is solved: services' `place` and `connect`
+  run on the finished elements. `fit` builds a model of leaf rooms (faces split by the wall
+  behind them, openings on faces, fixtures and their backs), resolves each service's `scope`
+  into instances (one per `"#dwelling"`), and places parts anchored first (`on`, `beside`,
+  `one`, then `every`, `over`), keeping track of what each face holds by height band (a switch
+  can sit over a baseboard). `connect` groups targets (`max`) by nearest neighbour and either
+  draws arcs with numbered home runs, or routes them with Dijkstra along wall centrelines that
+  have the cavity asked for, through ceiling hubs of the spaces allowed, checking `limit`.
+  Issues are merged per placement across rooms.
+- **The fingerprint** leaves out a service's `place`, `connect`, `parts` and `params` (and
+  `label`): those never change a layout, so editing them doesn't re-solve or re-seed anything.
+  They are part of the cache key (`view_key`, like symbols), so a cached child still gets the
+  current parts. A service's `scope` and `claims` are in the fingerprint.
+- **Output**: `wall`, `part` and `run` elements (`WallInfo`, `PartInfo`, `RunInfo`), with CAD
+  layers (`PLATE-WALL-<ASSEMBLY>`, `PLATE-<SERVICE>`); DXF and SVG draw all three.
+- **Library files.** A file that is a service (`parts`, `place`…) or a record of assemblies is
+  told apart by shape (`FileKind`, the `by_shape` contract in the prelude): it's checked against
+  its own definition, and the web app shows a card of it instead of solving it.
 
 ## Units
 

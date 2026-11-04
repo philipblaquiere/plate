@@ -8,7 +8,9 @@ use std::collections::BTreeMap;
 
 use serde::{Deserialize, Serialize};
 
+use crate::assembly::Assembly;
 use crate::config::EdgeRoles;
+use crate::service::Service;
 use crate::units::{Length, System, Units};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Deserialize, Serialize)]
@@ -46,6 +48,16 @@ pub struct Plan {
     /// a space, and left out of the fingerprint so changing it never changes a solution.
     #[serde(default, skip_serializing)]
     pub preview: Option<Previews>,
+    /// What the edges between this plan's spaces (and in the plans inside them) are built as.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub assemblies: BTreeMap<String, Assembly>,
+    /// Services that run through this plan and the plans inside it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub services: BTreeMap<String, Service>,
+    /// Where what the host merged into this plan (claims, a service's spaces) is written:
+    /// (pointer in this plan, absolute pointer in the configuration). Not part of its identity.
+    #[serde(skip)]
+    pub origins: Vec<(String, String)>,
 }
 
 /// `preview`: one slot to show the plan in, or a list of named ones.
@@ -212,6 +224,9 @@ pub struct Space {
     /// Fixtures: the instances stand side by side in one run, fronts in line.
     #[serde(default, skip_serializing_if = "is_false")]
     pub row: bool,
+    /// Labels rules and services select it by (`"#sleep"`), whatever it's called.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tags: Vec<String>,
 }
 
 fn yes() -> bool {
@@ -272,6 +287,26 @@ impl Space {
     pub fn is_fixture(&self) -> bool {
         self.kind == SpaceKind::Fixture
     }
+
+    /// Does it have this tag? Its kind counts as one (`"#room"`); tags refine like roles.
+    pub fn has_tag(&self, tag: &str) -> bool {
+        has_tag(&self.tags, self.kind, tag)
+    }
+}
+
+/// Does a space with these tags and this kind have `tag`?
+pub fn has_tag(tags: &[String], kind: SpaceKind, tag: &str) -> bool {
+    kind.name() == tag || tags.iter().any(|t| role_matches(t, tag))
+}
+
+/// A selector item that names a tag (`"#sleep"`): the tag.
+pub fn tag_of(item: &str) -> Option<&str> {
+    item.strip_prefix('#')
+}
+
+/// A key as one segment of a JSON pointer.
+pub fn escape_pointer(key: &str) -> String {
+    key.replace('~', "~0").replace('/', "~1")
 }
 
 /// `clearance`: one length all round, or one per side (seen from the front, facing it).
@@ -507,9 +542,18 @@ impl Selector {
         }
     }
 
-    /// Does the selector pick the instance `name` of space type `type_key`?
+    /// Does the selector pick the instance `name` of space type `type_key`? Tags (`"#sleep"`)
+    /// are resolved to names before a plan is solved; see [`Selector::matches_tagged`].
     pub fn matches(&self, name: &str, type_key: &str) -> bool {
         self.items().iter().any(|p| pattern_matches(p, name) || pattern_matches(p, type_key))
+    }
+
+    /// Like [`Selector::matches`], tags included.
+    pub fn matches_tagged(&self, name: &str, type_key: &str, tags: &[String], kind: SpaceKind) -> bool {
+        self.items().iter().any(|p| match tag_of(p) {
+            Some(tag) => has_tag(tags, kind, tag),
+            None => pattern_matches(p, name) || pattern_matches(p, type_key),
+        })
     }
 }
 
@@ -636,6 +680,30 @@ pub enum Rule {
         a: Selector,
         plan: Box<Plan>,
     },
+    /// The walls between `a` and `b` (or a port of `a`'s: `wall` is any wall) are built as
+    /// `assembly`, or at least to these.
+    Wall {
+        a: Selector,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        b: Option<Selector>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        port: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        assembly: Option<String>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        thickness: Option<LengthSer>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        cavity: Option<LengthSer>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        fire: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        acoustic: Option<f64>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        bearing: Option<bool>,
+        /// Only one stretch this long, clear of doors, need be built so.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        length: Option<LengthSer>,
+    },
 }
 
 impl Rule {
@@ -651,6 +719,7 @@ impl Rule {
             Rule::Along { .. } => "along",
             Rule::Unique { .. } => "unique",
             Rule::Instance { .. } => "instance",
+            Rule::Wall { .. } => "wall",
         }
     }
 
@@ -672,7 +741,10 @@ impl Rule {
     pub fn selectors(&self) -> Vec<(&'static str, &Selector)> {
         let mut out = Vec::new();
         match self {
-            Rule::Touch { a, b, .. } | Rule::Door { a, b, .. } | Rule::Apart { a, b, .. } => {
+            Rule::Touch { a, b, .. }
+            | Rule::Door { a, b, .. }
+            | Rule::Apart { a, b, .. }
+            | Rule::Wall { a, b, .. } => {
                 out.push(("a", a));
                 if let Some(b) = b {
                     out.push(("b", b));
@@ -688,6 +760,35 @@ impl Rule {
                 out.push(("via", via));
             }
             Rule::Window { a, .. } | Rule::Unique { a } | Rule::Instance { a, .. } => out.push(("a", a)),
+        }
+        out
+    }
+}
+
+impl Rule {
+    /// Every selector in the rule, to rewrite (tags into names).
+    pub fn selectors_mut(&mut self) -> Vec<&mut Selector> {
+        let mut out = Vec::new();
+        match self {
+            Rule::Touch { a, b, .. }
+            | Rule::Door { a, b, .. }
+            | Rule::Apart { a, b, .. }
+            | Rule::Wall { a, b, .. } => {
+                out.push(a);
+                if let Some(b) = b {
+                    out.push(b);
+                }
+            }
+            Rule::Near { a, b, .. } | Rule::Faces { a, b, .. } | Rule::Along { a, b, .. } => {
+                out.push(a);
+                out.push(b);
+            }
+            Rule::Reach { a, b, via, .. } => {
+                out.push(a);
+                out.push(b);
+                out.push(via);
+            }
+            Rule::Window { a, .. } | Rule::Unique { a } | Rule::Instance { a, .. } => out.push(a),
         }
         out
     }
@@ -727,8 +828,24 @@ impl Plan {
         h.finish()
     }
 
-    /// Could a selector item name some space of this plan?
+    /// Every rule, to rewrite in place.
+    pub fn rules_mut(&mut self) -> Vec<&mut Rule> {
+        let mut out = Vec::new();
+        for item in self.rules.iter_mut() {
+            match item {
+                RuleItem::One(rule) => out.push(rule),
+                RuleItem::Many(rules) => out.extend(rules.iter_mut()),
+            }
+        }
+        out
+    }
+
+    /// Could a selector item name some space of this plan? A tag always could: a tag that
+    /// matches nothing is simply not there.
     fn knows(&self, item: &str) -> bool {
+        if tag_of(item).is_some() {
+            return true;
+        }
         self.spaces.iter().any(|(key, space)| {
             if pattern_matches(item, key) {
                 return true;
@@ -857,7 +974,10 @@ impl Plan {
                 }
             }
             match rule {
-                Rule::Touch { b, port, .. } | Rule::Door { b, port, .. } | Rule::Apart { b, port, .. } => {
+                Rule::Touch { b, port, .. }
+                | Rule::Door { b, port, .. }
+                | Rule::Apart { b, port, .. }
+                | Rule::Wall { b, port, .. } => {
                     if b.is_some() == port.is_some() {
                         return Err((
                             here,
@@ -874,6 +994,12 @@ impl Plan {
                 Rule::Instance { plan, .. } => plan.validate(&format!("{here}/plan"))?,
                 _ => {}
             }
+        }
+        for (name, assembly) in &self.assemblies {
+            assembly.validate(&format!("{at}/assemblies/{}", escape_pointer(name)), Units::M)?;
+        }
+        for (name, service) in &self.services {
+            service.validate(&format!("{at}/services/{}", escape_pointer(name)))?;
         }
         Ok(())
     }

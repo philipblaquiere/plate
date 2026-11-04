@@ -64,11 +64,16 @@ type Hover =
   | { type: "vertex"; element: Element; index: number; p: Point }
   | { type: "face"; element: Element }
   | { type: "space"; element: Element }
+  | { type: "wall"; element: Element }
+  | { type: "part"; element: Element }
   | null;
 
 /** What a right-click landed on. */
 export type ContextTarget =
-  { type: "space"; element: Element } | { type: "edge"; element: Element; index: number };
+  | { type: "space"; element: Element }
+  | { type: "edge"; element: Element; index: number }
+  | { type: "wall"; element: Element }
+  | { type: "part"; element: Element };
 
 /**
  * The starting geometry, which the user edits by dragging; everything else is solved. A plan's
@@ -129,6 +134,9 @@ function el<K extends keyof SVGElementTagNameMap>(
   return node;
 }
 
+/** Parts of a service are drawn at least this big on screen, as symbols are on paper. */
+const PART_MIN_PX = 16;
+
 const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export class Viewer {
@@ -162,6 +170,8 @@ export class Viewer {
   showDimensions = true;
   showGrid = true;
   tool: Tool = "select";
+  /** The service shown over the plan (its parts and networks, the rest faded), or none. */
+  serviceView: string | null = null;
 
   onStatus: (status: ViewerStatus) => void = () => {};
   /** A point of an element is being dragged. `point` is in drawing units. */
@@ -183,8 +193,10 @@ export class Viewer {
   onVertexDelete: (element: Element, index: number) => void = () => {};
   /** Hint text for the status bar while drawing. */
   onHint: (text: string) => void = () => {};
-  /** Right-click on a space or a boundary edge, at client coordinates. */
+  /** Right-click on a space, a wall, a part or a boundary edge, at client coordinates. */
   onContextMenu: (target: ContextTarget, clientX: number, clientY: number) => void = () => {};
+  /** S was pressed in the drawing: show the next view. */
+  onCycleView: () => void = () => {};
 
   /** Port roles of the boundary's edges, for styling and tooltips. */
   private edgeRoles: string[][] = [];
@@ -216,6 +228,14 @@ export class Viewer {
     this.layout = layout;
     this.hover = null;
     if (layout && (this.follow || first)) this.fit(!first);
+    this.request();
+  }
+
+  /** Show one service over the plan, or none (the plan on its own). */
+  setServiceView(name: string | null): void {
+    if (this.serviceView === name) return;
+    this.serviceView = name;
+    this.hover = null;
     this.request();
   }
 
@@ -684,9 +704,12 @@ export class Viewer {
         this.onVertexDelete(h.element, h.index);
       } else if (this.tool === "draw") {
         this.undoDrawPoint();
-      } else if (this.tool === "select" && h?.type === "space") {
+      } else if (
+        this.tool === "select" &&
+        (h?.type === "space" || h?.type === "wall" || h?.type === "part")
+      ) {
         this.tooltip.hidden = true;
-        this.onContextMenu({ type: "space", element: h.element }, e.clientX, e.clientY);
+        this.onContextMenu({ type: h.type, element: h.element }, e.clientX, e.clientY);
       } else if (this.tool === "select" && h?.type === "edge" && h.element.kind === "boundary") {
         this.tooltip.hidden = true;
         this.onContextMenu({ type: "edge", element: h.element, index: h.index }, e.clientX, e.clientY);
@@ -770,6 +793,10 @@ export class Viewer {
       case "m":
         if (this.drawing) return false;
         this.setTool(this.tool === "measure" ? "select" : "measure");
+        return true;
+      case "s":
+        if (this.drawing) return false;
+        this.onCycleView();
         return true;
       case "v":
         if (this.drawing) return false;
@@ -1004,6 +1031,28 @@ export class Viewer {
     }
     if (best) return best;
     const w = this.toWorld(x, y);
+    // A service's parts, when it's shown: small, so they're found within a few pixels.
+    if (this.serviceView) {
+      let part: Element | null = null;
+      let near = 9;
+      for (const e of this.layout.elements) {
+        if (e.kind !== "part" || e.part?.service !== this.serviceView) continue;
+        // As drawn: grown from where it stands (see renderService).
+        const shape = this.partShape(e);
+        const inside = pointInPolygon({ x, y }, shape);
+        const c = centroid(shape);
+        const d = inside ? 0 : Math.hypot(c.x - x, c.y - y);
+        if (d < near) {
+          near = d;
+          part = e;
+        }
+      }
+      if (part) return { type: "part", element: part };
+    }
+    // Walls take floor between the spaces' clear outlines.
+    for (const e of this.layout.elements) {
+      if (e.kind === "wall" && pointInPolygon(w, e.points)) return { type: "wall", element: e };
+    }
     // The innermost space under the cursor.
     let space: Element | null = null;
     for (const e of this.layout.elements) {
@@ -1069,6 +1118,19 @@ export class Viewer {
       defs,
     );
     el("line", { x1: 0, y1: 0, x2: 0, y2: 6, class: "leftover-line" }, left);
+    // Wall hatches: lines for a framed wall, a cross for masonry or a rated one.
+    for (const [id, d] of [
+      ["wall-hatch", "M0,0V5"],
+      ["wall-cross", "M0,0V5M0,0H5"],
+    ]) {
+      const p = el(
+        "pattern",
+        { id, width: 5, height: 5, patternUnits: "userSpaceOnUse", patternTransform: "rotate(45)" },
+        defs,
+      );
+      el("rect", { width: 5, height: 5, class: "wall-ground" }, p);
+      el("path", { d, class: "wall-line" }, p);
+    }
     const clip = el("clipPath", { id: "sheet-clip" }, defs);
     el(
       "rect",
@@ -1124,7 +1186,8 @@ export class Viewer {
   }
 
   private renderElements(parent: SVGElement): void {
-    const g = el("g", { class: "elements" }, parent);
+    // With a service shown, the plan is faded under it.
+    const g = el("g", { class: this.serviceView ? "elements halftone" : "elements" }, parent);
     const elements = this.layout!.elements;
     const start = elements.filter(framing);
     // Fixtures last: they stand on the floor of their room, over their clearance.
@@ -1171,6 +1234,7 @@ export class Viewer {
       }
     }
     if (!clearances) this.renderClearances(g);
+    this.renderWalls(g);
     this.renderLeftover(g);
 
     this.renderOpenings(g);
@@ -1210,6 +1274,90 @@ export class Viewer {
     }
 
     this.renderSpaceLabels(g, spaces);
+    if (this.serviceView) this.renderService(parent, this.serviceView);
+  }
+
+  /** How much a part is grown on screen, and from where: no smaller than a symbol on paper,
+   * grown from where it stands (its wall's face). */
+  private partGrowth(p: Element): { grow: number; at: Point } {
+    const pts = p.points.map((q) => this.toScreen(q));
+    const size = Math.max(...pts.map((q) => Math.hypot(q.x - pts[0].x, q.y - pts[0].y)));
+    const grow = size > 0 ? Math.max(1, PART_MIN_PX / size) : 1;
+    return { grow, at: this.toScreen(p.part!.at) };
+  }
+
+  /** A part's footprint as drawn, on screen. */
+  private partShape(p: Element): Point[] {
+    const { grow, at } = this.partGrowth(p);
+    return p.points.map((q) => {
+      const s = this.toScreen(q);
+      return { x: at.x + (s.x - at.x) * grow, y: at.y + (s.y - at.y) * grow };
+    });
+  }
+
+  /** Walls, as poché: filled by their assembly's pattern, between the spaces' clear outlines. */
+  private renderWalls(parent: SVGElement): void {
+    const g = el("g", { class: "walls" }, parent);
+    for (const w of this.layout!.elements) {
+      if (w.kind !== "wall") continue;
+      const d = pathOf(
+        w.points.map((p) => this.toScreen(p)),
+        true,
+      );
+      el("path", { d, class: `wall wall-${w.wall?.pattern ?? "solid"}` }, g);
+    }
+  }
+
+  /** A service over the plan: its networks, then its parts. */
+  private renderService(parent: SVGElement, service: string): void {
+    const g = el("g", { class: "service" }, parent);
+    for (const r of this.layout!.elements) {
+      if (r.kind !== "run" || r.run?.service !== service) continue;
+      const pts = r.points.map((p) => this.toScreen(p));
+      el(
+        "path",
+        { d: pathOf(pts, false), class: `run run-${r.run.draw}${r.run.home ? " run-home" : ""}` },
+        g,
+      );
+      if (r.run.home && pts.length >= 2) {
+        // A home run: an arrow toward the source, with its group's number.
+        const [a, b] = [pts[pts.length - 2], pts[pts.length - 1]];
+        const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
+        const [ux, uy] = [(b.x - a.x) / len, (b.y - a.y) / len];
+        const head = `M${b.x - ux * 7 - uy * 3.5},${b.y - uy * 7 + ux * 3.5}L${b.x},${b.y}L${b.x - ux * 7 + uy * 3.5},${b.y - uy * 7 - ux * 3.5}`;
+        el("path", { d: head, class: "run run-head" }, g);
+        if (r.run.group) {
+          const t = el("text", { x: b.x + ux * 6, y: b.y + uy * 6 + 3, class: "run-label" }, g);
+          t.textContent = r.run.group;
+        }
+      }
+    }
+    for (const p of this.layout!.elements) {
+      if (p.kind !== "part" || p.part?.service !== service) continue;
+      const { grow, at } = this.partGrowth(p);
+      const pg = el(
+        "g",
+        {
+          class: `part part-${p.part.mount}`,
+          ...(grow > 1
+            ? { transform: `translate(${at.x},${at.y}) scale(${grow}) translate(${-at.x},${-at.y})` }
+            : {}),
+        },
+        g,
+      );
+      el(
+        "path",
+        {
+          d: pathOf(
+            p.points.map((q) => this.toScreen(q)),
+            true,
+          ),
+          class: p.symbol ? "part-box" : "part-box part-plain",
+        },
+        pg,
+      );
+      if (p.symbol) this.renderSymbol(pg, p);
+    }
   }
 
   /** A closed element as a path, holes included (draw it with `fill-rule: evenodd`). */
@@ -1312,7 +1460,17 @@ export class Viewer {
       const [a, b] = o.points.map((p) => this.toScreen(p));
       const len = Math.hypot(b.x - a.x, b.y - a.y);
       if (len < 3) continue;
-      el("path", { d: `M${a.x},${a.y}L${b.x},${b.y}`, class: "opening-gap" }, g);
+      // In a built wall the gap goes right through it.
+      const depth = o.opening?.depth ? o.opening.depth * this.view.k + 1 : 0;
+      el(
+        "path",
+        {
+          d: `M${a.x},${a.y}L${b.x},${b.y}`,
+          class: "opening-gap",
+          ...(depth ? { style: `stroke-width:${depth}px` } : {}),
+        },
+        g,
+      );
       if (o.kind === "window") {
         const ux = (b.x - a.x) / len;
         const uy = (b.y - a.y) / len;
@@ -1514,6 +1672,18 @@ export class Viewer {
       : this.hover;
     if (!h || this.pan?.moved || this.edgeDrag?.moved) return;
     const g = el("g", { class: "hover" }, parent);
+    if (h.type === "wall" || h.type === "part") {
+      const d = pathOf(
+        h.type === "part" ? this.partShape(h.element) : h.element.points.map((p) => this.toScreen(p)),
+        true,
+      );
+      el("path", { d, class: h.type === "wall" ? "hover-wall" : "hover-part" }, g);
+      if (h.type === "wall" && h.element.wall) {
+        const [a, b] = h.element.wall.line;
+        this.drawDimension(g, a, b, true, false, 14);
+      }
+      return;
+    }
     if (h.type === "space") {
       const info = h.element.space!;
       // The same typical elsewhere, lightly, then this one.
@@ -1903,10 +2073,52 @@ export class Viewer {
           ? "Drag to move, double-click to add a point, right-click to set its port"
           : "Drag to move, double-click to add a point",
       );
+    } else if (h?.type === "wall") {
+      const w = h.element.wall!;
+      const thin = (v: number) => L.thickness(v);
+      const rows: [string, string][] = [];
+      if (w.cavity > 0) rows.push(["Cavity", thin(w.cavity)]);
+      if (w.fire !== undefined) rows.push(["Fire", `${w.fire} h`]);
+      if (w.acoustic !== undefined) rows.push(["Sound", `STC ${w.acoustic}`]);
+      if (w.bearing) rows.push(["Bearing", "yes"]);
+      if (w.layers?.length)
+        rows.push(["Build-up", w.layers.map((l) => `${thin(l.thickness)} ${l.material}`).join(" · ")]);
+      rows.push(["Between", w.between.join(" and ")]);
+      rows.push(["Length", len(Math.hypot(w.line[1].x - w.line[0].x, w.line[1].y - w.line[0].y))]);
+      rows.push([
+        "Because",
+        w.because ? `${w.roles.map((r) => `'${r}`).join(", ")}: ${w.because}` : "asked for",
+      ]);
+      html = card(
+        `${w.label} (${w.assembly})`,
+        `${thin(w.thickness)} thick`,
+        rows,
+        "Right-click: show its assembly",
+      );
+    } else if (h?.type === "part") {
+      const p = h.element.part!;
+      const rows: [string, string][] = [["In", p.space]];
+      if (p.mount === "wall" && p.above !== undefined)
+        rows.push(["Height", `${L.thickness(p.above)} above the floor`]);
+      else rows.push(["On", p.mount === "cavity" ? "in the wall" : `the ${p.mount}`]);
+      if (p.group) {
+        const nets = this.layout!.elements.filter(
+          (e) => e.kind === "run" && e.run?.service === p.service && e.run.group === p.group,
+        );
+        rows.push([nets[0]?.run?.network ?? "Group", p.group]);
+      }
+      rows.push(["Placed", p.placed]);
+      html = card(p.label, p.service, rows, "Right-click: show where it's placed");
     } else if (h?.type === "space") {
       const info = h.element.space!;
       const b = boundsOf(h.element.points);
       const rows: [string, string][] = [["Size", `${L.length(b.w)} × ${L.length(b.h)}`]];
+      if (info.gross !== undefined)
+        rows.push([
+          "Floor",
+          `${L.area(h.element.area ?? 0)} clear, ${L.area(info.gross)} to the walls' centres`,
+        ]);
+      if (info.tags?.length) rows.push(["Tags", info.tags.map((t) => `#${t}`).join(" ")]);
       if (info.front) {
         // Width along its front, depth front to back.
         const [a, f] = info.front;

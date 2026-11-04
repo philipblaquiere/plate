@@ -3025,3 +3025,341 @@ button {
 .sheet-file.is-plan .sheet-file-diag {
   display: none;
 }
+
+/* ---------------------------------------------------------------- walls and services */
+
+/* Walls: poché between the spaces' clear outlines, by their assembly's pattern. */
+.wall {
+  stroke: none;
+}
+
+.wall-solid {
+  fill: #2c3035;
+}
+
+.wall-light {
+  fill: #9aa1a8;
+}
+
+.wall-hatch {
+  fill: url(#wall-hatch);
+}
+
+.wall-cross {
+  fill: url(#wall-cross);
+}
+
+.wall-ground {
+  fill: #f4f3ee;
+}
+
+.wall-line {
+  stroke: #2c3035;
+  stroke-width: 0.9;
+}
+
+.hover-wall {
+  fill: rgb(210 65 47 / 0.18);
+  stroke: var(--redline);
+  stroke-width: 1.5;
+  pointer-events: none;
+}
+
+/* A service shown over the plan: the plan fades, the service is drawn in its own ink. */
+.elements.halftone {
+  opacity: 0.38;
+}
+
+.service {
+  --service-ink: #4a3fb0;
+  pointer-events: none;
+}
+
+.service .part-box {
+  fill: #fff;
+  stroke: none;
+}
+
+.service .part path {
+  vector-effect: non-scaling-stroke;
+}
+
+.service .part-plain {
+  fill: color-mix(in srgb, var(--service-ink) 18%, #fff);
+  stroke: var(--service-ink);
+  stroke-width: 1;
+}
+
+.service .symbol path {
+  stroke: var(--service-ink);
+  stroke-width: 1;
+}
+
+.service .symbol path.tone-dark {
+  fill: var(--service-ink);
+}
+
+.run {
+  fill: none;
+  stroke: var(--service-ink);
+  stroke-width: 1;
+  opacity: 0.75;
+}
+
+.run-routed {
+  stroke-width: 2;
+  opacity: 0.9;
+  stroke-linejoin: round;
+}
+
+.run-head {
+  opacity: 1;
+}
+
+.run-label {
+  font: 600 10px var(--ui);
+  fill: var(--service-ink);
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+}
+
+.hover-part {
+  fill: none;
+  stroke: var(--redline);
+  stroke-width: 2;
+  pointer-events: none;
+}
+
+/* The views over the drawing: the plan, or one service on it. */
+.views {
+  position: absolute;
+  top: 38px;
+  left: 92px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  max-width: calc(100% - 340px);
+  z-index: 2;
+}
+
+.views-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid rgb(31 35 40 / 0.16);
+  border-radius: 8px;
+  background: var(--sheet-raised);
+  box-shadow: 0 1px 2px rgb(31 35 40 / 0.08);
+}
+
+.view-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  height: 24px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.view-chip:hover {
+  background: rgb(31 35 40 / 0.06);
+  color: var(--ink);
+}
+
+.view-chip[aria-pressed="true"] {
+  background: var(--ink);
+  color: #fff;
+}
+
+.view-badge {
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--redline);
+  color: #fff;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+}
+
+.legend {
+  min-width: 190px;
+  padding: 8px 10px;
+  border: 1px solid rgb(31 35 40 / 0.16);
+  border-radius: 8px;
+  background: var(--sheet-raised);
+  color: var(--ink);
+  font-size: 11.5px;
+  box-shadow: 0 1px 2px rgb(31 35 40 / 0.08);
+}
+
+.legend ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 20px;
+}
+
+.legend .legend-count {
+  margin-left: auto;
+  padding-left: 12px;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+.legend .legend-thumb {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+}
+
+.legend .legend-thumb svg {
+  width: 18px;
+  height: 18px;
+}
+
+.legend .legend-thumb svg * {
+  stroke: #4a3fb0;
+}
+
+.legend .legend-net {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgb(31 35 40 / 0.1);
+  color: var(--ink-soft);
+}
+
+/* A library file opened on its own: what it is, instead of a drawing. */
+.library {
+  position: absolute;
+  inset: 84px 18px 18px 92px;
+  overflow: auto;
+  color: var(--ink);
+}
+
+.lib {
+  max-width: 720px;
+}
+
+.lib-title {
+  margin: 0 0 4px;
+  font-size: 18px;
+}
+
+.lib-what,
+.lib-used {
+  margin: 0 0 14px;
+  color: var(--ink-soft);
+}
+
+.lib h3 {
+  margin: 16px 0 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.lib code {
+  font: 12px var(--code);
+}
+
+.lib-list,
+.lib-plain {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.lib-plain li {
+  padding: 3px 0;
+}
+
+.lib-item {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgb(31 35 40 / 0.08);
+}
+
+.lib-name {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.lib-label {
+  color: var(--ink-soft);
+}
+
+.lib-size {
+  margin-left: auto;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.lib-facts,
+.lib-buildup {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.lib-buildup {
+  font-family: var(--code);
+  font-size: 11px;
+}
+
+.lib-swatch {
+  display: block;
+  width: 56px;
+  border: 1px solid #2c3035;
+}
+
+.lib-swatch-solid {
+  background: #2c3035;
+}
+
+.lib-swatch-light {
+  background: #9aa1a8;
+}
+
+.lib-swatch-hatch {
+  background: repeating-linear-gradient(45deg, #2c3035 0 1px, #f4f3ee 1px 5px);
+}
+
+.lib-swatch-cross {
+  background:
+    repeating-linear-gradient(45deg, #2c3035 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(-45deg, #2c3035 0 1px, #f4f3ee 1px 5px);
+}
+
+.lib-thumb {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 36px;
+}
+
+.lib-thumb svg {
+  width: 36px;
+  height: 36px;
+}

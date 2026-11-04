@@ -69,6 +69,12 @@ export class Lengths {
     return `${decimal(this.metric(v), DECIMALS[u] + (precise ? 1 : 0))} ${u}`;
   }
 
+  /** A thickness (a wall, a layer of one): millimetres in metric, as build-ups are written. */
+  thickness(v: number): string {
+    if (this.system === "imperial") return feetInches(this.inches(v), 32);
+    return `${decimal(v * MM[this.units], 0)} mm`;
+  }
+
   /** A dimension label on the drawing. Metric drawings omit the unit, as on paper. */
   dimension(v: number): string {
     if (this.system === "imperial") return feetInches(this.inches(v), 16);
