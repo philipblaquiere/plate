@@ -87,6 +87,7 @@ describe("moving files", () => {
     expect(libraryKind('{\n  label = "Lighting",\n  parts = { light = {} },\n}')).toBe("service");
     expect(libraryKind("fun x => {\n  place = [],\n}")).toBe("service");
     expect(libraryKind("{\n  partition = { on = 'partition, thickness = 0.1 },\n}")).toBe("assemblies");
+    expect(libraryKind('{ partition = { thickness = "100 mm" } }')).toBe("assemblies");
     expect(libraryKind("let g = 1 in\n{\n  wet = {\n    layers = [g],\n  },\n}")).toBe("assemblies");
     expect(libraryKind("{\n  spaces = { a = {} },\n}")).toBeNull();
     expect(libraryKind("{ start = { mode = 'boundary } }")).toBeNull();

@@ -194,6 +194,9 @@ pub struct PartInfo {
     /// The group of its network it's in (a circuit), once connected.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
+    /// The network that group is in: group numbers start over in each.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network: Option<String>,
     /// Where it stands: the middle of its wall side, or of its footprint.
     pub at: Point,
 }

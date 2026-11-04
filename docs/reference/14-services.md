@@ -42,7 +42,7 @@ claims = {
 },
 ```
 
-`rules` are added to every plan the service covers; name spaces by tag, so they fit any plan. `inside` merges a plan piece (spaces, rules, needs) into each space the key selects. Claims are solved like rules written in the plan: a problem with one points at the claim.
+`rules` are added to every plan the service covers; name spaces by tag, so they fit any plan. `inside` merges a plan piece (spaces, rules, needs) into each space the key selects. Claims are solved like rules written in the plan: a problem with one points at the claim. Needs a claim brings add to the plan's own, so both hold; if they can't, the problems list says so.
 
 ## Networks
 
@@ -53,7 +53,7 @@ connect = [
 ],
 ```
 
-A network joins parts (of this service, of another as `"service.part"`, or tagged fixtures) back to its source, room by room, in groups of at most `max` (circuits). `'arcs` draws the electrical convention: an arc from part to part and a numbered home run. `'routed` runs in the walls whose cavity is at least `via.cavity`, and across the ceilings of `via.ceilings`, by the shortest way, each to its nearest source; `limit` caps a run.
+A network joins parts (of this service, of another as `"service.part"`, or tagged fixtures) back to its source, room by room, in groups of at most `max` (circuits). `'arcs` draws the electrical convention: an arc from part to part and a numbered home run. `'routed` runs in the walls whose cavity is at least `via.cavity`, and across the ceilings of `via.ceilings`, by the shortest way, each to its nearest source; `limit` caps a run. What stands against a wall joins that wall, or crosses its room's ceiling if `via.ceilings` allows it, never the floor to another wall. What's on the floor or ceiling joins the nearest wall of its room.
 
 ## Scope
 
