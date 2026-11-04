@@ -9,7 +9,7 @@ import { rulesOf, spanFor, valueAt } from "./editor/sources";
 import { withSystem } from "./editor/system";
 import { defaultUnits, modeOf, template, type StartMode } from "./editor/templates";
 import { ConfigEngine } from "./engine/engine";
-import { download, pickFile, takeLegacyDraft } from "./files";
+import { download, pickFile, pickZip, takeLegacyDraft } from "./files";
 import { openMenu, type MenuItem } from "./menu";
 import { libraryCard } from "./library";
 import { nextView, summarize, type ServiceSummary } from "./services";
@@ -34,7 +34,17 @@ import { Lengths } from "./viewer/format";
 import { Viewer, type ContextTarget } from "./viewer/viewer";
 import { Workbench } from "./workbench";
 import { importersOf, libraryKind, retargetImports } from "./plates";
-import { importsOf, isPlan, isPlate, WorkspaceStore } from "./workspace";
+import { closePalette, askText, isPaletteOpen, showPalette, type PaletteItem } from "./palette";
+import {
+  byRecent,
+  cleanProjectName,
+  formatRoute,
+  parseRoute,
+  planCopy,
+  pushRecent,
+  timeAgo,
+} from "./projects";
+import { adoptLegacyDrafts, importsOf, isPlan, isPlate, WorkspaceStore } from "./workspace";
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -92,6 +102,7 @@ const workbench = new Workbench(
   { save: () => void save(), open: () => void openFromComputer(), format: () => formatActive() },
   {
     onActive: (path) => {
+      if (!ready) return;
       // Looking at a plate shows it. Looking at a plan keeps the plate in the drawing if it uses
       // the plan (so editing the plan re-solves it there), and otherwise shows the plan on its own.
       if (ready && path && path !== mainPath() && !drawing) {
@@ -104,6 +115,10 @@ const workbench = new Workbench(
     },
     onShowPlate: (path) => showPlate(path),
     onCursor: () => referencePanel.follow(),
+  },
+  {
+    switchProject: () => void openProjectSwitcher(),
+    copyToProject: (path) => void copyToProject(path),
   },
 );
 
@@ -1040,7 +1055,9 @@ const MIN_SLOT: Record<string, number> = { mm: 500, cm: 50, m: 0.5, in: 18, ft: 
 function updateTitle(): void {
   const path = workbench.activePath() ?? mainPath();
   const dirty = path ? store.isDirty(path) : false;
-  document.title = path ? `${dirty ? "● " : ""}${path} – plate` : "plate";
+  const where = path ? `${dirty ? "● " : ""}${path} – ` : "";
+  document.title = `${where}${store.project} – plate`;
+  if (ready) syncRoute();
 }
 
 // ------------------------------------------------------------------ start screen + drawing
@@ -1185,6 +1202,7 @@ $("start-continue").addEventListener("click", () => {
   if (main && !workbench.activePath()) workbench.open(main);
 });
 $("start-open").addEventListener("click", () => void openFromComputer());
+$("start-projects").addEventListener("click", () => void openProjectSwitcher());
 
 // ------------------------------------------------------------------ editing in the drawing
 
@@ -1551,7 +1569,7 @@ async function openFromComputer(): Promise<void> {
   try {
     const doc = await store.create(store.freePath(picked.name.replace(/[^\w.-]+/g, "-")), picked.text);
     workbench.open(doc.path);
-    toast(`Added ${doc.path} to the workspace`);
+    toast(`Added ${doc.path} to ${store.project}`);
   } catch (err) {
     toast(`Couldn't add ${picked.name}: ${(err as Error).message}`, true);
   }
@@ -1586,13 +1604,24 @@ async function exportAs(format: ExportFormat): Promise<void> {
 }
 
 let toastTimer = 0;
-function toast(message: string, error = false): void {
+function toast(message: string, error = false, undo?: { label: string; action: () => void }): void {
   const el = $("toast");
   el.textContent = message;
   el.classList.toggle("toast-error", error);
+  if (undo) {
+    const b = document.createElement("button");
+    b.className = "toast-action";
+    b.textContent = undo.label;
+    b.addEventListener("click", () => {
+      el.hidden = true;
+      undo.action();
+    });
+    el.append(" ", b);
+  }
   el.hidden = false;
   window.clearTimeout(toastTimer);
-  toastTimer = window.setTimeout(() => (el.hidden = true), error ? 5000 : 3200);
+  // Long enough to reach a button; errors stay long enough to read.
+  toastTimer = window.setTimeout(() => (el.hidden = true), undo ? 10000 : error ? 5000 : 3200);
 }
 
 // ------------------------------------------------------------------ chrome wiring
@@ -1655,12 +1684,25 @@ function syncToggles(): void {
 window.addEventListener("keydown", (e) => {
   const mod = e.ctrlKey || e.metaKey;
   const key = e.key.toLowerCase();
+  if (mod && e.altKey && key === "p") {
+    e.preventDefault();
+    if (isPaletteOpen()) closePalette();
+    else void openProjectSwitcher();
+    return;
+  }
+  if (mod && !e.altKey && !e.shiftKey && key === "p") {
+    e.preventDefault();
+    hideStart();
+    if (isPaletteOpen()) closePalette();
+    else openQuickOpen();
+    return;
+  }
   if (!startScreen.hidden) {
     const modes: Record<string, StartMode> = { "1": "boundary", "2": "spine", "3": "free" };
     if (!mod && modes[e.key]) {
       e.preventDefault();
       beginDrawing(modes[e.key]);
-    } else if (e.key === "Escape" && mainPath()) {
+    } else if (e.key === "Escape") {
       e.preventDefault();
       hideStart();
     } else if (mod && key === "o") {
@@ -1748,14 +1790,439 @@ gutter.addEventListener("keydown", (e) => {
   if (e.key === "ArrowRight") setSplit(current + 0.02);
 });
 
+// ------------------------------------------------------------------ projects
+
+const RECENT_KEY = "plate:recent";
+
+function recentProjects(): string[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(RECENT_KEY) ?? "[]") as unknown;
+    return Array.isArray(list) ? (list as string[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+function rememberProject(name: string): void {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(pushRecent(recentProjects(), name)));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** The project the address names, else the last one used, else the first; a new user gets Home. */
+async function openStartingProject(listing: api.ProjectListing): Promise<{ main: string | null }> {
+  const route = parseRoute(location.hash);
+  const known = (name: string) => listing.projects.some((p) => p.name === name);
+  const wanted = route?.project;
+  const example = wanted ? listing.examples.find((e) => e.name === wanted) : undefined;
+  if (wanted && !known(wanted) && example) {
+    const opened = await api.openExample(example.name);
+    await store.open(opened.name, { announce: false });
+    pendingFile = route?.path ?? null;
+    return { main: example.main };
+  }
+  const recent = byRecent(listing.projects, recentProjects())[0]?.name;
+  const name = wanted && known(wanted) ? wanted : recent;
+  if (!name) {
+    const first = listing.examples[0];
+    const opened = await api.openExample(first.name);
+    await store.open(opened.name, { announce: false });
+    return { main: first.main };
+  }
+  await store.open(name, { announce: false });
+  if (wanted === name) pendingFile = route?.path ?? null;
+  return { main: listing.projects.find((p) => p.name === name)?.main ?? null };
+}
+
+/** A file named by the address, to open once the project's up. */
+let pendingFile: string | null = null;
+
+/**
+ * Show the store's project: its tabs and plate as they were left, or `fallback` on a first visit.
+ */
+async function showProject(fallback: string | null): Promise<void> {
+  ready = false;
+  const restored = workbench.enterProject();
+  let main = restored ?? (fallback && store.get(fallback) ? fallback : firstPlate());
+  const named = pendingFile && store.get(pendingFile) ? pendingFile : null;
+  pendingFile = null;
+  if (named) {
+    if (isPlate(store.get(named)!.text.value)) main = named;
+    workbench.open(named, { focus: false });
+  } else if (main && !workbench.activePath()) {
+    workbench.open(main, { focus: false });
+  }
+  planViews.clear();
+  workbench.setMain(main);
+  rememberProject(store.project);
+  syncRoute();
+  ready = true;
+  updateTitle();
+  resetSheet();
+  viewer.setLayout(null);
+  await runSolve();
+}
+
+/** Keep the address on the open file. This isn't a step Back would undo; changing project is. */
+function syncRoute(): void {
+  const hash = formatRoute({ project: store.project, path: workbench.activePath() });
+  if (hash !== location.hash) history.replaceState(null, "", hash);
+}
+
+let switchSeq = 0;
+
+/** Open a project: instant if it's been opened already, one request if not. */
+async function switchProject(
+  name: string,
+  options: { main?: string | null; file?: string | null; fromAddress?: boolean } = {},
+): Promise<void> {
+  if (name === store.project) {
+    if (options.file && store.get(options.file)) workbench.open(options.file);
+    return;
+  }
+  const seq = ++switchSeq;
+  if (drawing) {
+    restarting = true;
+    viewer.cancelDrawing();
+    restarting = false;
+    endDrawingUi();
+  }
+  hideStart();
+  window.clearTimeout(debounce);
+  inflight?.abort();
+  ready = false;
+  workbench.leaveProject();
+  try {
+    await store.open(name, { announce: false });
+  } catch (err) {
+    toast(`Couldn't open ${name}: ${(err as Error).message}`, true);
+    // Stay where we were: its documents are still loaded.
+    await store.open(store.project || name, { announce: false }).catch(() => undefined);
+    await showProject(null);
+    return;
+  }
+  if (seq !== switchSeq) return;
+  pendingFile = options.file ?? null;
+  // Going somewhere new is a step Back can undo; following the address already is one.
+  if (!options.fromAddress) history.pushState(null, "", formatRoute({ project: name, path: null }));
+  await showProject(options.main ?? null);
+  workbench.activeEditor().focus();
+}
+
+/** Back and forward, or an address typed by hand. */
+window.addEventListener("hashchange", () => void followRoute());
+
+async function followRoute(): Promise<void> {
+  const route = parseRoute(location.hash);
+  if (!route) return;
+  if (route.project !== store.project) {
+    const listing = await api.listProjects().catch(() => null);
+    const example = listing?.examples.find((e) => e.name === route.project);
+    const known = listing?.projects.some((p) => p.name === route.project);
+    if (!known && !example) return toast(`There's no project called ${route.project}.`, true);
+    if (!known && example) await api.openExample(example.name);
+    await switchProject(route.project, { file: route.path, main: example?.main, fromAddress: true });
+  } else if (route.path && route.path !== workbench.activePath() && store.get(route.path)) {
+    workbench.open(route.path);
+  }
+}
+
+/** Ctrl+P: any file in the project, by name. */
+function openQuickOpen(): void {
+  const active = workbench.activePath();
+  const paths = store.paths().filter((p) => p !== active);
+  showPalette({
+    placeholder: `Go to a file in ${store.project}`,
+    hint: "Ctrl+P",
+    empty: "No file here matches.",
+    items: paths.map((path) => ({
+      id: path,
+      label: path,
+      badge: store.isDirty(path) ? "unsaved" : undefined,
+      pick: () => workbench.open(path),
+    })),
+  });
+}
+
+const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Ctrl+Alt+P: every project, recent first, then the examples not opened yet. */
+async function openProjectSwitcher(): Promise<void> {
+  const listing = await api.listProjects().catch((err: Error) => (toast(err.message, true), null));
+  if (!listing) return;
+  const now = Date.now();
+  const projects = byRecent(listing.projects, recentProjects());
+  const items: PaletteItem[] = projects.map((p, i) => {
+    const dirty = store.dirtyCount(p.name);
+    const mainOfProject = p.name === store.project ? mainPath() : null;
+    return {
+      id: p.name,
+      label: p.name,
+      group: i === 0 ? "Your projects" : undefined,
+      detail: [plural(p.plates, "plate"), plural(p.files, "file"), timeAgo(p.modified, now)]
+        .filter(Boolean)
+        .join(" · "),
+      image: p.files ? api.projectThumbnailUrl(p.name, mainOfProject) : undefined,
+      badge: dirty ? `${dirty} unsaved` : p.name === store.project ? "open" : undefined,
+      menu: (x, y) => projectMenu(p, x, y),
+      pick: () => void switchProject(p.name, { main: p.main }),
+    };
+  });
+  const missing = listing.examples.filter((e) => !listing.projects.some((p) => p.name === e.name));
+  missing.forEach((e, i) => {
+    items.push({
+      id: `example:${e.name}`,
+      label: e.title,
+      group: i === 0 ? "Examples" : undefined,
+      detail: e.blurb,
+      image: api.exampleThumbnailUrl(e.name),
+      pick: () => void openExampleProject(e),
+    });
+  });
+  showPalette({
+    placeholder: "Switch project",
+    hint: "Ctrl+Alt+P",
+    tall: true,
+    searchDetail: true,
+    empty: "No project matches.",
+    items,
+    footer: [
+      { label: "New project…", action: () => void newProject() },
+      { label: "Import a zip…", action: () => void importProjectZip() },
+    ],
+  });
+}
+
+async function openExampleProject(example: api.ExampleInfo): Promise<void> {
+  try {
+    const opened = await api.openExample(example.name);
+    await switchProject(opened.name, { main: opened.main });
+  } catch (err) {
+    toast(`Couldn't open ${example.title}: ${(err as Error).message}`, true);
+  }
+}
+
+/** Ask for a project name until it's a usable one, or the question's dismissed. */
+async function askProjectName(title: string, action: string, value = ""): Promise<string | null> {
+  const typed = await askText({ title, value, placeholder: "Riverside flats", action });
+  if (typed === null) return null;
+  const name = cleanProjectName(typed);
+  if (!name) toast("A project name needs a letter or a number in it.", true);
+  return name || null;
+}
+
+async function newProject(): Promise<void> {
+  const name = await askProjectName("Name the new project", "Create");
+  if (!name) return;
+  try {
+    await api.createProject(name);
+    await switchProject(name);
+    showStart();
+  } catch (err) {
+    toast(`Couldn't create ${name}: ${(err as Error).message}`, true);
+  }
+}
+
+async function importProjectZip(): Promise<void> {
+  const zip = await pickZip();
+  if (!zip) return;
+  try {
+    const made = await api.importProject(
+      cleanProjectName(zip.name.replace(/\.zip$/i, "")) || "imported",
+      zip,
+    );
+    await switchProject(made.name, { main: made.main });
+    toast(`Imported ${made.name}.`);
+  } catch (err) {
+    toast(`Couldn't import ${zip.name}: ${(err as Error).message}`, true);
+  }
+}
+
+function projectMenu(project: api.ProjectInfo, x: number, y: number): void {
+  openMenu(
+    project.name,
+    [
+      { label: "Rename…", action: () => void renameProject(project.name) },
+      { label: "Duplicate", action: () => void duplicateProject(project.name) },
+      {
+        label: "Export as zip",
+        disabled: !project.files,
+        action: () => {
+          closePalette();
+          const a = document.createElement("a");
+          a.href = api.projectExportUrl(project.name);
+          a.download = `${project.name}.zip`;
+          a.click();
+        },
+      },
+      "-",
+      { label: "Delete", action: () => void deleteProject(project.name) },
+    ],
+    x,
+    y,
+  );
+}
+
+async function renameProject(name: string): Promise<void> {
+  const to = await askProjectName(`Rename ${name}`, "Rename", name);
+  if (!to || to === name) return;
+  // Save nothing behind the user's back: unsaved text travels with the drafts.
+  const here = store.project === name;
+  if (here) {
+    ready = false;
+    workbench.leaveProject();
+  }
+  try {
+    await api.moveProject(name, to);
+    store.dropProject(name, to);
+    workbench.forgetProject(name, to);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(recentProjects().map((n) => (n === name ? to : n))));
+    } catch {
+      /* ignore */
+    }
+    if (here) {
+      await store.open(to, { announce: false });
+      await showProject(null);
+    }
+    toast(`Renamed to ${to}.`);
+  } catch (err) {
+    toast(`Couldn't rename ${name}: ${(err as Error).message}`, true);
+    if (here) await showProject(null);
+  }
+}
+
+async function duplicateProject(name: string): Promise<void> {
+  const to = await askProjectName(`Duplicate ${name} as`, "Duplicate", `${name} copy`);
+  if (!to) return;
+  try {
+    await saveIfOpen(name);
+    const copy = await api.duplicateProject(name, to);
+    await switchProject(copy.name);
+    toast(`Made ${copy.name}.`);
+  } catch (err) {
+    toast(`Couldn't duplicate ${name}: ${(err as Error).message}`, true);
+  }
+}
+
+/** A copy is of what's on disk: bring the open project's unsaved text there first. */
+async function saveIfOpen(name: string): Promise<void> {
+  if (name === store.project) for (const p of store.dirtyPaths()) await store.save(p);
+}
+
+async function deleteProject(name: string): Promise<void> {
+  closePalette();
+  const here = store.project === name;
+  try {
+    if (here) {
+      // Somewhere to land first: another project, or an empty one for someone with none left.
+      const listing = await api.listProjects();
+      const next = byRecent(
+        listing.projects.filter((p) => p.name !== name),
+        recentProjects(),
+      )[0];
+      if (next) {
+        await switchProject(next.name, { main: next.main });
+      } else {
+        const landing = name === "my-project" ? "my-project-2" : "my-project";
+        await api.createProject(landing);
+        await switchProject(landing);
+      }
+    }
+    const { trash } = await api.trashProject(name);
+    const kept = keptInBrowser(name);
+    store.dropProject(name);
+    workbench.forgetProject(name);
+    try {
+      localStorage.setItem(RECENT_KEY, JSON.stringify(recentProjects().filter((n) => n !== name)));
+    } catch {
+      /* ignore */
+    }
+    toast(`Deleted ${name}.`, false, {
+      label: "Undo",
+      action: () => void undoDelete(trash, kept),
+    });
+  } catch (err) {
+    toast(`Couldn't delete ${name}: ${(err as Error).message}`, true);
+  }
+}
+
+/** What the browser holds for a project: its unsaved text and its tabs. */
+function keptInBrowser(name: string): Record<string, string | null> {
+  try {
+    return {
+      drafts: localStorage.getItem(`plate:drafts:${name}`),
+      project: localStorage.getItem(`plate:project:${name}`),
+    };
+  } catch {
+    return {};
+  }
+}
+
+async function undoDelete(id: string, kept: Record<string, string | null>): Promise<void> {
+  try {
+    const { name } = await api.restoreProject(id);
+    try {
+      for (const [key, value] of Object.entries(kept)) {
+        if (value) localStorage.setItem(`plate:${key}:${name}`, value);
+      }
+    } catch {
+      /* drafts are a convenience only */
+    }
+    await switchProject(name);
+    toast(`${name} is back.`);
+  } catch (err) {
+    toast(`Couldn't bring it back: ${(err as Error).message}`, true);
+  }
+}
+
+/** Copy a file and what it imports to another project, at the same paths. */
+async function copyToProject(path: string): Promise<void> {
+  const listing = await api.listProjects().catch((err: Error) => (toast(err.message, true), null));
+  if (!listing) return;
+  const others = byRecent(listing.projects, recentProjects()).filter((p) => p.name !== store.project);
+  if (!others.length) return toast("There's no other project to copy to yet.", true);
+  showPalette({
+    placeholder: `Copy ${path} to…`,
+    empty: "No project matches.",
+    items: others.map((p) => ({
+      id: p.name,
+      label: p.name,
+      pick: () => void copyInto(path, p.name),
+    })),
+  });
+}
+
+async function copyInto(path: string, project: string): Promise<void> {
+  try {
+    const there = await api.readProject(project);
+    const existing = Object.fromEntries(there.files.map((f) => [f.path, f.text]));
+    const plan = planCopy(path, store.files(), existing);
+    for (const file of plan.write) await api.writeFile(project, file.path, file.text);
+    const kept = plan.clashes.length
+      ? ` Left alone, already there and different: ${plan.clashes.join(", ")}.`
+      : "";
+    toast(`Copied ${plural(plan.write.length, "file")} to ${project}.${kept}`, plan.clashes.length > 0);
+  } catch (err) {
+    toast(`Couldn't copy to ${project}: ${(err as Error).message}`, true);
+  }
+}
+
 // ------------------------------------------------------------------ go
 
-/** Load the workspace folder, retrying while the server starts. */
-async function loadWorkspace(): Promise<void> {
+/** Open the project to start in, retrying while the server starts. */
+async function loadWorkspace(): Promise<{ main: string | null }> {
   for (;;) {
     try {
-      await store.load();
-      return;
+      const listing = await api.listProjects();
+      // Files from before projects moved to "my-files": their drafts and tabs go with them.
+      if (listing.projects.some((p) => p.name === "my-files")) {
+        adoptLegacyDrafts("my-files");
+        workbench.adoptLegacyLayout("my-files");
+      }
+      return await openStartingProject(listing);
     } catch (err) {
       setStatus("offline", "Waiting for engine");
       showEmpty(`${(err as Error).message} The files are loaded from the workspace folder it serves.`);
@@ -1767,25 +2234,17 @@ async function loadWorkspace(): Promise<void> {
 async function start(): Promise<void> {
   setStatus("idle", "Starting…");
   viewer.setEmptyUnits(startSystem, defaultUnits(startSystem));
-  await loadWorkspace();
+  workbench.restoreSidebar();
+  const openedFirst = await loadWorkspace();
   $("empty").hidden = true;
 
   // Work left in the single-file editor of earlier versions becomes a file.
   const legacy = takeLegacyDraft();
   if (legacy && !Object.values(store.files()).includes(legacy.text)) {
     const doc = await store.create(store.freePath(legacy.name), legacy.text).catch(() => null);
-    if (doc) toast(`Your unsaved plate from before is now ${doc.path} in the workspace.`);
+    if (doc) toast(`Your unsaved plate from before is now ${doc.path} in ${store.project}.`);
   }
-
-  const restored = workbench.restore();
-  let main = restored ?? firstPlate();
-  // First visit: show a plate that imports a plan, so both sides of a multi-file setup are visible.
-  if (!restored && store.get("hotel.ncl")) main = "hotel.ncl";
-  if (main && !workbench.activePath()) workbench.open(main, { focus: false });
-  workbench.setMain(main);
-  ready = true;
-  updateTitle();
-  await runSolve();
+  await showProject(openedFirst.main);
   showStart();
 }
 

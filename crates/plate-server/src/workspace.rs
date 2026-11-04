@@ -1,5 +1,6 @@
-//! The workspace: a folder of `.ncl` files the editor browses, opens and saves, like a folder
-//! opened in VS Code. Plate files (with a `start`) can import plans and libraries from it.
+//! A folder of `.ncl` files the editor browses, opens and saves, like a folder opened in VS Code:
+//! one project (see `projects.rs`). Plate files (with a `start`) can import plans and libraries
+//! from it.
 //!
 //! Paths in the API are relative to the folder, with `/` separators. Only `.ncl` files are
 //! listed or touched, nothing outside the folder is reachable, and hidden files and folders
@@ -11,56 +12,14 @@ use std::path::{Component, Path, PathBuf};
 
 use serde::Serialize;
 
-/// Examples copied into a new, empty workspace: a simple plate, a medium one and a building that
-/// uses most of the format across several files, then real-life scenarios (scenarios/) and the
-/// plans they share (plans/, plans/rooms/). A test checks it lists every file in examples/.
-const SEED: &[(&str, &str)] = &[
-    ("1-studio.ncl", include_str!("../../../examples/1-studio.ncl")),
-    ("2-apartment.ncl", include_str!("../../../examples/2-apartment.ncl")),
-    ("3-hotel.ncl", include_str!("../../../examples/3-hotel.ncl")),
-    ("4-walls.ncl", include_str!("../../../examples/4-walls.ncl")),
-    ("5-duplex.ncl", include_str!("../../../examples/5-duplex.ncl")),
-    ("build/assemblies/basic.ncl", include_str!("../../../examples/build/assemblies/basic.ncl")),
-    ("build/assemblies/wood-frame.ncl", include_str!("../../../examples/build/assemblies/wood-frame.ncl")),
-    ("build/codes/cec.ncl", include_str!("../../../examples/build/codes/cec.ncl")),
-    ("build/codes/nec.ncl", include_str!("../../../examples/build/codes/nec.ncl")),
-    ("build/services/heat.ncl", include_str!("../../../examples/build/services/heat.ncl")),
-    ("build/services/lighting.ncl", include_str!("../../../examples/build/services/lighting.ncl")),
-    ("build/services/plumbing.ncl", include_str!("../../../examples/build/services/plumbing.ncl")),
-    ("build/services/power.ncl", include_str!("../../../examples/build/services/power.ncl")),
-    ("plans/bathroom.ncl", include_str!("../../../examples/plans/bathroom.ncl")),
-    ("plans/cafe.ncl", include_str!("../../../examples/plans/cafe.ncl")),
-    ("plans/flat.ncl", include_str!("../../../examples/plans/flat.ncl")),
-    ("plans/guest-room.ncl", include_str!("../../../examples/plans/guest-room.ncl")),
-    ("plans/public.ncl", include_str!("../../../examples/plans/public.ncl")),
-    ("plans/rooms/bedroom.ncl", include_str!("../../../examples/plans/rooms/bedroom.ncl")),
-    ("plans/rooms/kitchen.ncl", include_str!("../../../examples/plans/rooms/kitchen.ncl")),
-    ("plans/rooms/living.ncl", include_str!("../../../examples/plans/rooms/living.ncl")),
-    ("plans/wing.ncl", include_str!("../../../examples/plans/wing.ncl")),
-    ("scenarios/beach-villa.ncl", include_str!("../../../examples/scenarios/beach-villa.ncl")),
-    ("scenarios/family-house.ncl", include_str!("../../../examples/scenarios/family-house.ncl")),
-    ("scenarios/mansion.ncl", include_str!("../../../examples/scenarios/mansion.ncl")),
-    ("scenarios/mansion/centre.ncl", include_str!("../../../examples/scenarios/mansion/centre.ncl")),
-    ("scenarios/mansion/east.ncl", include_str!("../../../examples/scenarios/mansion/east.ncl")),
-    ("scenarios/mansion/suite.ncl", include_str!("../../../examples/scenarios/mansion/suite.ncl")),
-    ("scenarios/mansion/west.ncl", include_str!("../../../examples/scenarios/mansion/west.ncl")),
-    ("scenarios/office-building.ncl", include_str!("../../../examples/scenarios/office-building.ncl")),
-    ("scenarios/office-tower-floor.ncl", include_str!("../../../examples/scenarios/office-tower-floor.ncl")),
-    ("scenarios/office/core.ncl", include_str!("../../../examples/scenarios/office/core.ncl")),
-    ("scenarios/office/desks.ncl", include_str!("../../../examples/scenarios/office/desks.ncl")),
-    ("scenarios/office/meeting.ncl", include_str!("../../../examples/scenarios/office/meeting.ncl")),
-    ("scenarios/office/tower-core.ncl", include_str!("../../../examples/scenarios/office/tower-core.ncl")),
-    ("scenarios/office/workplace.ncl", include_str!("../../../examples/scenarios/office/workplace.ncl")),
-    ("scenarios/small-apartment.ncl", include_str!("../../../examples/scenarios/small-apartment.ncl")),
-    ("scenarios/villa/house.ncl", include_str!("../../../examples/scenarios/villa/house.ncl")),
-];
-
 /// Most files listed (a safety net against opening a huge folder).
-const MAX_FILES: usize = 2000;
+pub const MAX_FILES: usize = 2000;
 
 #[derive(Debug)]
 pub enum WsError {
     BadPath(String),
+    /// A project name or zip that can't be used, with why.
+    BadName(String),
     NotFound(String),
     Exists(String),
     NotEmpty(String),
@@ -71,6 +30,7 @@ impl std::fmt::Display for WsError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             WsError::BadPath(p) => write!(f, "`{p}` isn't a .ncl file or a folder inside the workspace"),
+            WsError::BadName(why) => write!(f, "{why}"),
             WsError::NotFound(p) => write!(f, "{p} doesn't exist"),
             WsError::Exists(p) => write!(f, "{p} already exists"),
             WsError::NotEmpty(p) => write!(f, "{p} still has files in it: move or delete them first"),
@@ -97,24 +57,7 @@ pub struct Workspace {
 }
 
 impl Workspace {
-    /// Open (creating it if needed) a workspace folder. An empty folder gets the examples.
-    pub fn open(root: impl Into<PathBuf>) -> io::Result<Workspace> {
-        let root = root.into();
-        std::fs::create_dir_all(&root)?;
-        let ws = Workspace { root };
-        if ws.list()?.is_empty() {
-            for (name, text) in SEED {
-                let path = ws.root.join(name);
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(path, text)?;
-            }
-        }
-        Ok(ws)
-    }
-
-    /// An existing folder, as is (no seeding).
+    /// A folder, as it is.
     pub fn at(root: impl Into<PathBuf>) -> Workspace {
         Workspace { root: root.into() }
     }
@@ -323,55 +266,26 @@ mod tests {
     }
 
     #[test]
-    fn the_seed_is_every_example() {
-        let examples = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
-        let mut found = Vec::new();
-        walk(&examples, &examples, &mut found, 0).unwrap();
-        let mut found: Vec<String> = found.into_iter().map(|f| f.path).collect();
-        let mut seeded: Vec<String> = SEED.iter().map(|(p, _)| p.to_string()).collect();
-        found.sort();
-        seeded.sort();
-        assert_eq!(found, seeded, "list every file in examples/ in SEED");
-    }
-
-    #[test]
-    fn seeds_lists_reads_writes_and_renames() {
-        let ws = Workspace::open(temp()).unwrap();
-        let names: Vec<String> = ws.list().unwrap().into_iter().map(|f| f.path).collect();
-        assert!(
-            names.contains(&"3-hotel.ncl".to_owned()) && names.contains(&"plans/guest-room.ncl".to_owned())
-        );
-        assert_eq!(names.len(), SEED.len(), "{names:?}");
-
+    fn lists_reads_writes_and_renames() {
+        let ws = Workspace::at(temp());
+        ws.write("a.ncl", "{}").unwrap();
         ws.write("plans/office.ncl", "{ spaces = {} }").unwrap();
         assert_eq!(ws.read("plans/office.ncl").unwrap(), "{ spaces = {} }");
         assert!(ws.list().unwrap().iter().any(|f| f.path == "plans/office.ncl"));
 
         ws.rename("plans/office.ncl", "plans/studio.ncl").unwrap();
         assert!(matches!(ws.read("plans/office.ncl"), Err(WsError::NotFound(_))));
-        assert!(matches!(ws.rename("3-hotel.ncl", "plans/studio.ncl"), Err(WsError::Exists(_))));
+        assert!(matches!(ws.rename("a.ncl", "plans/studio.ncl"), Err(WsError::Exists(_))));
         ws.delete("plans/studio.ncl").unwrap();
         let _ = std::fs::remove_dir_all(ws.root());
     }
 
     #[test]
     fn refuses_paths_outside_the_folder() {
-        let ws = Workspace::open(temp()).unwrap();
+        let ws = Workspace::at(temp());
         for bad in ["../x.ncl", "/etc/passwd", "a/../../x.ncl", ".git/config.ncl", "x.txt", "", "a\\b.ncl"] {
             assert!(matches!(ws.read(bad), Err(WsError::BadPath(_))), "{bad}");
             assert!(matches!(ws.write(bad, ""), Err(WsError::BadPath(_))), "{bad}");
-        }
-        let _ = std::fs::remove_dir_all(ws.root());
-    }
-
-    #[test]
-    fn the_seeded_files_check_with_their_imports() {
-        // Plates, and plans on their own (they're previewed).
-        let ws = Workspace::open(temp()).unwrap();
-        let files = ws.sources().unwrap();
-        for name in files.keys() {
-            plate_config::check_files(plate_config::Workspace { main: name, files: &files })
-                .unwrap_or_else(|e| panic!("{name}: {e:?}"));
         }
         let _ = std::fs::remove_dir_all(ws.root());
     }

@@ -1,16 +1,19 @@
 import { createCodeEditor, type CodeEditor, type EditorCommands, type ViewState } from "./editor/editor";
+import { Explorer, type ExplorerActions } from "./explorer";
 import { openMenu } from "./menu";
-import { importPath, libraryKind } from "./plates";
+import { libraryKind } from "./plates";
 import { SideBar, type SideState } from "./sidebar";
 import { isPlan, isPlate, type WorkspaceStore } from "./workspace";
 
 /**
  * The editor side of the app, laid out like VS Code: a side bar (the file explorer, or the
- * reference), and up to two editor groups side by side, each with its own tabs. Every tab shows a document of the workspace
- * store; the same file can be open in both groups.
+ * reference), and up to two editor groups side by side, each with its own tabs. Every tab shows a
+ * document of the open project; the same file can be open in both groups. Each project keeps its
+ * own tabs, cursors and shown plate; the side bar is the same for all of them.
  */
 
 const LAYOUT_KEY = "plate:layout";
+const projectKey = (project: string) => `plate:project:${project}`;
 const MAX_GROUPS = 2;
 const TAB_MIME = "application/x-plate-tab";
 
@@ -48,7 +51,7 @@ class Group {
         </div>
       </div>
       <div class="group-editor"></div>
-      <div class="group-empty" hidden>Open a file from the explorer, or press <b>New</b> to draw a plate.</div>
+      <div class="group-empty" hidden><span>Open a file from the explorer, or press <b>New</b> to draw a plate.</span></div>
       <div class="group-drop" hidden></div>`;
     parent.append(this.el);
     this.tabsEl = this.el.querySelector(".tab-list")!;
@@ -64,7 +67,9 @@ export class Workbench {
   mainPath: string | null = null;
   readonly sidebar: SideBar;
   private readonly groupsEl: HTMLElement;
-  private readonly explorer: Explorer;
+  readonly explorer: Explorer;
+  /** Where each visited project's editors were, for going back. */
+  private readonly viewStates = new Map<string, Map<string, ViewState>[]>();
 
   constructor(
     private readonly store: WorkspaceStore,
@@ -78,6 +83,7 @@ export class Workbench {
     },
     private readonly commands: EditorCommands & { format(): void },
     private readonly events: WorkbenchEvents,
+    explorerActions: ExplorerActions,
   ) {
     this.groupsEl = els.groups;
     this.sidebar = new SideBar({
@@ -88,12 +94,14 @@ export class Workbench {
     });
     this.sidebar.onChange(() => this.persist());
     this.addGroup();
-    this.explorer = new Explorer(store, els.explorer, this);
+    this.explorer = new Explorer(store, els.explorer, this, explorerActions);
     store.subscribe((change) => {
       if (change.renamed) this.renamed(change.renamed.from, change.renamed.to);
       if (change.list) {
         // Close tabs whose files are gone.
-        for (const g of this.groups) for (const p of [...g.tabs]) if (!store.get(p)) this.closeIn(g, p);
+        if (!this.switching) {
+          for (const g of this.groups) for (const p of [...g.tabs]) if (!store.get(p)) this.closeIn(g, p);
+        }
         this.explorer.render();
       }
       if (change.dirty || change.list) this.render();
@@ -343,6 +351,9 @@ export class Workbench {
           return tab;
         }),
       );
+      g.tabsEl
+        .querySelector('[aria-selected="true"]')
+        ?.scrollIntoView({ block: "nearest", inline: "nearest" });
       g.emptyEl.hidden = g.tabs.length > 0;
       g.el.classList.toggle("is-empty", g.tabs.length === 0);
     });
@@ -389,41 +400,140 @@ export class Workbench {
     });
   }
 
-  // ---------------------------------------------------------------- persistence
+  // ---------------------------------------------------------------- projects
 
-  persist(): void {
-    try {
-      localStorage.setItem(
-        LAYOUT_KEY,
-        JSON.stringify({
-          groups: this.groups.map((g) => ({ tabs: g.tabs, active: g.active })),
-          active: this.activeGroup,
-          main: this.mainPath,
-          sidebar: this.sidebar.snapshot(),
-        }),
+  private legacyLayout: string | null = null;
+
+  /** True while tabs are being swapped: nothing shown belongs to the open project yet. */
+  private switching = false;
+
+  /**
+   * Put away the open project's editors, before another is opened. Cursors and scroll positions
+   * stay in memory for coming back; tabs are in the browser already.
+   */
+  leaveProject(): void {
+    // Already on the way to another project: there's nothing on screen to put away.
+    if (this.switching) return;
+    this.persist();
+    this.switching = true;
+    const project = this.store.project;
+    for (const g of this.groups) {
+      if (g.active) g.views.set(g.active, g.editor.saveViewState());
+    }
+    if (project)
+      this.viewStates.set(
+        project,
+        this.groups.map((g) => new Map(g.views)),
       );
+    for (const g of [...this.groups]) {
+      g.tabs = [];
+      g.active = null;
+      g.views.clear();
+      g.editor.setModel(null);
+    }
+    while (this.groups.length > 1) this.removeGroup(this.groups[this.groups.length - 1]);
+    this.mainPath = null;
+  }
+
+  /**
+   * The store has a new project: show it as it was left. Returns the plate that was shown, if any.
+   */
+  enterProject(): string | null {
+    const views = this.viewStates.get(this.store.project);
+    const main = this.restoreTabs();
+    this.groups.forEach((g, i) => {
+      for (const [path, view] of views?.[i] ?? []) g.views.set(path, view);
+      const view = g.active ? g.views.get(g.active) : undefined;
+      if (view) g.editor.restoreViewState(view);
+    });
+    this.switching = false;
+    this.render();
+    return main;
+  }
+
+  /** A project is gone or renamed: forget where its editors were (the new name, if any, inherits it). */
+  forgetProject(name: string, renamedTo?: string): void {
+    const views = this.viewStates.get(name);
+    this.viewStates.delete(name);
+    if (views && renamedTo) this.viewStates.set(renamedTo, views);
+    try {
+      const saved = localStorage.getItem(projectKey(name));
+      if (saved && renamedTo) localStorage.setItem(projectKey(renamedTo), saved);
+      localStorage.removeItem(projectKey(name));
     } catch {
       /* ignore */
     }
   }
 
-  /** Reopen the tabs of the last session. Returns the plate that was shown, if any. */
-  restore(): string | null {
+  // ---------------------------------------------------------------- persistence
+
+  persist(): void {
+    if (this.switching) return;
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify({ sidebar: this.sidebar.snapshot() }));
+      if (this.store.project) {
+        localStorage.setItem(
+          projectKey(this.store.project),
+          JSON.stringify({
+            groups: this.groups.map((g) => ({ tabs: g.tabs, active: g.active })),
+            active: this.activeGroup,
+            main: this.mainPath,
+            collapsed: this.explorer?.collapsedFolders() ?? [],
+          }),
+        );
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  /** Put the side bar back as it was. */
+  restoreSidebar(): void {
     let saved: {
-      groups?: { tabs: string[]; active: string | null }[];
-      active?: number;
-      main?: string | null;
       /** Before the side bar had views: whether the explorer was open. */
       explorer?: boolean;
       sidebar?: Partial<SideState>;
+      /** Before projects: the workspace's one set of tabs. */
+      groups?: unknown;
     } = {};
     try {
-      saved = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "{}");
+      const raw = localStorage.getItem(LAYOUT_KEY);
+      saved = JSON.parse(raw ?? "{}");
+      // Restoring the side bar writes this key over, so what it held is kept for a moment.
+      if (saved.groups) this.legacyLayout = raw;
     } catch {
       /* ignore */
     }
     if (saved.sidebar) this.sidebar.restore(saved.sidebar);
     else if (saved.explorer === false) this.sidebar.setOpen(false);
+  }
+
+  /** The layout from before projects, with its tabs, belongs to the project its files moved to. */
+  adoptLegacyLayout(project: string): void {
+    try {
+      if (this.legacyLayout && !localStorage.getItem(projectKey(project))) {
+        localStorage.setItem(projectKey(project), this.legacyLayout);
+      }
+    } catch {
+      /* ignore */
+    }
+    this.legacyLayout = null;
+  }
+
+  /** Reopen a project's tabs. Returns the plate that was shown, if any. */
+  private restoreTabs(): string | null {
+    let saved: {
+      groups?: { tabs: string[]; active: string | null }[];
+      active?: number;
+      main?: string | null;
+      collapsed?: string[];
+    } = {};
+    try {
+      saved = JSON.parse(localStorage.getItem(projectKey(this.store.project)) ?? "{}");
+    } catch {
+      /* ignore */
+    }
+    this.explorer.enterProject(saved.collapsed ?? []);
     (saved.groups ?? []).slice(0, MAX_GROUPS).forEach((g, gi) => {
       const tabs = g.tabs.filter((p) => this.store.get(p));
       for (const p of tabs) this.open(p, { group: gi, focus: false });
@@ -436,361 +546,6 @@ export class Workbench {
   }
 }
 
-/** The workspace's files as a tree, with new, rename and delete. */
-class Explorer {
-  private readonly list: HTMLElement;
-  private readonly collapsed = new Set<string>();
-
-  constructor(
-    private readonly store: WorkspaceStore,
-    private readonly el: HTMLElement,
-    private readonly bench: Workbench,
-  ) {
-    this.list = el.querySelector(".explorer-list")!;
-    el.querySelector(".explorer-new")?.addEventListener("click", () => this.promptNew(""));
-    el.querySelector(".explorer-new-folder")?.addEventListener("click", () => this.promptNewFolder(""));
-    // Dropping a file on the list's empty space moves it to the top of the workspace.
-    this.dropTarget(this.list, "");
-  }
-
-  /** Accept files dragged from the tree: they move into `folder` ("" for the top). */
-  private dropTarget(target: HTMLElement, folder: string): void {
-    target.addEventListener("dragover", (e) => {
-      if (!e.dataTransfer?.types.includes(TREE_DRAG)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      e.dataTransfer.dropEffect = "move";
-      target.classList.add("is-drop");
-    });
-    target.addEventListener("dragleave", () => target.classList.remove("is-drop"));
-    target.addEventListener("drop", (e) => {
-      const from = e.dataTransfer?.getData(TREE_DRAG);
-      target.classList.remove("is-drop");
-      if (!from) return;
-      e.preventDefault();
-      e.stopPropagation();
-      void this.moveInto(from, folder);
-    });
-  }
-
-  /** Move a file or folder into `folder` (imports follow). */
-  private async moveInto(from: string, folder: string): Promise<void> {
-    const name = from.split("/").pop()!;
-    const to = folder ? `${folder}/${name}` : name;
-    if (to === from) return;
-    try {
-      if (this.store.get(from)) await this.store.rename(from, to);
-      else await this.store.renameFolder(from, to);
-    } catch (err) {
-      this.flash((err as Error).message);
-    }
-  }
-
-  render(): void {
-    const root = this.el.querySelector(".explorer-root");
-    if (root) {
-      root.textContent = this.store.root.split(/[\\/]/).filter(Boolean).pop() ?? "workspace";
-      root.setAttribute("title", this.store.root);
-    }
-    const rows: HTMLElement[] = [];
-    const seen = new Set<string>();
-    // Empty folders are listed like a file in them would be, so they sort among the others.
-    const empty = this.store
-      .allFolders()
-      .filter((f) => !this.store.paths().some((p) => p.startsWith(`${f}/`)));
-    const entries = [...this.store.paths(), ...empty.map((f) => `${f}/`)].sort(treeOrder);
-    for (const path of entries) {
-      const parts = path.split("/");
-      // Folders along the way.
-      for (let d = 1; d < parts.length; d++) {
-        const dir = parts.slice(0, d).join("/");
-        if (seen.has(dir)) continue;
-        seen.add(dir);
-        if ([...this.collapsed].some((c) => dir.startsWith(`${c}/`))) continue;
-        rows.push(this.folderRow(dir, d - 1));
-      }
-      if (path.endsWith("/")) continue;
-      const hidden = parts.slice(0, -1).some((_, i) => this.collapsed.has(parts.slice(0, i + 1).join("/")));
-      if (!hidden) rows.push(this.fileRow(path, parts.length - 1));
-    }
-    if (!rows.length) {
-      const hint = document.createElement("div");
-      hint.className = "ex-empty";
-      hint.textContent = "No files yet. Press + for a file, or the folder button to organise your studies.";
-      rows.push(hint);
-    }
-    this.list.replaceChildren(...rows);
-  }
-
-  private folderRow(dir: string, depth: number): HTMLElement {
-    const row = document.createElement("button");
-    row.className = "ex-row ex-folder";
-    row.style.setProperty("--depth", String(depth));
-    row.setAttribute("aria-expanded", String(!this.collapsed.has(dir)));
-    row.innerHTML = `<svg class="ex-chevron" viewBox="0 0 12 12" aria-hidden="true"><path d="M4.5 3 7.5 6 4.5 9"/></svg><span class="ex-name"></span>`;
-    row.querySelector(".ex-name")!.textContent = dir.split("/").pop()!;
-    row.addEventListener("click", () => {
-      if (this.collapsed.has(dir)) this.collapsed.delete(dir);
-      else this.collapsed.add(dir);
-      this.render();
-    });
-    row.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      const files = this.store.paths().filter((p) => p.startsWith(`${dir}/`)).length;
-      openMenu(
-        dir,
-        [
-          { label: "New file here…", action: () => this.promptNew(`${dir}/`) },
-          { label: "New folder here…", action: () => this.promptNewFolder(`${dir}/`) },
-          "-",
-          { label: "Rename or move…", action: () => this.promptRenameFolder(dir, row) },
-          {
-            label: files ? "Delete folder (move its files out first)" : "Delete folder",
-            disabled: files > 0,
-            action: () => void this.deleteFolder(dir),
-          },
-        ],
-        e.clientX,
-        e.clientY,
-      );
-    });
-    row.draggable = true;
-    row.addEventListener("dragstart", (e) => {
-      e.dataTransfer?.setData(TREE_DRAG, dir);
-      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-    });
-    this.dropTarget(row, dir);
-    return row;
-  }
-
-  private promptNewFolder(prefix: string): void {
-    this.bench.sidebar.show("files");
-    const input = this.nameInput(prefix, "studies", "Folder name");
-    this.list.prepend(input.row);
-    input.done.then(async (name) => {
-      if (!name) return;
-      try {
-        await this.store.createFolder(name);
-        this.collapsed.delete(name);
-      } catch (err) {
-        this.flash((err as Error).message);
-      }
-    });
-  }
-
-  private promptRenameFolder(dir: string, row: HTMLElement): void {
-    const input = this.nameInput(dir, "", "Folder name");
-    row.replaceWith(input.row);
-    input.done.then(async (name) => {
-      const to = name?.replace(/^\/+|\/+$/g, "");
-      if (!to || to === dir) return this.render();
-      try {
-        await this.store.renameFolder(dir, to);
-      } catch (err) {
-        this.flash((err as Error).message);
-        this.render();
-      }
-    });
-  }
-
-  private async deleteFolder(dir: string): Promise<void> {
-    try {
-      await this.store.removeFolder(dir);
-    } catch (err) {
-      this.flash((err as Error).message);
-    }
-  }
-
-  private fileRow(path: string, depth: number): HTMLElement {
-    const row = document.createElement("button");
-    row.className = "ex-row ex-file";
-    row.style.setProperty("--depth", String(depth));
-    row.dataset.path = path;
-    const plate = isPlate(this.store.get(path)?.text.value ?? "");
-    row.classList.toggle("is-plate", plate);
-    row.classList.toggle("is-main", this.bench.mainPath === path);
-    row.classList.toggle("is-open", this.bench.activePath() === path);
-    row.classList.toggle("is-dirty", this.store.isDirty(path));
-    row.title = plate
-      ? `${path}: a plate (it has a start)`
-      : isPlan(this.store.get(path)?.text.value ?? "")
-        ? `${path}: a plan, shown on its own in its preview slot`
-        : libraryKind(this.store.get(path)?.text.value ?? "") === "service"
-          ? `${path}: a service, for a plate's services`
-          : libraryKind(this.store.get(path)?.text.value ?? "") === "assemblies"
-            ? `${path}: assemblies, for a plate's assemblies`
-            : `${path}: a library to import`;
-    row.innerHTML = `<span class="ex-icon" aria-hidden="true"></span><span class="ex-name"></span><span class="ex-dot" aria-hidden="true"></span>`;
-    row.querySelector(".ex-name")!.textContent = path.split("/").pop()!;
-    row.addEventListener("click", () => this.bench.open(path));
-    // Drag onto a folder to move it there (tabs and imports follow).
-    row.draggable = true;
-    row.addEventListener("dragstart", (e) => {
-      e.dataTransfer?.setData(TREE_DRAG, path);
-      if (e.dataTransfer) e.dataTransfer.effectAllowed = "move";
-    });
-    row.addEventListener("contextmenu", (e) => {
-      e.preventDefault();
-      // As written in the file in front of you (imports are relative to the importing file).
-      const active = this.bench.activePath() ?? "";
-      const spec = importPath(active.slice(0, active.lastIndexOf("/") + 1), path);
-      openMenu(
-        path,
-        [
-          { label: "Open", action: () => this.bench.open(path) },
-          {
-            label: "Open to the side",
-            action: () => this.bench.open(path, { group: this.bench.activeGroup === 0 ? 1 : 0 }),
-          },
-          ...this.bench.showItems(path),
-          "-",
-          { label: "Rename…", action: () => this.promptRename(path, row) },
-          { label: "Duplicate", action: () => void this.duplicate(path) },
-          {
-            label: "Copy import line",
-            note: `import "${spec}"`,
-            action: () => void navigator.clipboard?.writeText(`import "${spec}"`),
-          },
-          "-",
-          { label: "Delete", action: () => void this.delete(path) },
-        ],
-        e.clientX,
-        e.clientY,
-      );
-    });
-    return row;
-  }
-
-  /** An inline name box at the top of the list (or in a folder). */
-  private promptNew(prefix: string): void {
-    this.bench.sidebar.show("files");
-    const input = this.nameInput(prefix, "plan.ncl");
-    this.list.prepend(input.row);
-    input.done.then(async (name) => {
-      if (!name) return;
-      const path = withExtension(name);
-      try {
-        const doc = await this.store.create(path, NEW_FILE);
-        this.bench.open(doc.path);
-      } catch (err) {
-        this.flash((err as Error).message);
-      }
-    });
-  }
-
-  private promptRename(path: string, row: HTMLElement): void {
-    const input = this.nameInput(path, "");
-    row.replaceWith(input.row);
-    input.done.then(async (name) => {
-      if (!name || withExtension(name) === path) return this.render();
-      try {
-        const to = withExtension(name);
-        await this.store.rename(path, to); // tabs follow (the workbench hears of it)
-      } catch (err) {
-        this.flash((err as Error).message);
-        this.render();
-      }
-    });
-  }
-
-  private async duplicate(path: string): Promise<void> {
-    const doc = this.store.get(path);
-    if (!doc) return;
-    try {
-      const copy = await this.store.create(
-        this.store.freePath(path.replace(/\.ncl$/, "-copy")),
-        doc.text.value,
-      );
-      this.bench.open(copy.path);
-    } catch (err) {
-      this.flash((err as Error).message);
-    }
-  }
-
-  private async delete(path: string): Promise<void> {
-    if (!confirm(`Delete ${path}? This removes the file from the workspace folder.`)) return;
-    try {
-      await this.store.remove(path);
-    } catch (err) {
-      this.flash((err as Error).message);
-    }
-  }
-
-  private nameInput(
-    value: string,
-    placeholder: string,
-    label = "File name",
-  ): { row: HTMLElement; done: Promise<string | null> } {
-    const row = document.createElement("div");
-    row.className = "ex-row ex-input";
-    const input = document.createElement("input");
-    input.value = value;
-    input.placeholder = placeholder;
-    input.spellcheck = false;
-    input.setAttribute("aria-label", label);
-    row.append(input);
-    const done = new Promise<string | null>((resolve) => {
-      let settled = false;
-      const finish = (v: string | null) => {
-        if (settled) return;
-        settled = true;
-        row.remove();
-        resolve(v?.trim() || null);
-      };
-      input.addEventListener("keydown", (e) => {
-        e.stopPropagation();
-        if (e.key === "Enter") finish(input.value);
-        if (e.key === "Escape") finish(null);
-      });
-      input.addEventListener("blur", () => finish(input.value === value ? null : input.value));
-    });
-    queueMicrotask(() => {
-      input.focus();
-      // Select the name without the extension, like VS Code.
-      const end = input.value.lastIndexOf(".");
-      input.setSelectionRange(input.value.lastIndexOf("/") + 1, end > 0 ? end : input.value.length);
-    });
-    return { row, done };
-  }
-
-  private flash(message: string): void {
-    const note = document.createElement("div");
-    note.className = "ex-error";
-    note.textContent = message;
-    this.list.prepend(note);
-    setTimeout(() => note.remove(), 4000);
-  }
-}
-
-/** What a row dragged in the file tree carries: its path. */
-const TREE_DRAG = "application/x-plate-path";
-
-const NEW_FILE = `# A plan to import from a plate: let my_plan = import "this-file.ncl" in …
-{
-  spaces = {},
-  rules = [],
-}
-`;
-
-/** Folders before files at each level, then by name, like VS Code's explorer. */
-function treeOrder(a: string, b: string): number {
-  const pa = a.split("/");
-  const pb = b.split("/");
-  for (let i = 0; i < Math.min(pa.length, pb.length); i++) {
-    if (pa[i] === pb[i]) continue;
-    const dirA = i < pa.length - 1;
-    const dirB = i < pb.length - 1;
-    if (dirA !== dirB) return dirA ? -1 : 1;
-    return pa[i].localeCompare(pb[i]);
-  }
-  return pa.length - pb.length;
-}
-
 function basename(path: string): string {
   return path.slice(path.lastIndexOf("/") + 1);
-}
-
-function withExtension(name: string): string {
-  const clean = name.replace(/\\/g, "/").replace(/^\/+/, "");
-  return clean.endsWith(".ncl") ? clean : `${clean}.ncl`;
 }

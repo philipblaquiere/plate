@@ -21,7 +21,7 @@ Open <http://localhost:5173>.
 
 `npm run dev` installs npm dependencies, adds the `wasm32-wasip1` Rust target if missing, builds the browser engine, then starts the solver API (`:7878`) and Vite (`:5173`). The first run compiles a lot of Rust and takes a few minutes; the page says "Waiting for engine" until the API is up.
 
-Your files live in `workspace/` (gitignored), seeded with the examples on first run.
+Your projects live in `workspace/` (gitignored), one folder each. The examples are a click away in the project switcher (`Ctrl+Alt+P`).
 
 ## How it works
 
@@ -65,7 +65,7 @@ SERVER                    validate (serde) ──► Solver ──► Layout ─
 }
 ```
 
-More in `examples/`: an apartment, a hotel, scenarios from a beach villa to an office tower floor, and a duplex with walls, power, heat, plumbing and lighting (`5-duplex.ncl`, built from `examples/build/`).
+`examples/` has three projects that together use everything the format can do: **Home** (a studio, an apartment, a villa on its plot), **Commercial** (a hotel, an annex grown from a spine, a tower office floor) and **Duplex** (real walls, power, heat and plumbing, in feet and inches).
 
 ## Repo layout
 
@@ -78,7 +78,7 @@ More in `examples/`: an apartment, a hotel, scenarios from a beach villa to an o
 | `crates/plate-server` | Axum API for the editor, plus the `plate` CLI                      |
 | `web/`                | Editor: Vite, TypeScript, Monaco, SVG viewer                       |
 | `schema/`             | `plate.schema.json`, `plate.ncl` helpers, `symbols.json` catalog   |
-| `examples/`           | Plates seeded into a new workspace                                 |
+| `examples/`           | Three example projects, offered in the project switcher            |
 | `docs/`               | User guide, architecture, reference guides shown in the editor     |
 
 ## Commands
@@ -90,8 +90,8 @@ npm test             # cargo test + wasm build + tsc + vitest
 npm run build:wasm   # rebuild the browser engine after changing plate-config or the schema
 npm run format       # prettier + rustfmt
 
-cargo run -p plate-server --bin plate -- check examples/3-hotel.ncl -v       # solve from the CLI
-cargo run -p plate-server --bin plate -- export examples/1-studio.ncl dxf -o studio.dxf
+cargo run -p plate-server --bin plate -- check examples/commercial/hotel.ncl -v   # solve from the CLI
+cargo run -p plate-server --bin plate -- export examples/home/studio.ncl dxf -o studio.dxf
 ```
 
 ## Docs

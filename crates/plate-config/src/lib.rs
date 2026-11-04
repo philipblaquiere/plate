@@ -37,7 +37,16 @@ pub const STDLIB: &str = include_str!("../../../schema/plate.ncl");
 
 /// Where files live inside Nickel. Paths must be absolute: imports are resolved relative to the
 /// importing file, and in the browser there is no current directory to resolve against.
+#[cfg(not(windows))]
 const ROOT: &str = "/workspace/";
+// Nickel normalises import paths, and on Windows a path without a drive isn't absolute.
+#[cfg(windows)]
+const ROOT: &str = r"C:\workspace\";
+
+/// Where a workspace file sits in Nickel's in-memory cache, spelled as Nickel normalises it.
+fn virtual_path(path: &str) -> String {
+    format!("{ROOT}{}", path.replace('/', std::path::MAIN_SEPARATOR_STR))
+}
 
 /// The name a single source is evaluated under when it has no file of its own.
 pub const MAIN_FILE: &str = "main.ncl";
@@ -110,7 +119,7 @@ impl<'a> Wrapped<'a> {
             None => (format!("let plate = {STDLIB} in\n"), "\n"),
         };
         let text = format!("{prefix}{source}{suffix}");
-        Wrapped { path, virtual_path: format!("{ROOT}{path}"), text, source, offset: prefix.len() }
+        Wrapped { path, virtual_path: virtual_path(path), text, source, offset: prefix.len() }
     }
 
     /// Map a byte range in the wrapped text to the user's source. Ranges inside the generated
@@ -187,7 +196,7 @@ pub fn evaluate_unchecked(source: &str) -> Result<serde_json::Value, Vec<Diagnos
     let set = Set {
         files: vec![Wrapped {
             path: MAIN_FILE,
-            virtual_path: format!("{ROOT}{MAIN_FILE}"),
+            virtual_path: virtual_path(MAIN_FILE),
             text: source.to_owned(),
             source,
             offset: 0,
@@ -447,7 +456,8 @@ fn narrow(message: &str, source: &str, range: Option<Mapped>) -> Option<Mapped> 
 /// then the contract's own message. Fold that into "size: <message>".
 fn tidy_message(message: &str) -> String {
     // Imports are resolved inside a virtual folder; its name means nothing to the user.
-    let message = &message.replace(&format!(" (looked in [{}])", ROOT.trim_end_matches('/')), "");
+    let message =
+        &message.replace(&format!(" (looked in [{}])", ROOT.trim_end_matches(std::path::MAIN_SEPARATOR)), "");
     let mut lines = message.lines().map(str::trim).filter(|l| !l.is_empty());
     let first = lines.next().unwrap_or_default();
     let rest: Vec<&str> = lines.collect();
@@ -654,8 +664,23 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
         assert_eq!(v["name"], "Mine");
     }
 
-    /// Every `.ncl` file under `examples/`, by path relative to it (`plans/wing.ncl`).
-    fn examples() -> BTreeMap<String, String> {
+    /// Defaults, in use wherever nothing else is said.
+    const EXEMPT_FEATURES: [&str; 2] = ["Engine: grid", "Space.kind: room"];
+
+    /// The projects under `examples/`.
+    fn example_projects() -> Vec<String> {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let mut names: Vec<String> = std::fs::read_dir(dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .collect();
+        names.sort();
+        names
+    }
+
+    /// Every `.ncl` file of an example project, by path relative to it (`hotel/wing.ncl`). A
+    /// project's files are all it gets, as in the app: an import that leaves it fails.
+    fn example(project: &str) -> BTreeMap<String, String> {
         fn walk(root: &std::path::Path, dir: &std::path::Path, out: &mut BTreeMap<String, String>) {
             for entry in std::fs::read_dir(dir).unwrap() {
                 let path = entry.unwrap().path();
@@ -667,7 +692,7 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
                 }
             }
         }
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples");
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../examples").join(project);
         let mut files = BTreeMap::new();
         walk(&dir, &dir, &mut files);
         files
@@ -675,13 +700,28 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
 
     #[test]
     fn every_example_passes_the_schema_and_the_rust_types() {
-        let files = examples();
+        let mut libraries = 0;
+        let mut plates = 0;
+        for project in example_projects() {
+            let files = example(&project);
+            plates += check_example_project(&project, &files, &mut libraries);
+        }
+        assert!(plates >= 3);
+        assert!(libraries >= 4, "example services and assemblies");
+    }
+
+    /// Checks every plate and plan of a project. How many plates it has.
+    fn check_example_project(
+        project: &str,
+        files: &BTreeMap<String, String>,
+        libraries: &mut usize,
+    ) -> usize {
         let mut count = 0;
         // Plate files are checked as plates (with whatever they import); plans are imported.
         for name in files.iter().filter(|(_, s)| is_plate(s)).map(|(n, _)| n) {
             count += 1;
-            let (config, evaluation) = check_files(Workspace { main: name, files: &files })
-                .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            let (config, evaluation) = check_files(Workspace { main: name, files })
+                .unwrap_or_else(|e| panic!("{project}/{name}: {e:?}"));
             // Every example meets every requirement at the seed it ships with, with no floor
             // left over (preferences may be missed: the report says so).
             let solved = plate_core::solve::solve(&config);
@@ -691,7 +731,7 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
                 .filter(|d| d.code != Some(plate_core::diagnostic::Code::Preference))
                 .map(|d| d.message.as_str())
                 .collect();
-            assert!(solved.report.unmet == 0 && solved.report.leftover < 1e-6, "{name}: {found:?}");
+            assert!(solved.report.unmet == 0 && solved.report.leftover < 1e-6, "{project}/{name}: {found:?}");
             assert!(solved.report.status != plate_core::layout::Status::Incomplete, "{name}");
             // The data also passes a standard JSON Schema validator, which keeps the schema
             // honest JSON Schema rather than something only our compiler reads.
@@ -700,20 +740,16 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
                 panic!("{name}: {e}");
             }
         }
-        assert!(count >= 3);
-        assert!(files.keys().any(|k| !is_plate(&files[k])), "an example plan file");
-
         // Plan files are checked on their own too (they're previewed), against `Plan`.
         let schema = schema_json().unwrap();
         let plan_schema = serde_json::json!({ "$ref": "#/$defs/Plan", "$defs": schema["$defs"].clone() });
         let validator = jsonschema::validator_for(&plan_schema).unwrap();
-        let mut libraries = 0;
         for name in files.iter().filter(|(_, s)| !is_plate(s)).map(|(n, _)| n) {
-            let (config, evaluation) = check_files(Workspace { main: name, files: &files })
-                .unwrap_or_else(|e| panic!("{name}: {e:?}"));
+            let (config, evaluation) =
+                check_files(Workspace { main: name, files }).unwrap_or_else(|e| panic!("{name}: {e:?}"));
             // A library (a service, a set of assemblies) is checked against its own definition.
             if let Some(def @ ("Service" | "Assemblies")) = evaluation.kind.definition() {
-                libraries += 1;
+                *libraries += 1;
                 let def_schema =
                     serde_json::json!({ "$ref": format!("#/$defs/{def}"), "$defs": schema["$defs"].clone() });
                 let v = jsonschema::validator_for(&def_schema).unwrap();
@@ -742,19 +778,111 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
                 );
             }
         }
-        assert!(libraries >= 4, "example services and assemblies");
+        count
+    }
+
+    /// The examples show what the app can do: every field, rule helper and kind of space is used
+    /// in at least one. Anything new goes in an example, or says here why it doesn't.
+    #[test]
+    fn the_examples_use_every_feature() {
+        // A field that only restates its default, or a variant that needs no showing of its own.
+        const EXEMPT: &[&str] = &EXEMPT_FEATURES;
+        let mut text = String::new();
+        for project in example_projects() {
+            for source in example(&project).values() {
+                // Comments don't count as using something.
+                for line in source.lines() {
+                    text.push_str(line.split(" # ").next().unwrap_or(line).split_once('#').map_or(
+                        line,
+                        |(a, b)| {
+                            if a.trim().is_empty() || !b.contains('"') {
+                                a
+                            } else {
+                                line
+                            }
+                        },
+                    ));
+                    text.push('\n');
+                }
+            }
+        }
+        let used_field = |name: &str| {
+            text.match_indices(name).any(|(at, _)| {
+                let before = text[..at].chars().next_back().unwrap_or(' ');
+                let after = text[at + name.len()..].trim_start();
+                !(before.is_alphanumeric() || before == '_' || before == '\'')
+                    && (after.starts_with('=') || after.starts_with('.') || after.starts_with('|'))
+            })
+        };
+        let schema = schema_json().unwrap();
+        let defs = &schema["$defs"];
+        let mut missing: Vec<String> = Vec::new();
+        let fields = |value: &serde_json::Value| -> Vec<String> {
+            value["properties"].as_object().map(|p| p.keys().cloned().collect()).unwrap_or_default()
+        };
+        let mut wanted: Vec<(String, String)> =
+            fields(schema).into_iter().map(|f| ("plate".to_owned(), f)).collect();
+        for def in [
+            "Space",
+            "Plan",
+            "Needs",
+            "PreviewCase",
+            "Assembly",
+            "Layer",
+            "Part",
+            "Service",
+            "Claims",
+            "Network",
+        ] {
+            wanted.extend(fields(&defs[def]).into_iter().map(|f| (def.to_owned(), f)));
+        }
+        for (def, field) in wanted {
+            let id = format!("{def}.{field}");
+            if !used_field(&field) && !EXEMPT.contains(&id.as_str()) {
+                missing.push(id);
+            }
+        }
+        for (def, value) in
+            [("Engine", &defs["Engine"]), ("Space.kind", &defs["Space"]["properties"]["kind"])]
+        {
+            for option in value["enum"].as_array().unwrap() {
+                let option = option.as_str().unwrap();
+                let id = format!("{def}: {option}");
+                if !text.contains(&format!("'{option}")) && !EXEMPT.contains(&id.as_str()) {
+                    missing.push(id);
+                }
+            }
+        }
+        for mode in ["boundary", "spine"] {
+            assert!(text.contains(&format!("mode = '{mode}")), "start mode {mode}");
+        }
+        for system in ["metric", "imperial"] {
+            assert!(text.contains(&format!("system = '{system}")), "system {system}");
+        }
+        for line in STDLIB.lines() {
+            // The helpers: `  name` on a line of its own, then its doc and definition.
+            let name = line.strip_prefix("  ").unwrap_or_default().trim_end();
+            if name.is_empty() || !name.chars().all(|c| c.is_ascii_lowercase() || c == '_') {
+                continue;
+            }
+            let id = format!("plate.{name}");
+            if !text.contains(&id) && !EXEMPT.contains(&id.as_str()) {
+                missing.push(id);
+            }
+        }
+        assert!(missing.is_empty(), "no example uses: {}", missing.join(", "));
     }
 
     #[test]
     fn library_files_are_told_by_their_shape() {
         use schema::FileKind;
-        let files = examples();
+        let files = example("duplex");
         let kind = |name: &str| check_files(Workspace { main: name, files: &files }).unwrap().1.kind;
         assert_eq!(kind("build/services/lighting.ncl"), FileKind::Service);
         assert_eq!(kind("build/codes/nec.ncl"), FileKind::Service);
         assert_eq!(kind("build/assemblies/wood-frame.ncl"), FileKind::Assemblies);
         assert_eq!(kind("plans/flat.ncl"), FileKind::Plan);
-        assert_eq!(kind("5-duplex.ncl"), FileKind::Plate);
+        assert_eq!(kind("duplex.ncl"), FileKind::Plate);
         // A service's placement naming a part it doesn't have is caught in the file itself.
         let bad = "{ parts = { light = {} }, place = [plate.over \"lamp\" \"#room\"] }";
         let files = BTreeMap::from([("s.ncl".to_owned(), bad.to_owned())]);
@@ -765,9 +893,9 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
 
     #[test]
     fn a_plan_file_is_the_same_plan_a_plate_imports() {
-        let files = examples();
-        let (hotel, _) = check_files(Workspace { main: "3-hotel.ncl", files: &files }).unwrap();
-        let (wing, _) = check_files(Workspace { main: "plans/wing.ncl", files: &files }).unwrap();
+        let files = example("commercial");
+        let (hotel, _) = check_files(Workspace { main: "hotel.ncl", files: &files }).unwrap();
+        let (wing, _) = check_files(Workspace { main: "hotel/wing.ncl", files: &files }).unwrap();
         let imported = hotel.spaces["wing"].plan.as_ref().unwrap();
         // Same fingerprint: same seed, so a preview in a plate's slot is that plate's solution.
         assert_eq!(imported.fingerprint(), wing.plan().fingerprint());

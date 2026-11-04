@@ -41,8 +41,11 @@ needs to run in the browser.
 | File                          | Job                                                                                |
 | ----------------------------- | ---------------------------------------------------------------------------------- |
 | `src/main.ts`                 | Wiring: start screen and drawing flow, debounced solve, title block, files, export |
-| `src/workspace.ts`            | `WorkspaceStore`: every workspace file as a document, dirty state, browser drafts  |
-| `src/workbench.ts`            | Explorer, tabs, up to two editor groups, drag and drop, layout persistence         |
+| `src/workspace.ts`            | `WorkspaceStore`: the open project's files as documents, dirty state, drafts       |
+| `src/explorer.ts`             | The file tree: pinned plates, filter, keyboard, uses and used by                   |
+| `src/palette.ts`              | The search box over a list: project switcher, quick open, asking for a name        |
+| `src/projects.ts`             | Routes, recents, names, what copying to a project takes (pure)                     |
+| `src/workbench.ts`            | Tabs, up to two editor groups, drag and drop, layout per project                   |
 | `src/sidebar.ts`              | The side bar: activity bar, one view at a time (files or reference), widths        |
 | `src/reference/model.ts`      | The reference's topics, generated from the schema, `plate.ncl` and the guides      |
 | `src/reference/locate.ts`     | What the cursor is on: source map inverted (or the text scanned), schema walked    |
@@ -75,11 +78,31 @@ coordinates.
 ## Workspace and imports
 
 `plate-server/src/workspace.rs` serves one folder: `.ncl` files only, paths relative to the
-folder, nothing outside it reachable (no `..`, no absolute paths, no hidden folders). An empty
-folder is seeded with the examples.
+folder, nothing outside it reachable (no `..`, no absolute paths, no hidden folders).
+
+`plate-server/src/projects.rs` makes each folder at the top of the workspace a project: a
+`Workspace` of its own. There's no manifest. The browser only ever gives the evaluator the open
+project's files, so a plate is closed under imports: editing one project can't change a layout in
+another (a shared library would break "same file and seed, same layout"), and each solve sends only
+what it can read. A hidden `.plate-projects` marks a workspace as laid out this way; without it,
+`.ncl` files and folders holding them move into `my-files`, once, with relative imports intact.
+
+The examples are compiled in (`EXAMPLES`), and copied into the workspace when first opened, so they
+can improve with the app without touching what someone changed.
+
+Opening a project is one request (`GET /api/projects/{p}` gives every file's text). In the browser,
+`WorkspaceStore` keeps the last few projects loaded, so going back is instant and undo survives;
+a background request then picks up anything changed on disk. Model URIs include the project, since
+two projects can hold the same path. Tabs, main plate and closed folders are per project in
+`localStorage` (`plate:project:<name>`), as are drafts (`plate:drafts:<name>`).
+
+Thumbnails in the switcher come from `thumbnail.rs`: the plate solved at its own seed and drawn as
+outlines. They're solved at most once per content: kept in memory by a hash of the files, with that
+hash as the `ETag`, so the browser's repeat asks cost a hash and no solve.
 
 Evaluation takes a set of files and the one to evaluate (`plate_config::Workspace`). Each file is
-added to Nickel's cache in memory under `/workspace/<path>`, so `import "hotel-room.ncl"`
+added to Nickel's cache in memory under `/workspace/<path>` (`C:\workspace\<path>` on native
+Windows, where a path needs a drive to be absolute), so `import "hotel-room.ncl"`
 resolves like on disk (relative to the importing file) without touching the file system. Every
 file is wrapped to see `plate` (the helper library); the main file also gets the schema contract,
 which checks a value with a `start` as a plate (the schema's root) and anything else as a plan

@@ -58,16 +58,41 @@ export async function exportLayout(
   return { ok: true, blob: await res.blob(), filename };
 }
 
-// ------------------------------------------------------------------ workspace files
+// ------------------------------------------------------------------ projects
 
-export interface WorkspaceListing {
+export interface ProjectInfo {
+  name: string;
+  files: number;
+  plates: number;
+  /** The plate to show when nothing says otherwise. */
+  main: string | null;
+  /** When a file in it last changed (milliseconds since the epoch). */
+  modified: number;
+}
+
+export interface ExampleInfo {
+  name: string;
+  title: string;
+  blurb: string;
+  main: string;
+  files: number;
+}
+
+export interface ProjectListing {
   root: string;
-  files: { path: string; size: number }[];
-  /** Every folder, empty ones included (older engines leave it out). */
-  folders?: string[];
+  projects: ProjectInfo[];
+  examples: ExampleInfo[];
+}
+
+/** A project's files, all at once. */
+export interface ProjectContents {
+  root: string;
+  files: { path: string; text: string }[];
+  folders: string[];
 }
 
 const encodePath = (path: string) => path.split("/").map(encodeURIComponent).join("/");
+const projectUrl = (name: string) => `/projects/${encodeURIComponent(name)}`;
 
 async function files<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => null)) as ({ ok: boolean; error?: string } & T) | null;
@@ -84,20 +109,68 @@ async function call(path: string, init?: RequestInit): Promise<Response> {
   }
 }
 
-/** Every .ncl file in the workspace folder. */
-export async function listFiles(): Promise<WorkspaceListing> {
-  return files<WorkspaceListing>(await call("/files"));
+const postJson = (path: string, body: unknown) =>
+  call(path, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+export async function listProjects(): Promise<ProjectListing> {
+  return files<ProjectListing>(await call("/projects"));
 }
 
-export async function readFile(path: string): Promise<string> {
-  const res = await call(`/files/${encodePath(path)}`);
-  if (!res.ok) throw new Error((await res.json().catch(() => ({ error: res.statusText }))).error);
-  return res.text();
+export async function readProject(name: string): Promise<ProjectContents> {
+  return files<ProjectContents>(await call(projectUrl(name)));
 }
 
-export async function writeFile(path: string, text: string): Promise<void> {
+export async function createProject(name: string): Promise<{ name: string }> {
+  return files(await postJson("/projects", { name }));
+}
+
+/** Copy an example into the workspace, or find the copy made before. */
+export async function openExample(example: string): Promise<{ name: string; main: string }> {
+  return files(await postJson("/projects", { example }));
+}
+
+export async function moveProject(name: string, to: string): Promise<void> {
+  await files(await postJson(`${projectUrl(name)}/move`, { to }));
+}
+
+export async function duplicateProject(name: string, to: string): Promise<{ name: string }> {
+  return files(await postJson(`${projectUrl(name)}/duplicate`, { to }));
+}
+
+/** To the trash: what to restore it by. */
+export async function trashProject(name: string): Promise<{ trash: string }> {
+  return files(await call(projectUrl(name), { method: "DELETE" }));
+}
+
+export async function restoreProject(id: string): Promise<{ name: string }> {
+  return files(await postJson(`/trash/${encodeURIComponent(id)}/restore`, {}));
+}
+
+export async function importProject(name: string, zip: Blob): Promise<{ name: string; main: string | null }> {
+  return files(
+    await call(`/projects/import?name=${encodeURIComponent(name)}`, {
+      method: "POST",
+      headers: { "content-type": "application/zip" },
+      body: zip,
+    }),
+  );
+}
+
+/** Addresses the browser can load directly. */
+export const projectExportUrl = (name: string) => `/api${projectUrl(name)}/export`;
+export const projectThumbnailUrl = (name: string, main?: string | null) =>
+  `/api${projectUrl(name)}/thumbnail${main ? `?main=${encodeURIComponent(main)}` : ""}`;
+export const exampleThumbnailUrl = (name: string) => `/api/examples/${encodeURIComponent(name)}/thumbnail`;
+
+// ------------------------------------------------------------------ files in a project
+
+export async function writeFile(project: string, path: string, text: string): Promise<void> {
   await files(
-    await call(`/files/${encodePath(path)}`, {
+    await call(`${projectUrl(project)}/files/${encodePath(path)}`, {
       method: "PUT",
       headers: { "content-type": "text/plain; charset=utf-8" },
       body: text,
@@ -105,32 +178,20 @@ export async function writeFile(path: string, text: string): Promise<void> {
   );
 }
 
-export async function deleteFile(path: string): Promise<void> {
-  await files(await call(`/files/${encodePath(path)}`, { method: "DELETE" }));
+export async function deleteFile(project: string, path: string): Promise<void> {
+  await files(await call(`${projectUrl(project)}/files/${encodePath(path)}`, { method: "DELETE" }));
 }
 
-export async function renameFile(from: string, to: string): Promise<void> {
-  await files(
-    await call("/rename", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ from, to }),
-    }),
-  );
+export async function renameFile(project: string, from: string, to: string): Promise<void> {
+  await files(await postJson(`${projectUrl(project)}/rename`, { from, to }));
 }
 
-/** Make a folder in the workspace (empty to start with). */
-export async function makeFolder(path: string): Promise<void> {
-  await files(
-    await call("/folders", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ path }),
-    }),
-  );
+/** Make a folder in a project (empty to start with). */
+export async function makeFolder(project: string, path: string): Promise<void> {
+  await files(await postJson(`${projectUrl(project)}/folders`, { path }));
 }
 
 /** Remove a folder with no files in it. */
-export async function removeFolder(path: string): Promise<void> {
-  await files(await call(`/folders/${encodePath(path)}`, { method: "DELETE" }));
+export async function removeFolder(project: string, path: string): Promise<void> {
+  await files(await call(`${projectUrl(project)}/folders/${encodePath(path)}`, { method: "DELETE" }));
 }

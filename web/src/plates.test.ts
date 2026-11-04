@@ -1,5 +1,33 @@
 import { describe, expect, it } from "vitest";
-import { importPath, importsOf, isPlan, isPlate, libraryKind, retargetImports } from "./plates";
+import {
+  importPath,
+  importsOf,
+  isPlan,
+  isPlate,
+  libraryKind,
+  retargetImports,
+  directImporters,
+  directImports,
+} from "./plates";
+
+describe("directImports and directImporters", () => {
+  const files = {
+    "a.ncl": 'let b = import "plans/b.ncl" in # import "gone.ncl"\nlet n = import "nope.ncl" in {}',
+    "plans/b.ncl": 'let c = import "c.ncl" in {}',
+    "plans/c.ncl": "{}",
+  };
+
+  it("lists only what a file names itself, that exists", () => {
+    expect(directImports("a.ncl", files)).toEqual(["plans/b.ncl"]);
+    expect(directImports("plans/b.ncl", files)).toEqual(["plans/c.ncl"]);
+    expect(directImports("missing.ncl", files)).toEqual([]);
+  });
+
+  it("finds who names a file", () => {
+    expect(directImporters("plans/c.ncl", files)).toEqual(["plans/b.ncl"]);
+    expect(directImporters("a.ncl", files)).toEqual([]);
+  });
+});
 
 describe("workspace files", () => {
   it("tells plates from plans", () => {

@@ -1038,7 +1038,7 @@ impl Problem<'_> {
                     out.push(C::Window { a: pick(a), role, need: width, width, w, ptr });
                 }
                 Rule::Apart { a, b, port, distance, wall, .. } => {
-                    if hits_fill(a) || b.as_ref().is_some_and(&hits_fill) {
+                    if hits_fill(a) || b.as_ref().is_some_and(hits_fill) {
                         issues.push(Issue::new(ptr.clone(), "`apart` can't name the fill space").with_hint(
                             "The fill space touches whatever the others leave: keep the others apart instead.",
                         ));
