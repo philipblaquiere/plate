@@ -71,6 +71,31 @@ fn without_assemblies_nothing_is_built() {
 }
 
 #[test]
+fn without_assemblies_a_rule_that_asks_for_a_wall_is_said() {
+    let with_rule = |rule: Value| {
+        let mut v = flat(json!({}));
+        v.as_object_mut().unwrap().remove("assemblies");
+        v["rules"].as_array_mut().unwrap().push(rule);
+        run(v)
+    };
+    let s = with_rule(json!({ "rule": "wall", "a": "bath", "port": "wall", "cavity": 0.14, "length": 1.5 }));
+    assert!(
+        messages(&s).iter().any(|(p, m)| p.as_deref() == Some("/rules/2") && m.contains("a cavity of 0.14")),
+        "{:?}",
+        messages(&s)
+    );
+    assert!(s.report.unmet > 0);
+    // A selector that matches nothing, and a rule that asks for nothing: no wall is missing.
+    for rule in [
+        json!({ "rule": "wall", "a": "#nothing", "port": "wall", "cavity": 0.14 }),
+        json!({ "rule": "wall", "a": "bath", "port": "wall" }),
+    ] {
+        let s = with_rule(rule);
+        assert!(!messages(&s).iter().any(|(_, m)| m.contains("no assembly")), "{:?}", messages(&s));
+    }
+}
+
+#[test]
 fn walls_are_built_from_the_roles_either_side() {
     let s = run(flat(json!({})));
     assert_eq!(s.report.unmet, 0, "{:?}", messages(&s));
@@ -199,6 +224,36 @@ fn a_named_assembly_and_one_stretch() {
     assert!(messages(&s)
         .iter()
         .any(|(p, m)| p.as_deref() == Some("/rules/2/assembly") && m.contains("nope")));
+}
+
+#[test]
+fn a_named_assembly_must_still_meet_what_rules_ask() {
+    let with_rules = |rules: Value| {
+        let mut v = flat(json!({}));
+        v["assemblies"]["plain"] = json!({ "thickness": 0.1 });
+        v["rules"].as_array_mut().unwrap().extend(rules.as_array().unwrap().iter().cloned());
+        run(v)
+    };
+    let named = json!({ "rule": "wall", "a": "bedroom", "b": "hall", "assembly": "plain" });
+    let rated = json!({ "rule": "wall", "a": "bedroom", "b": "hall", "fire": 1 });
+    let unmet = |s: &Solution| {
+        messages(s).iter().any(|(p, m)| p.as_deref() == Some("/rules/2/assembly") && m.contains("1 h fire"))
+    };
+    // Another rule on that wall, and a number on the same rule.
+    assert!(unmet(&with_rules(json!([named, rated]))));
+    let on_itself = json!({ "rule": "wall", "a": "bedroom", "b": "hall", "assembly": "plain", "fire": 1 });
+    assert!(unmet(&with_rules(json!([on_itself]))));
+    // What its roles would ask is what naming it overrides.
+    let s = with_rules(json!([named]));
+    assert_eq!(s.report.unmet, 0, "{:?}", messages(&s));
+}
+
+#[test]
+fn a_door_to_a_tag_no_space_has_asks_for_nothing() {
+    let mut v = flat(json!({}));
+    v["rules"].as_array_mut().unwrap().push(json!({ "rule": "door", "a": "hall", "b": "#missing" }));
+    let s = run(v);
+    assert_eq!(s.report.unmet, 0, "{:?}", messages(&s));
 }
 
 #[test]
@@ -639,4 +694,123 @@ fn a_tag_that_names_nothing_is_only_mentioned() {
     assert!(parts(&s, "charger").is_empty());
     let d = s.diagnostics.iter().find(|d| d.message.contains("#garage")).expect("mentioned");
     assert_eq!(d.severity, crate::diagnostic::Severity::Info, "{}", d.message);
+}
+
+/// A flat whose walls are all too shallow to run in but for the one wall of the bath a rule makes
+/// deep, with a stack in that wall and a toilet in the bath.
+fn drain_in_the_bath(seed: u64, via: Value) -> Value {
+    let mut v = flat(json!({}));
+    v["seed"] = json!(seed);
+    for name in ["exterior", "partition", "wet"] {
+        v["assemblies"][name]["cavity"] = json!(0.05);
+    }
+    v["assemblies"]["deep"] = json!({ "thickness": 0.3, "cavity": 0.2 });
+    v["spaces"]["bath"]["plan"] = json!({
+        "spaces": { "toilet": { "kind": "fixture", "width": 0.4, "depth": 0.7, "against": "wet", "tags": ["drain"] } },
+    });
+    v["rules"]
+        .as_array_mut()
+        .unwrap()
+        .push(json!({ "rule": "wall", "a": "bath", "b": "hall", "assembly": "deep" }));
+    v["services"] = json!({ "plumbing": {
+        "parts": { "stack": { "mount": "cavity", "width": 0.1, "depth": 0.1 } },
+        "place": [{ "place": "one", "part": "stack", "spaces": "bath", "wall": { "cavity": 0.15 } }],
+        "connect": [{ "from": "stack", "to": "#drain", "draw": "routed", "via": via }]
+    } });
+    v
+}
+
+/// Is the toilet up against the deep wall?
+fn toilet_on_the_deep_wall(s: &Solution) -> bool {
+    let toilet = of_kind(s, ElementKind::Space)
+        .into_iter()
+        .find(|e| e.space.as_ref().unwrap().name == "toilet")
+        .unwrap();
+    of_kind(s, ElementKind::Wall).iter().any(|w| {
+        let line = w.wall.as_ref().unwrap().line;
+        w.wall.as_ref().unwrap().assembly == "deep"
+            && toilet
+                .points
+                .iter()
+                .any(|p| crate::geometry::point_segment_distance(*p, line[0], line[1]) < 0.2)
+    })
+}
+
+#[test]
+fn a_fixture_on_a_wall_too_shallow_does_not_cross_the_room() {
+    let mut tried = 0;
+    for seed in 1..12 {
+        let s = run(drain_in_the_bath(seed, json!({ "cavity": 0.15 })));
+        if parts(&s, "stack").is_empty() || toilet_on_the_deep_wall(&s) {
+            continue;
+        }
+        tried += 1;
+        assert!(of_kind(&s, ElementKind::Run).is_empty(), "seed {seed}: {:?}", messages(&s));
+        assert!(
+            messages(&s).iter().any(|(_, m)| m.contains("can't run in")),
+            "seed {seed}: {:?}",
+            messages(&s)
+        );
+    }
+    assert!(tried > 0, "no seed put the toilet on a shallow wall");
+}
+
+#[test]
+fn a_ceiling_it_may_cross_takes_a_fixture_off_a_shallow_wall() {
+    let mut tried = 0;
+    for seed in 1..12 {
+        let s = run(drain_in_the_bath(seed, json!({ "cavity": 0.15, "ceilings": "bath" })));
+        if parts(&s, "stack").is_empty() || toilet_on_the_deep_wall(&s) {
+            continue;
+        }
+        tried += 1;
+        assert!(!of_kind(&s, ElementKind::Run).is_empty(), "seed {seed}: {:?}", messages(&s));
+    }
+    assert!(tried > 0, "no seed put the toilet on a shallow wall");
+}
+
+#[test]
+fn the_source_of_a_network_must_be_on_a_wall_it_can_run_in() {
+    let mut v = with_service(
+        "power",
+        json!({
+            "parts": { "panel": {}, "outlet": {} },
+            "place": [
+                { "place": "one", "part": "panel", "spaces": "hall" },
+                { "place": "one", "part": "outlet", "spaces": "living" },
+            ],
+            "connect": [{ "from": "panel", "to": "outlet", "via": { "cavity": 0.12 } }]
+        }),
+    );
+    for name in ["exterior", "partition", "wet"] {
+        v["assemblies"][name]["cavity"] = json!(0.09);
+    }
+    let s = run(v);
+    let said = |what: &str| messages(&s).iter().any(|(_, m)| m.contains(&format!("a {what} is on a wall")));
+    assert!(said("panel"), "{:?}", messages(&s));
+    assert!(said("outlet"), "{:?}", messages(&s));
+}
+
+#[test]
+fn a_part_says_which_network_its_group_is_in() {
+    let s = run(with_service(
+        "power",
+        json!({
+            "parts": { "panel": {}, "outlet": {}, "counter": {} },
+            "place": [
+                { "place": "one", "part": "panel", "spaces": "hall" },
+                { "place": "one", "part": "outlet", "spaces": "living" },
+                { "place": "one", "part": "counter", "spaces": "living" },
+            ],
+            "connect": [
+                { "label": "Circuits", "from": "panel", "to": "outlet", "max": 1 },
+                { "label": "Counter circuits", "from": "panel", "to": "counter", "max": 1 },
+            ]
+        }),
+    ));
+    let info = |part: &str| parts(&s, part)[0].part.as_ref().unwrap();
+    assert_eq!(info("outlet").group.as_deref(), Some("1"));
+    assert_eq!(info("counter").group.as_deref(), Some("1"));
+    assert_eq!(info("outlet").network.as_deref(), Some("Circuits"));
+    assert_eq!(info("counter").network.as_deref(), Some("Counter circuits"));
 }

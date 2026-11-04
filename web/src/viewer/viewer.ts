@@ -2102,12 +2102,7 @@ export class Viewer {
       if (p.mount === "wall" && p.above !== undefined)
         rows.push(["Height", `${L.thickness(p.above)} above the floor`]);
       else rows.push(["On", p.mount === "cavity" ? "in the wall" : `the ${p.mount}`]);
-      if (p.group) {
-        const nets = this.layout!.elements.filter(
-          (e) => e.kind === "run" && e.run?.service === p.service && e.run.group === p.group,
-        );
-        rows.push([nets[0]?.run?.network ?? "Group", p.group]);
-      }
+      if (p.group) rows.push([p.network ?? "Group", p.group]);
       rows.push(["Placed", p.placed]);
       html = card(p.label, p.service, rows, "Right-click: show where it's placed");
     } else if (h?.type === "space") {

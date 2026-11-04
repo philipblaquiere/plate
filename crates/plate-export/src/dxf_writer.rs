@@ -3,7 +3,7 @@ use dxf::enums::{AcadVersion, DrawingUnits, Units as DxfUnits};
 use dxf::tables::Layer;
 use dxf::LwPolylineVertex;
 use dxf::{Color, Drawing, Point as DxfPoint};
-use plate_core::{ElementKind, Layout, SpaceKind, System, Units};
+use plate_core::{Element, ElementKind, Layout, Point, SpaceKind, System, Units};
 
 use crate::ExportError;
 
@@ -47,6 +47,19 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
                     .iter()
                     .map(|p| LwPolylineVertex { x: p.x, y: p.y, ..Default::default() })
                     .collect();
+                let mut entity = Entity::new(EntityType::LwPolyline(poly));
+                entity.common.layer = layer.clone();
+                drawing.add_entity(entity);
+            }
+            continue;
+        }
+        // A wall: one closed polyline per stretch between its openings.
+        if element.kind == ElementKind::Wall {
+            for piece in wall_pieces(element, &layout.elements) {
+                let mut poly = LwPolyline::default();
+                poly.set_is_closed(true);
+                poly.vertices =
+                    piece.iter().map(|p| LwPolylineVertex { x: p.x, y: p.y, ..Default::default() }).collect();
                 let mut entity = Entity::new(EntityType::LwPolyline(poly));
                 entity.common.layer = layer.clone();
                 drawing.add_entity(entity);
@@ -179,11 +192,87 @@ fn dxf_units(units: Units) -> DxfUnits {
     }
 }
 
+/// A wall's rectangle, cut where the doors and windows set in it are. The rectangle's first two
+/// points run along the wall, the next two back along its other face.
+fn wall_pieces(wall: &Element, elements: &[Element]) -> Vec<Vec<Point>> {
+    let [p, q, r, _] = wall.points[..] else { return vec![wall.points.clone()] };
+    let len = p.distance(q);
+    let width = q.distance(r);
+    if len <= 0.0 || width <= 0.0 {
+        return vec![wall.points.clone()];
+    }
+    let u = Point::new((q.x - p.x) / len, (q.y - p.y) / len);
+    let n = Point::new((r.x - q.x) / width, (r.y - q.y) / width);
+    let along = |o: Point| (o.x - p.x) * u.x + (o.y - p.y) * u.y;
+    let across = |o: Point| (o.x - p.x) * n.x + (o.y - p.y) * n.y;
+    let tol = 1e-6 * (1.0 + len);
+
+    let mut cuts: Vec<(f64, f64)> = elements
+        .iter()
+        .filter(|e| matches!(e.kind, ElementKind::Door | ElementKind::Window))
+        .filter(|e| e.opening.as_ref().is_some_and(|o| o.depth.is_some()) && e.points.len() == 2)
+        .filter(|e| e.points.iter().all(|o| (-tol..=width + tol).contains(&across(*o))))
+        .map(|e| {
+            let (a, b) = (along(e.points[0]), along(e.points[1]));
+            (a.min(b).max(0.0), a.max(b).min(len))
+        })
+        .filter(|(a, b)| b - a > tol)
+        .collect();
+    cuts.sort_by(|a, b| a.0.total_cmp(&b.0));
+
+    let rectangle = |s: f64, e: f64| {
+        let at = |t: f64, d: f64| Point::new(p.x + u.x * t + n.x * d, p.y + u.y * t + n.y * d);
+        vec![at(s, 0.0), at(e, 0.0), at(e, width), at(s, width)]
+    };
+    let mut pieces = Vec::new();
+    let mut from = 0.0;
+    for (a, b) in cuts {
+        if a - from > tol {
+            pieces.push(rectangle(from, a));
+        }
+        from = f64::max(from, b);
+    }
+    if len - from > tol {
+        pieces.push(rectangle(from, len));
+    }
+    pieces
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use plate_core::layout::OpeningInfo;
     use plate_core::{Config, PlateSolver, Solver};
     use serde_json::json;
+
+    fn opening(kind: ElementKind, a: Point, b: Point, depth: Option<f64>) -> Element {
+        let info = OpeningInfo { between: Vec::new(), width: a.distance(b), depth };
+        Element::opening("o".to_owned(), kind, a, b, info)
+    }
+
+    #[test]
+    fn a_wall_is_cut_where_its_openings_are() {
+        let wall = Element::new(
+            "w".to_owned(),
+            ElementKind::Wall,
+            vec![Point::new(0.0, 0.0), Point::new(10.0, 0.0), Point::new(10.0, 0.2), Point::new(0.0, 0.2)],
+            true,
+        );
+        let at = |x: f64, y: f64| Point::new(x, y);
+        let others = [
+            opening(ElementKind::Door, at(2.0, 0.1), at(3.0, 0.1), Some(0.2)),
+            opening(ElementKind::Window, at(6.0, 0.1), at(5.0, 0.1), Some(0.2)),
+            // Not in this wall: on another line, and set in no wall at all.
+            opening(ElementKind::Door, at(7.0, 3.0), at(8.0, 3.0), Some(0.2)),
+            opening(ElementKind::Door, at(8.5, 0.1), at(9.0, 0.1), None),
+        ];
+        let pieces = wall_pieces(&wall, &others);
+        let spans: Vec<(f64, f64)> = pieces.iter().map(|r| (r[0].x, r[1].x)).collect();
+        assert_eq!(spans, vec![(0.0, 2.0), (3.0, 5.0), (6.0, 10.0)]);
+        assert!(pieces.iter().all(|r| r.len() == 4 && (r[2].y - 0.2).abs() < 1e-9));
+        // No openings: the wall as it is.
+        assert_eq!(wall_pieces(&wall, &[]).len(), 1);
+    }
 
     fn dxf(v: serde_json::Value) -> Drawing {
         let layout = PlateSolver.solve(&Config::from_value(v).unwrap()).unwrap().layout;

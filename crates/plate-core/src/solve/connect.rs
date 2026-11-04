@@ -28,6 +28,10 @@ struct Node {
     room: String,
     label: String,
     part: Option<usize>,
+    /// The room it's in, as an index into the model's rooms.
+    in_room: Option<usize>,
+    /// The face it's against (room index, face index), if it's against a wall.
+    face: Option<(usize, usize)>,
 }
 
 pub fn run(
@@ -59,12 +63,29 @@ fn nodes(
     let mut out = Vec::new();
     for item in sel.items() {
         if let Some(tag) = tag_of(item) {
-            for room in model.rooms.iter().filter(|r| inst.covers(&r.path)) {
+            for (r, room) in model.rooms.iter().enumerate().filter(|(_, r)| inst.covers(&r.path)) {
                 for f in &room.fixtures {
                     let Some(info) = &elements[f.element].space else { continue };
                     if crate::plan::has_tag(&info.tags, info.kind, tag) {
                         let at = Point::new((f.back.0.x + f.back.1.x) / 2.0, (f.back.0.y + f.back.1.y) / 2.0);
-                        out.push(Node { at, room: room.path.clone(), label: info.label.clone(), part: None });
+                        let tol = model.units.tolerance() * 100.0;
+                        let face = room
+                            .faces
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, face)| face.walled)
+                            .map(|(k, face)| (k, point_segment_distance(at, face.a, face.b)))
+                            .filter(|(_, d)| *d <= tol)
+                            .min_by(|x, y| x.1.total_cmp(&y.1))
+                            .map(|(k, _)| (r, k));
+                        out.push(Node {
+                            at,
+                            room: room.path.clone(),
+                            label: info.label.clone(),
+                            part: None,
+                            in_room: Some(r),
+                            face,
+                        });
                     }
                 }
             }
@@ -78,6 +99,8 @@ fn nodes(
                     room: p.room.clone(),
                     label: p.part.replace('_', " "),
                     part: Some(k),
+                    in_room: model.rooms.iter().position(|r| r.path == p.room),
+                    face: p.face,
                 });
             }
         }
@@ -122,24 +145,34 @@ impl Job<'_> {
         let network = net.label.clone().unwrap_or_else(|| inst.service.clone());
         let need = net.via.cavity.map_or(0.0, |c| c.0.to(units));
 
-        // Wall parts must be on a wall the network can run in.
-        if need > 0.0 {
-            for t in &terminals {
-                let Some((r, f)) = t.part.and_then(|k| placed[k].face) else { continue };
-                let face = &model.rooms[r].faces[f];
-                if face.cavity + 1e-9 < need {
-                    let wall = face
-                        .wall
-                        .and_then(|w| elements[w].wall.as_ref())
-                        .map_or_else(|| "it".to_owned(), |w| w.label.clone());
-                    issues.add(
-                        pointer,
-                        format!("a {} is on a wall it can't run in ({wall} has a cavity of {}; it needs {})", t.label, num(face.cavity), num(need)),
-                        &t.room,
-                        Some("Give that wall's assembly a cavity, or keep the part off it (`wall.cavity` on a `one` placement).".into()),
-                    );
+        // What's on a wall must be on a wall the network can run in: terminals, and the sources
+        // it uses (arcs start from the one, routed runs from any).
+        let shallow = |t: &Node| {
+            let (r, f) = t.face?;
+            let face = &model.rooms[r].faces[f];
+            (face.cavity + 1e-9 < need).then_some(face)
+        };
+        let starts = if net.draw == Draw::Arcs { &sources[..1] } else { &sources[..] };
+        let mut said: Vec<usize> = Vec::new();
+        for t in starts.iter().chain(&terminals) {
+            let Some(face) = shallow(t) else { continue };
+            // A part can be both a source and a terminal.
+            if let Some(k) = t.part {
+                if said.contains(&k) {
+                    continue;
                 }
+                said.push(k);
             }
+            let wall = face
+                .wall
+                .and_then(|w| elements[w].wall.as_ref())
+                .map_or_else(|| "it".to_owned(), |w| w.label.clone());
+            issues.add(
+                pointer,
+                format!("a {} is on a wall it can't run in ({wall} has a cavity of {}; it needs {})", t.label, num(face.cavity), num(need)),
+                &t.room,
+                Some("Give that wall's assembly a cavity, or keep the part off it (`wall.cavity` on a `one` placement).".into()),
+            );
         }
 
         // Terminals in order: from the source out, room by room.
@@ -169,6 +202,7 @@ impl Job<'_> {
                 for &t in group {
                     if let Some(k) = terminals[t].part {
                         placed[k].group = Some(format!("{}", g + 1));
+                        placed[k].network = Some(network.clone());
                     }
                 }
             }
@@ -219,6 +253,10 @@ impl Job<'_> {
                         let node = graph.terminals[t];
                         let what = &terminals[t].label;
                         if !dist[node].is_finite() {
+                            // On a wall it can't run in: said already.
+                            if shallow(&terminals[t]).is_some() {
+                                continue;
+                            }
                             let hint = match net.via.ceilings {
                                 Some(_) => "No wall it can run in leads there: give the walls on the way a cavity deep enough.",
                                 None => "No wall it can run in leads there: give the walls on the way a cavity, or let it cross ceilings (`via.ceilings`).",
@@ -334,22 +372,22 @@ impl Graph {
         let tol = model.units.tolerance() * 100.0;
         let mut g =
             Graph { points: Vec::new(), edges: Vec::new(), sources: Vec::new(), terminals: Vec::new() };
-        // Walls it can run in, in this scope, with their thickness.
-        let segments: Vec<(Point, Point, f64)> = model
+        // Walls it can run in, in this scope, with their thickness and their element.
+        let segments: Vec<(Point, Point, f64, usize)> = model
             .walls
             .iter()
-            .filter_map(|&w| elements[w].wall.as_ref())
-            .filter(|w| w.cavity + 1e-9 >= need)
-            .filter(|w| w.between.iter().any(|n| !n.starts_with('\'') && inst.covers(n)))
-            .map(|w| (w.line[0], w.line[1], w.thickness))
+            .filter_map(|&e| elements[e].wall.as_ref().map(|w| (e, w)))
+            .filter(|(_, w)| w.cavity + 1e-9 >= need)
+            .filter(|(_, w)| w.between.iter().any(|n| !n.starts_with('\'') && inst.covers(n)))
+            .map(|(e, w)| (w.line[0], w.line[1], w.thickness, e))
             .collect();
         let mut stops: Vec<Vec<f64>> = vec![vec![0.0, 1.0]; segments.len()];
         let mut extra: Vec<(Point, Point)> = Vec::new();
-        for (k, &(a, b, _)) in segments.iter().enumerate() {
+        for (k, &(a, b, ..)) in segments.iter().enumerate() {
             for p in [a, b] {
                 // Walls that meet here (one's end on another's line).
                 let mut met = false;
-                for (j, &(c, d, _)) in segments.iter().enumerate() {
+                for (j, &(c, d, ..)) in segments.iter().enumerate() {
                     if j != k && point_segment_distance(p, c, d) < tol {
                         stops[j].push(project(p, c, d).1);
                         met = true;
@@ -362,7 +400,7 @@ impl Graph {
                         .iter()
                         .enumerate()
                         .filter(|(j, _)| *j != k)
-                        .map(|(j, &(c, d, t))| (j, project(p, c, d), t))
+                        .map(|(j, &(c, d, t, _))| (j, project(p, c, d), t))
                         .filter(|(_, (q, _), t)| q.distance(p) <= t / 2.0 + tol * 10.0)
                         .min_by(|x, y| x.1 .0.distance(p).total_cmp(&y.1 .0.distance(p)));
                     if let Some((j, (q, s), _)) = near {
@@ -372,23 +410,31 @@ impl Graph {
                 }
             }
         }
-        // Where each thing joins: the nearest point on a wall it can run in.
-        let things: Vec<Point> = sources.iter().chain(terminals).map(|t| t.at).collect();
+        // Where each thing joins. Against a wall: that wall, if it can run in it. Off the walls
+        // (on the floor, on the ceiling): the nearest wall of its room it can run in. No further:
+        // a run doesn't cross a room's floor to get to another wall.
+        let things: Vec<&Node> = sources.iter().chain(terminals).collect();
         let joins: Vec<Option<Point>> = things
             .iter()
-            .map(|&p| {
+            .map(|t| {
+                let may_join = |wall: usize| match (t.face, t.in_room) {
+                    (Some((r, f)), _) => model.rooms[r].faces[f].wall == Some(wall),
+                    (None, Some(r)) => model.rooms[r].faces.iter().any(|f| f.wall == Some(wall)),
+                    (None, None) => false,
+                };
                 segments
                     .iter()
                     .enumerate()
-                    .map(|(k, &(a, b, _))| (k, project(p, a, b)))
-                    .min_by(|x, y| x.1 .0.distance(p).total_cmp(&y.1 .0.distance(p)))
+                    .filter(|(_, s)| may_join(s.3))
+                    .map(|(k, &(a, b, ..))| (k, project(t.at, a, b)))
+                    .min_by(|x, y| x.1 .0.distance(t.at).total_cmp(&y.1 .0.distance(t.at)))
                     .map(|(k, (q, s))| {
                         stops[k].push(s);
                         q
                     })
             })
             .collect();
-        for (k, &(a, b, _)) in segments.iter().enumerate() {
+        for (k, &(a, b, ..)) in segments.iter().enumerate() {
             let len = a.distance(b);
             if len <= tol {
                 continue;
@@ -407,8 +453,9 @@ impl Graph {
             g.link(p, q);
         }
         // Ceilings it can cross: a hub in the middle of each such space, joined to the walls round it.
+        let mut hubs: Vec<(usize, usize)> = Vec::new();
         if let Some(ceilings) = &net.via.ceilings {
-            for room in model.rooms.iter().filter(|r| inst.covers(&r.path)) {
+            for (r, room) in model.rooms.iter().enumerate().filter(|(_, r)| inst.covers(&r.path)) {
                 if !ceilings.matches_tagged(&room.name, &room.key, &room.tags, room.kind) {
                     continue;
                 }
@@ -420,6 +467,7 @@ impl Graph {
                     + tol * 10.0;
                 let wall_nodes = g.points.len();
                 let hub = g.node(interior_point(&room.loops[0], &room.loops[1..]), tol);
+                hubs.push((r, hub));
                 let around: Vec<usize> = (0..wall_nodes)
                     .filter(|&i| {
                         room.loops.iter().any(|l| {
@@ -434,13 +482,20 @@ impl Graph {
                 }
             }
         }
-        // The source and terminals, joined to their nearest wall.
+        // The source and terminals: joined where they can be, else across their room's ceiling.
         let mut ids = Vec::new();
-        for (p, j) in things.iter().zip(&joins) {
-            let id = g.node(*p, tol);
-            if let Some(q) = j {
-                let on = g.node(*q, tol);
-                g.link(id, on);
+        for (t, j) in things.iter().zip(&joins) {
+            let id = g.node(t.at, tol);
+            match j {
+                Some(q) => {
+                    let on = g.node(*q, tol);
+                    g.link(id, on);
+                }
+                None => {
+                    if let Some(&(_, hub)) = hubs.iter().find(|(r, _)| t.in_room == Some(*r)) {
+                        g.link(id, hub);
+                    }
+                }
             }
             ids.push(id);
         }

@@ -457,7 +457,7 @@ fn solve_preview(config: &Config, view: &View) -> Solution {
     }
     let mut diagnostics = Vec::new();
     let plan = match view {
-        View::Slot(SlotInfo { context: Some(c), .. }) => context_plan(&plan, c),
+        View::Slot(s @ SlotInfo { context: Some(c), .. }) => context_plan(&plan, c, s.units),
         _ => context::prepare(&plan, None, None, "").0,
     };
     let setup = match view {
@@ -1029,7 +1029,7 @@ impl Host {
                 Some(abs) => abs.to_owned(),
                 None => format!("{}{child_ptr}", ctx.plan_pointer),
             };
-            let within = Within { name: &placed.name, key: &placed.type_key, space };
+            let within = Within { name: &placed.name, key: &placed.type_key, space, units: self.units };
             // A service may give this space what it claims (a fixture, rules) even without a plan.
             let child_plan: Option<Plan> = match child_plan {
                 Some(p) => Some(p.clone()),
@@ -1385,7 +1385,7 @@ fn slot_context(parent: &Plan, within: Within) -> Option<serde_json::Value> {
 }
 
 /// A plan prepared as it was in a plate's space, from that space's [`slot_context`].
-fn context_plan(plan: &Plan, c: &serde_json::Value) -> Plan {
+fn context_plan(plan: &Plan, c: &serde_json::Value, units: Units) -> Plan {
     let mut parent = Plan::default();
     if let Ok(a) = serde_json::from_value(c["assemblies"].clone()) {
         parent.assemblies = a;
@@ -1402,7 +1402,7 @@ fn context_plan(plan: &Plan, c: &serde_json::Value) -> Plan {
         serde_json::from_value(serde_json::json!({ "kind": w["kind"], "tags": w["tags"] })).ok();
     let (name, key) = (w["name"].as_str().unwrap_or_default(), w["key"].as_str().unwrap_or_default());
     match &space {
-        Some(space) => context::prepare(plan, Some(&parent), Some(Within { name, key, space }), "").0,
+        Some(space) => context::prepare(plan, Some(&parent), Some(Within { name, key, space, units }), "").0,
         None => context::prepare(plan, Some(&parent), None, "").0,
     }
 }

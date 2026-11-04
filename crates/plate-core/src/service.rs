@@ -333,6 +333,11 @@ impl Service {
                 }
             }
         }
+        // The spaces they name are checked once they're in a plan.
+        let claimed = crate::plan::Plan { rules: self.claims.rules.clone(), ..Default::default() };
+        for (pointer, rule) in claimed.rules() {
+            rule.validate(&format!("{at}/claims{pointer}"))?;
+        }
         for (sel, plan) in &self.claims.inside {
             plan.validate(&format!("{at}/claims/inside/{}", crate::plan::escape_pointer(sel)))?;
         }
@@ -369,6 +374,20 @@ mod tests {
         let (p, m) = s.validate("/services/power").unwrap_err();
         assert_eq!(p, "/services/power/place/0/part");
         assert!(m.contains("outlet"), "{m}");
+    }
+
+    #[test]
+    fn claimed_rules_are_checked_too() {
+        let s: Service = serde_json::from_value(serde_json::json!({
+            "claims": { "rules": [
+                { "rule": "wall", "a": "#room", "port": "wall", "fire": 1 },
+                { "rule": "wall", "a": "#room", "fire": 1 }
+            ] }
+        }))
+        .unwrap();
+        let (p, m) = s.validate("/services/fire").unwrap_err();
+        assert_eq!(p, "/services/fire/claims/rules/1");
+        assert!(m.contains("`b`"), "{m}");
     }
 
     #[test]

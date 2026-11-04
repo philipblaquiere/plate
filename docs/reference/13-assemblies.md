@@ -17,6 +17,8 @@ Walls come from ports. Each edge two spaces share is one wall, and it has the po
 
 An assembly without `on` is never asked for by a role, only by a rule: by name, or because it's the thinnest that meets what a rule asks.
 
+Naming an assembly overrides what the wall's roles would ask. It doesn't override what rules ask: if the named assembly falls short of a rule about that wall (or of a number on the same rule), the problems list says so.
+
 ## Build-ups and ratings
 
 `layers` lists the build-up from one face to the other; the thickness and the cavity (layers marked `cavity`) add up from it. `fire` (hours), `acoustic` (STC) and `bearing` are what rules can ask for.

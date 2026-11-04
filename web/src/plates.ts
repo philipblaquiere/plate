@@ -21,7 +21,7 @@ export function isPlan(source: string): boolean {
 export function libraryKind(source: string): "service" | "assemblies" | null {
   if (isPlate(source) || isPlan(source)) return null;
   if (/^[\s{]*(parts|place|connect|claims|scope|params)\s*[=.|]/m.test(source)) return "service";
-  if (/^\s*[a-z_][a-z0-9_]*\s*=\s*\{[^]*?\b(thickness|layers)\s*=/m.test(source)) return "assemblies";
+  if (/^[\s{]*[a-z_][a-z0-9_]*\s*=\s*\{[^]*?\b(thickness|layers)\s*=/m.test(source)) return "assemblies";
   return null;
 }
 
