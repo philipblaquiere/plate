@@ -7,7 +7,8 @@
 //! the corridor, `facade` on the outside, `party` between neighbours of the same type, and
 //! `wet` on every other party wall, so bathrooms can go back to back.
 
-use super::common::{num, select, Named, SpaceType};
+use super::build::Foresight;
+use super::common::{num, select, Clear, Named, SpaceType};
 use super::frame::Transform;
 use super::grid;
 use super::ports::{collinear_overlap, door_ports, ports_along, window_ports, PortSeg, Source};
@@ -51,6 +52,30 @@ pub fn solve(plan: &Plan, slot: &Slot, ctx: &Ctx) -> LevelResult {
     let mm = units.to_mm();
     let mut types = SpaceType::all(plan, units);
     let mut issues = Vec::new();
+    // Bays are sized once, not searched: size each for the walls it will have. Between bays and to
+    // the corridor they're known; the back is the plate's edge, at the top level.
+    if types.iter().any(|t| t.clear.is_some()) {
+        let walls = Foresight::new(plan, units);
+        for t in types.iter_mut() {
+            let Some(c) = t.clear else { continue };
+            let me = (t.key.as_str(), t.key.as_str());
+            let role = if t.space.plan.is_some() { "party" } else { "partition" };
+            let side = walls.intrusion(&[role.to_owned()], me, Some(me));
+            let front = walls.intrusion(&["entrance".to_owned()], me, Some(me));
+            let back = if ctx.root && slot.boundary.is_some() {
+                let depth = |p: &PortSeg| walls.intrusion(&p.roles, me, None);
+                slot.ports.iter().map(depth).fold(0.0, f64::max)
+            } else {
+                0.0
+            };
+            let (width, depth) = (
+                Clear::gross(c.own_width, c.width, 2.0 * side, 2.0 * side),
+                Clear::gross(c.own_depth, c.depth, front + back, front + back),
+            );
+            t.width = width;
+            t.depth = depth;
+        }
+    }
     // Fixtures stand inside rooms; a corridor stack has nowhere to put them.
     for t in types.iter().filter(|t| t.space.is_fixture()) {
         issues.push(Issue::new(

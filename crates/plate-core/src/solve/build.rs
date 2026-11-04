@@ -108,8 +108,7 @@ struct Edge {
 pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: bool) -> Built {
     let n = level.placed.len();
     let mut out = Built { insets: vec![[0.0; 4]; n], fill: vec![None; n], ..Default::default() };
-    let wall_rules: Vec<(String, &Rule)> =
-        plan.rules().into_iter().filter(|(_, r)| matches!(r, Rule::Wall { .. })).collect();
+    let wall_rules = wall_rules(plan);
     let tol = units.tolerance() * 10.0;
     let solid = |i: usize| level.placed[i].fixture.is_none();
     let index = |name: &str| level.placed.iter().position(|p| p.name == name).filter(|&j| solid(j));
@@ -198,33 +197,9 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
     // What each wall must be.
     let name_of = |i: usize| (level.placed[i].name.as_str(), level.placed[i].type_key.as_str());
     let applies = |w: &BuiltWall, a: &Selector, b: &Option<Selector>, port: &Option<String>| -> bool {
-        let side = |me: usize, them: Option<usize>| {
-            let (n, k) = name_of(me);
-            if !a.matches(n, k) {
-                return false;
-            }
-            match (b, port, them) {
-                (Some(b), _, Some(t)) => {
-                    let (n, k) = name_of(t);
-                    b.matches(n, k)
-                }
-                (_, Some(p), _) => {
-                    p == crate::plan::ANY_WALL || w.roles.iter().any(|r| crate::plan::role_matches(r, p))
-                }
-                _ => false,
-            }
-        };
-        side(w.owner, w.other) || w.other.is_some_and(|o| side(o, Some(w.owner)))
-    };
-    let rule_need = |rule: &Rule| match rule {
-        Rule::Wall { thickness, cavity, fire, acoustic, bearing, .. } => Need {
-            thickness: thickness.map_or(0.0, |v: LengthSer| v.0.to(units)),
-            cavity: cavity.map_or(0.0, |v: LengthSer| v.0.to(units)),
-            fire: fire.unwrap_or(0.0),
-            acoustic: acoustic.unwrap_or(0.0),
-            bearing: bearing.unwrap_or(false),
-        },
-        _ => Need::default(),
+        let them = w.other.map(name_of);
+        rule_applies(a, b, port, &w.roles, name_of(w.owner), them)
+            || w.other.is_some_and(|o| rule_applies(a, b, port, &w.roles, name_of(o), Some(name_of(w.owner))))
     };
     if plan.assemblies.is_empty() {
         const HINT: &str = "Add `assemblies` to the plate (or this plan), or import a set of them.";
@@ -233,45 +208,21 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
             if let Some(name) = assembly {
                 let message = format!("no assembly named \"{name}\": this plan has none");
                 out.issues.push(Issue::new(format!("{ptr}/assembly"), message).with_hint(HINT));
-            } else if rule_need(rule) != Need::default() && walls.iter().any(|w| applies(w, a, b, port)) {
-                let message = format!("no assembly is {}: this plan has none", rule_need(rule).describe());
+            } else if rule_need(rule, units) != Need::default()
+                && walls.iter().any(|w| applies(w, a, b, port))
+            {
+                let message =
+                    format!("no assembly is {}: this plan has none", rule_need(rule, units).describe());
                 out.issues.push(Issue::new(ptr.clone(), message).with_hint(HINT));
             }
         }
         return out;
     }
     let mut keep = vec![true; walls.len()];
-    // Per wall: what it must be, why, the assembly a rule named (with the rule's pointer), and
-    // what rules alone ask (naming an assembly stands in for those its roles match, not for them).
-    type Asked = (Need, Vec<String>, Option<(String, String)>, Need);
-    let mut needs: Vec<Asked> = Vec::new();
-    for w in &walls {
-        let mut need = Need::default();
-        let mut why = Vec::new();
-        let mut explicit = None;
-        let mut ruled = Need::default();
-        for (name, a) in &plan.assemblies {
-            if a.matches(&w.roles) {
-                need = need.and(a.requirement(units));
-                why.push(name.clone());
-            }
-        }
-        for (ptr, rule) in &wall_rules {
-            let Rule::Wall { a, b, port, assembly, length: None, .. } = rule else { continue };
-            if !applies(w, a, b, port) {
-                continue;
-            }
-            ruled = ruled.and(rule_need(rule));
-            match assembly {
-                Some(name) => explicit = Some((name.clone(), ptr.clone())),
-                None => {
-                    need = need.and(rule_need(rule));
-                    why.push(format!("the rule at {ptr}"));
-                }
-            }
-        }
-        needs.push((need, why, explicit, ruled));
-    }
+    let mut needs: Vec<Asked> = walls
+        .iter()
+        .map(|w| asked(plan, &wall_rules, &w.roles, |a, b, p| applies(w, a, b, p), units))
+        .collect();
 
     // Rules asking for one stretch: the wall of the space with the longest run clear of doors.
     for (ptr, rule) in &wall_rules {
@@ -295,11 +246,11 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
                 .max_by(|x, y| x.1.total_cmp(&y.1));
             match best {
                 Some((k, run)) if run + tol >= len => {
-                    needs[k].3 = needs[k].3.and(rule_need(rule));
+                    needs[k].3 = needs[k].3.and(rule_need(rule, units));
                     match assembly {
                         Some(n) => needs[k].2 = Some((n.clone(), ptr.clone())),
                         None => {
-                            needs[k].0 = needs[k].0.and(rule_need(rule));
+                            needs[k].0 = needs[k].0.and(rule_need(rule, units));
                             needs[k].1.push(format!("the rule at {ptr}"));
                         }
                     }
@@ -362,13 +313,7 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
             keep[k] = false; // nothing says what to build: an edge, as before
             continue;
         }
-        let candidates = plan.assemblies.iter().filter(|(_, a)| a.on.is_none() || a.matches(&w.roles));
-        let best = candidates.filter(|(_, a)| a.meets(need, units)).min_by(|(na, a), (nb, b)| {
-            a.thickness(units)
-                .total_cmp(&b.thickness(units))
-                .then_with(|| b.matches(&w.roles).cmp(&a.matches(&w.roles)))
-                .then_with(|| na.cmp(nb))
-        });
+        let best = thinnest(plan, &w.roles, need, units);
         match best {
             Some((name, a)) => {
                 w.name = name.clone();
@@ -377,13 +322,7 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
             }
             None => {
                 // Nothing is good enough: the most demanding of those asked for, and say so.
-                let (name, a) = plan
-                    .assemblies
-                    .iter()
-                    .filter(|(_, a)| a.matches(&w.roles))
-                    .max_by(|x, y| x.1.thickness(units).total_cmp(&y.1.thickness(units)))
-                    .or_else(|| plan.assemblies.iter().next())
-                    .expect("assemblies is not empty");
+                let (name, a) = most_demanding(plan, &w.roles, units);
                 let (on, off) = (name_of(w.owner).0, w.other.map_or("the outside", |o| name_of(o).0));
                 let pointer = a.source.as_ref().map_or_else(|| "/assemblies".to_owned(), |s| format!("@{s}"));
                 out.issues.push(
@@ -563,38 +502,159 @@ pub fn inset_polygon(l: &[Point], d: &[f64]) -> Vec<Point> {
     out
 }
 
-/// A copy of `plan` for the engine: the spaces with plans sized for the walls around them too,
-/// since their plans' `needs` are clear sizes now. `allowance` is the thickest wall.
-pub fn with_allowance(plan: &Plan, units: Units) -> Plan {
-    let allowance = plan.assemblies.values().map(|a| a.thickness(units)).fold(0.0, f64::max);
-    if allowance <= 0.0 {
-        return plan.clone();
+/// The `wall` rules of a plan, with their pointers.
+fn wall_rules(plan: &Plan) -> Vec<(String, &Rule)> {
+    plan.rules().into_iter().filter(|(_, r)| matches!(r, Rule::Wall { .. })).collect()
+}
+
+/// What a `wall` rule asks of a wall.
+fn rule_need(rule: &Rule, units: Units) -> Need {
+    match rule {
+        Rule::Wall { thickness, cavity, fire, acoustic, bearing, .. } => Need {
+            thickness: thickness.map_or(0.0, |v: LengthSer| v.0.to(units)),
+            cavity: cavity.map_or(0.0, |v: LengthSer| v.0.to(units)),
+            fire: fire.unwrap_or(0.0),
+            acoustic: acoustic.unwrap_or(0.0),
+            bearing: bearing.unwrap_or(false),
+        },
+        _ => Need::default(),
     }
-    let mut p = plan.clone();
-    let grow = |r: Option<crate::plan::LengthRange>| {
-        r.map(|r| {
-            let b = r.to(units);
-            let l = |v: f64| LengthSer(crate::units::Length::Bare(v + allowance));
-            crate::plan::LengthRange::Range {
-                min: (b.min > 0.0).then(|| l(b.min)),
-                max: b.max.is_finite().then(|| l(b.max)),
-            }
-        })
-    };
-    for space in p.spaces.values_mut() {
-        let Some(child) = space.plan.as_mut() else { continue };
-        child.needs.width = grow(child.needs.width);
-        child.needs.depth = grow(child.needs.depth);
-        if let Some(a) = child.needs.area {
-            let b = a.bounds();
-            let g = |v: f64| (v.sqrt() + allowance).powi(2);
-            child.needs.area = Some(crate::plan::AreaRange::Range {
-                min: (b.min > 0.0).then(|| g(b.min)),
-                max: b.max.is_finite().then(|| g(b.max)),
-            });
+}
+
+/// Does a `wall` rule's `a`, `b` and `port` take in this wall, seen from `me` (name, type)?
+fn rule_applies(
+    a: &Selector,
+    b: &Option<Selector>,
+    port: &Option<String>,
+    roles: &[String],
+    me: (&str, &str),
+    them: Option<(&str, &str)>,
+) -> bool {
+    if !a.matches(me.0, me.1) {
+        return false;
+    }
+    match (b, port, them) {
+        (Some(b), _, Some(t)) => b.matches(t.0, t.1),
+        (_, Some(p), _) => {
+            p == crate::plan::ANY_WALL || roles.iter().any(|r| crate::plan::role_matches(r, p))
+        }
+        _ => false,
+    }
+}
+
+/// What a wall must be, why, the assembly a rule named (with the rule's pointer), and what rules
+/// alone ask (naming an assembly stands in for those its roles match, not for them).
+type Asked = (Need, Vec<String>, Option<(String, String)>, Need);
+
+/// What the assemblies its roles match and the `wall` rules that apply ask of a wall.
+fn asked(
+    plan: &Plan,
+    wall_rules: &[(String, &Rule)],
+    roles: &[String],
+    applies: impl Fn(&Selector, &Option<Selector>, &Option<String>) -> bool,
+    units: Units,
+) -> Asked {
+    let mut need = Need::default();
+    let mut why = Vec::new();
+    let mut explicit = None;
+    let mut ruled = Need::default();
+    for (name, a) in &plan.assemblies {
+        if a.matches(roles) {
+            need = need.and(a.requirement(units));
+            why.push(name.clone());
         }
     }
-    p
+    for (ptr, rule) in wall_rules {
+        let Rule::Wall { a, b, port, assembly, length: None, .. } = rule else { continue };
+        if !applies(a, b, port) {
+            continue;
+        }
+        ruled = ruled.and(rule_need(rule, units));
+        match assembly {
+            Some(name) => explicit = Some((name.clone(), ptr.clone())),
+            None => {
+                need = need.and(rule_need(rule, units));
+                why.push(format!("the rule at {ptr}"));
+            }
+        }
+    }
+    (need, why, explicit, ruled)
+}
+
+/// The thinnest assembly that meets `need`, for a wall with these roles.
+fn thinnest<'a>(
+    plan: &'a Plan,
+    roles: &[String],
+    need: &Need,
+    units: Units,
+) -> Option<(&'a String, &'a Assembly)> {
+    let candidates = plan.assemblies.iter().filter(|(_, a)| a.on.is_none() || a.matches(roles));
+    candidates.filter(|(_, a)| a.meets(need, units)).min_by(|(na, a), (nb, b)| {
+        a.thickness(units)
+            .total_cmp(&b.thickness(units))
+            .then_with(|| b.matches(roles).cmp(&a.matches(roles)))
+            .then_with(|| na.cmp(nb))
+    })
+}
+
+/// When nothing is good enough: the most demanding of those asked for.
+fn most_demanding<'a>(plan: &'a Plan, roles: &[String], units: Units) -> (&'a String, &'a Assembly) {
+    plan.assemblies
+        .iter()
+        .filter(|(_, a)| a.matches(roles))
+        .max_by(|x, y| x.1.thickness(units).total_cmp(&y.1.thickness(units)))
+        .or_else(|| plan.assemblies.iter().next())
+        .expect("assemblies is not empty")
+}
+
+/// The thickest wall a plan's assemblies can build.
+pub fn thickest(plan: &Plan, units: Units) -> f64 {
+    plan.assemblies.values().map(|a| a.thickness(units)).fold(0.0, f64::max)
+}
+
+/// What the engines know of a level's walls before they are built: how far the wall on an edge
+/// will take floor from the space beside it.
+pub struct Foresight<'a> {
+    plan: &'a Plan,
+    wall_rules: Vec<(String, &'a Rule)>,
+    units: Units,
+}
+
+impl<'a> Foresight<'a> {
+    pub fn new(plan: &'a Plan, units: Units) -> Foresight<'a> {
+        Foresight { plan, wall_rules: wall_rules(plan), units }
+    }
+
+    /// The intrusion of the wall between `me` and `them` (name, type), or between `me` and the
+    /// plate's boundary when there's no `them`. No assembly asked for, no wall: 0. A rule asking
+    /// for one stretch (`length`) depends on where the doors end up, so it isn't foreseen.
+    pub fn intrusion(&self, roles: &[String], me: (&str, &str), them: Option<(&str, &str)>) -> f64 {
+        if self.plan.assemblies.is_empty() || roles.iter().any(|r| r == OPEN) {
+            return 0.0;
+        }
+        let applies = |a: &Selector, b: &Option<Selector>, p: &Option<String>| {
+            rule_applies(a, b, p, roles, me, them)
+                || them.is_some_and(|t| rule_applies(a, b, p, roles, t, Some(me)))
+        };
+        let (need, why, explicit, _) = asked(self.plan, &self.wall_rules, roles, applies, self.units);
+        let assembly = match explicit {
+            Some((name, _)) => self.plan.assemblies.get(&name),
+            None if why.is_empty() => None,
+            None => Some(
+                thinnest(self.plan, roles, &need, self.units)
+                    .unwrap_or_else(|| most_demanding(self.plan, roles, self.units))
+                    .1,
+            ),
+        };
+        assembly.map_or(0.0, |a| {
+            let t = a.thickness(self.units);
+            if them.is_none() && a.line != Some(WallLine::Centre) {
+                t
+            } else {
+                t / 2.0
+            }
+        })
+    }
 }
 
 #[cfg(test)]

@@ -696,6 +696,112 @@ fn a_tag_that_names_nothing_is_only_mentioned() {
     assert_eq!(d.severity, crate::diagnostic::Severity::Info, "{}", d.message);
 }
 
+/// A plate of `w` × `d` between neighbours, with a hall, a store if `store` says so, and a room
+/// whose plan needs `width` of clear floor.
+fn room_needing(w: f64, d: f64, width: Value, assemblies: Value, store: bool, seed: u64) -> Solution {
+    let mut spaces = json!({
+        "hall": { "kind": "circulation", "fill": true, "area": { "min": 3 }, "side": { "min": 1.2 } },
+        "room": { "plan": {
+            "needs": { "width": width, "ports": { "entrance": "required" } },
+            "spaces": { "bed": { "kind": "fixture", "width": 1.5, "depth": 2, "against": "wall" } },
+        } },
+    });
+    if store {
+        spaces["store"] = json!({ "area": { "min": 6 }, "side": { "min": 1.5 } });
+    }
+    run(json!({
+        "seed": seed,
+        "start": { "mode": "boundary", "points": [[0, 0], [w, 0], [w, d], [0, d]], "ports": ["blank", "blank", "blank", "blank"] },
+        "assemblies": assemblies,
+        "spaces": spaces,
+        "rules": [{ "rule": "door", "a": if store { json!(["room", "store"]) } else { json!("room") }, "b": "hall" }],
+    }))
+}
+
+fn solved_seeds(solve: impl Fn(u64) -> Solution) -> usize {
+    (1..6).filter(|&seed| solve(seed).report.unmet == 0).count()
+}
+
+#[test]
+fn a_room_is_sized_for_the_walls_it_gets_not_the_thickest_there_is() {
+    // A boundary wall on one side and half a partition on the other take 0.375: the old allowance
+    // of one thickest wall (0.25) left this room short at every seed.
+    let walls = json!({ "party": { "on": "blank", "thickness": 0.25 }, "partition": { "on": ["partition", "link", "entrance"], "thickness": 0.25 } });
+    let range = json!({ "min": 5, "max": 5.2 });
+    let n = solved_seeds(|seed| room_needing(12.0, 4.5, range.clone(), walls.clone(), true, seed));
+    assert!(n >= 3, "only {n} seeds gave the room its clear width");
+
+    // Thin walls here, a thick one in the catalogue: the old allowance overshot at every seed.
+    let walls = json!({
+        "party": { "on": "blank", "thickness": 0.1 },
+        "partition": { "on": ["partition", "link", "entrance"], "thickness": 0.1 },
+        "thick": { "on": "none", "thickness": 0.6 },
+    });
+    let n = solved_seeds(|seed| room_needing(12.0, 4.5, range.clone(), walls.clone(), true, seed));
+    assert!(n >= 3, "only {n} seeds gave the room its clear width");
+}
+
+#[test]
+fn a_room_wall_to_wall_gets_what_its_walls_leave() {
+    let walls = json!({ "party": { "on": "blank", "thickness": 0.25 }, "partition": { "on": ["partition", "link", "entrance"], "thickness": 0.1 } });
+    // Inward walls on both sides: 5.5 leaves exactly the 5 asked for.
+    let s = room_needing(5.5, 8.0, json!(5), walls.clone(), false, 1);
+    assert_eq!(s.report.unmet, 0, "{:?}", messages(&s));
+    let b = Bounds::from_points(&element(&s, "room").points);
+    assert!(((b.max_x - b.min_x) - 5.0).abs() < 1e-6);
+    // 5.25 can't: it's a real miss, and it says so.
+    let s = room_needing(5.25, 8.0, json!(5), walls, false, 1);
+    assert!(
+        messages(&s).iter().any(|m| m.0.as_deref() == Some("/spaces/room/plan/needs/width")),
+        "{:?}",
+        messages(&s)
+    );
+}
+
+#[test]
+fn a_space_may_be_wider_than_its_plan_by_its_walls() {
+    // Its own width is gross, its plan's clear: 5.5 and 5 are no conflict with 0.25 walls.
+    let v = json!({
+        "seed": 1,
+        "start": { "mode": "boundary", "points": [[0, 0], [5.5, 0], [5.5, 8], [0, 8]], "ports": ["blank", "blank", "blank", "blank"] },
+        "assemblies": { "party": { "on": "blank", "thickness": 0.25 }, "partition": { "on": ["partition", "link", "entrance"], "thickness": 0.1 } },
+        "spaces": {
+            "hall": { "kind": "circulation", "fill": true, "area": { "min": 3 }, "side": { "min": 1.2 } },
+            "room": { "width": 5.5, "plan": {
+                "needs": { "width": 5, "ports": { "entrance": "required" } },
+                "spaces": { "bed": { "kind": "fixture", "width": 1.5, "depth": 2, "against": "wall" } },
+            } },
+        },
+        "rules": [{ "rule": "door", "a": "room", "b": "hall" }],
+    });
+    let s = run(v);
+    assert_eq!(s.report.unmet, 0, "{:?}", messages(&s));
+}
+
+#[test]
+fn bays_are_sized_for_their_own_walls() {
+    // Thin walls and a thick one elsewhere: bays sized for the thick one would be 0.5 too wide.
+    let s = run(json!({
+        "seed": 1,
+        "engine": "spine_stack",
+        "start": { "mode": "boundary", "points": [[0, 0], [24, 0], [24, 16], [0, 16]] },
+        "assemblies": {
+            "party": { "on": "party", "thickness": 0.1 },
+            "partition": { "on": ["partition", "entrance"], "thickness": 0.1 },
+            "thick": { "on": "none", "thickness": 0.6 },
+        },
+        "spaces": {
+            "corridor": { "kind": "circulation", "width": 1.8 },
+            "room": { "count": 4, "depth": 6, "plan": {
+                "needs": { "width": { "min": 3.4, "max": 3.5 } },
+                "spaces": { "bed": { "kind": "fixture", "width": 1.5, "depth": 2, "against": "wall" } },
+            } },
+        },
+        "rules": [{ "rule": "along", "a": "room", "b": "corridor" }],
+    }));
+    assert_eq!(s.report.unmet, 0, "{:?}", messages(&s));
+}
+
 /// A flat whose walls are all too shallow to run in but for the one wall of the bath a rule makes
 /// deep, with a stack in that wall and a toilet in the bath.
 fn drain_in_the_bath(seed: u64, via: Value) -> Value {

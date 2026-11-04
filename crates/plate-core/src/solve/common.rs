@@ -75,6 +75,49 @@ pub struct SpaceType {
     /// A fixture placed as one run of this many, side by side (`row`): one rectangle to the
     /// engine, split when it's drawn.
     pub row: u32,
+    /// What its own plan needs of its clear floor, when its walls decide whether it gets it.
+    /// `width`, `depth` and `area` above then only estimate the gross size.
+    pub clear: Option<Clear>,
+}
+
+/// A space's limits when its plan's `needs` are met by what its walls leave of it: its own gross
+/// limits, and its plan's clear ones.
+#[derive(Debug, Clone, Copy)]
+pub struct Clear {
+    pub own_width: Bounds1,
+    pub own_depth: Bounds1,
+    pub own_area: Bounds1,
+    pub width: Bounds1,
+    pub depth: Bounds1,
+    pub area: Bounds1,
+}
+
+impl Clear {
+    /// The gross size that leaves a clear size in `need`, walls taking `lo` to `hi` of it, within
+    /// `own` (which wins when they disagree: `needs_conflicts` says so if it's a real conflict).
+    pub fn gross(own: Bounds1, need: Bounds1, lo: f64, hi: f64) -> Bounds1 {
+        let grown = Bounds1 {
+            min: if need.min > 0.0 { need.min + lo } else { 0.0 },
+            max: if need.max.is_finite() { need.max + hi } else { need.max },
+        };
+        let both = own.intersect(grown);
+        if both.min > both.max && hi > 0.0 {
+            own
+        } else {
+            both
+        }
+    }
+
+    /// Can any walls keep a space within its own limits from having what its plan needs? (`t` is
+    /// the thickest wall: at most `2 t` goes from each way across.)
+    fn binds(&self, t: f64) -> bool {
+        let leaves = |own: Bounds1, need: Bounds1| own.min - 2.0 * t < need.min || own.max > need.max;
+        let least = (self.own_width.min - 2.0 * t).max(0.0) * (self.own_depth.min - 2.0 * t).max(0.0);
+        let most = self.own_width.max * self.own_depth.max;
+        (!self.width.is_any() && leaves(self.own_width, self.width))
+            || (!self.depth.is_any() && leaves(self.own_depth, self.depth))
+            || (!self.area.is_any() && (least < self.area.min || most > self.area.max))
+    }
 }
 
 impl SpaceType {
@@ -83,13 +126,35 @@ impl SpaceType {
             .iter()
             .map(|(key, space)| {
                 let needs = space.plan.as_ref().map(|p| &p.needs);
-                let width = bounds(space.width, units).intersect(bounds(needs.and_then(|n| n.width), units));
-                let depth = bounds(space.depth, units).intersect(bounds(needs.and_then(|n| n.depth), units));
-                let mut area = area_bounds(space.area).intersect(area_bounds(needs.and_then(|n| n.area)));
+                let (own_width, own_depth) = (bounds(space.width, units), bounds(space.depth, units));
+                let need_width = bounds(needs.and_then(|n| n.width), units);
+                let need_depth = bounds(needs.and_then(|n| n.depth), units);
+                let need_area = area_bounds(needs.and_then(|n| n.area));
+                let mut own_area = area_bounds(space.area);
                 // A space with a plan and no size of its own is sized by what's inside it.
                 if let (Some(plan), None, None, None) = (&space.plan, space.area, space.width, space.depth) {
-                    area = area.intersect(program_area(plan, units));
+                    own_area = own_area.intersect(program_area(plan, units));
                 }
+                // Walls stand between a space's size and its plan's clear needs. Until the engine
+                // has neighbours to ask, the thickest wall is the estimate.
+                let clear = Clear {
+                    own_width,
+                    own_depth,
+                    own_area,
+                    width: need_width,
+                    depth: need_depth,
+                    area: need_area,
+                };
+                let thickest = if needs.is_some() { super::build::thickest(plan, units) } else { 0.0 };
+                let clear = (thickest > 0.0 && !space.fill && !space.is_fixture() && clear.binds(thickest))
+                    .then_some(clear);
+                let width = Clear::gross(own_width, need_width, thickest, thickest);
+                let depth = Clear::gross(own_depth, need_depth, thickest, thickest);
+                let grow = |v: f64| if thickest > 0.0 { (v.sqrt() + thickest).powi(2) } else { v };
+                let area = own_area.intersect(Bounds1 {
+                    min: if need_area.min > 0.0 { grow(need_area.min) } else { 0.0 },
+                    max: if need_area.max.is_finite() { grow(need_area.max) } else { need_area.max },
+                });
                 let pins = space.at.as_ref().map(|a| a.points(units)).unwrap_or_default();
                 let (min, max) = if pins.is_empty() {
                     (space.count.min(), space.count.max())
@@ -124,9 +189,42 @@ impl SpaceType {
                     max,
                     pins,
                     row,
+                    clear,
                 }
             })
             .collect()
+    }
+
+    /// The limits a gross size is held to: its own, once its plan's are checked in the clear.
+    pub fn gross_limits(&self) -> (Bounds1, Bounds1, Bounds1) {
+        match &self.clear {
+            Some(c) => (c.own_width, c.own_depth, c.own_area),
+            None => (self.width, self.depth, self.area),
+        }
+    }
+
+    /// What a neighbour says about the wall to it, seen from this space: a door to circulation
+    /// is an entrance; a zone facing open floor (the fill or another zone) has no wall there; a
+    /// neighbour can say what its walls are (`walls = 'wet`).
+    pub fn roles_from(&self, other: &SpaceType, other_is_fill: bool, door: bool) -> Vec<String> {
+        use crate::plan::SpaceKind;
+        if self.space.kind == SpaceKind::Zone && (other_is_fill || other.space.kind == SpaceKind::Zone) {
+            return vec![super::ports::OPEN.to_owned()];
+        }
+        let mut roles = Vec::new();
+        if door {
+            // A door from circulation or open ground is a way in; from another room, a link.
+            let way_in = matches!(other.space.kind, SpaceKind::Circulation | SpaceKind::Zone);
+            roles.push(if way_in { "entrance" } else { "link" }.to_owned());
+        }
+        match other.space.walls.as_ref() {
+            Some(w) => roles.extend(w.roles()),
+            None => {
+                let same = other.key == self.key && self.space.plan.is_some();
+                roles.push(if same { "party" } else { "partition" }.to_owned());
+            }
+        }
+        roles
     }
 
     /// The area to aim for when nothing else says.
