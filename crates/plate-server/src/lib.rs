@@ -60,7 +60,7 @@ use plate_core::Diagnostic;
 use serde::Deserialize;
 use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
-use tower_http::set_header::SetResponseHeader;
+use tower_http::set_header::{SetResponseHeader, SetResponseHeaderLayer};
 
 #[derive(Debug, Deserialize)]
 pub struct SourceRequest {
@@ -105,6 +105,11 @@ pub fn app_with(web_dir: Option<PathBuf>, projects: Option<projects::Projects>) 
         })
         .with_state(state);
 
+    // Nothing the API says is to be kept, unless it says otherwise (thumbnails do).
+    let api = api.layer(SetResponseHeaderLayer::if_not_present(
+        header::CACHE_CONTROL,
+        header::HeaderValue::from_static("no-store"),
+    ));
     let router = Router::new().nest("/api", api);
     match web_dir {
         Some(dir) if dir.join("index.html").exists() => {
@@ -639,6 +644,7 @@ mod tests {
         let res = app_with(Some(web.clone()), None).oneshot(get("/api/files")).await.unwrap();
         assert_eq!(res.status(), StatusCode::NOT_FOUND);
         assert!(res.headers()[header::CONTENT_TYPE].to_str().unwrap().contains("json"));
+        assert_eq!(res.headers()[header::CACHE_CONTROL], "no-store", "API answers aren't kept");
         let res = app_with(Some(web.clone()), None).oneshot(get("/")).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK, "the app's page is still served");
         assert_eq!(res.headers()[header::CACHE_CONTROL], "no-cache", "and never reused unchecked");
@@ -662,6 +668,7 @@ mod tests {
         // Thumbnails: drawn once per content, then a 304.
         let res = app().oneshot(get("/api/projects/commercial/thumbnail")).await.unwrap();
         assert_eq!(res.status(), StatusCode::OK);
+        assert_eq!(res.headers()[header::CACHE_CONTROL], "no-cache", "thumbnails revalidate");
         let tag = res.headers()[header::ETAG].clone();
         let again = Request::get("/api/projects/commercial/thumbnail")
             .header(header::IF_NONE_MATCH, tag)

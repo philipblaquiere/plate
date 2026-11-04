@@ -365,13 +365,20 @@ async function runSolve(): Promise<void> {
     }
   } catch (err) {
     if ((err as Error).name === "AbortError" || seq !== solveSeq) return;
-    // The file is valid; only the solver is unreachable (it may still be compiling).
     setDiagnostics([]);
-    setStatus("offline", "Waiting for engine");
     $("sb-engine").textContent = "";
-    if (!lastLayout) showEmpty((err as Error).message);
-    window.clearTimeout(debounce);
-    debounce = window.setTimeout(runSolve, 1500);
+    if (err instanceof api.ApiUnavailable) {
+      // The file is valid; only the solver is unreachable (it may still be compiling).
+      setStatus("offline", "Waiting for engine");
+      if (!lastLayout) showEmpty(err.message);
+      window.clearTimeout(debounce);
+      debounce = window.setTimeout(runSolve, 1500);
+    } else {
+      // A bug, not a wait: say so, and don't keep trying the same thing.
+      console.error(err);
+      setStatus("error", "Something went wrong");
+      showEmpty(`Something went wrong drawing ${main}: ${(err as Error).message}`);
+    }
   } finally {
     window.clearTimeout(slow);
     updateSheetFile();
@@ -2224,8 +2231,14 @@ async function loadWorkspace(): Promise<{ main: string | null }> {
       }
       return await openStartingProject(listing);
     } catch (err) {
-      setStatus("offline", "Waiting for engine");
-      showEmpty(`${(err as Error).message} The files are loaded from the workspace folder it serves.`);
+      if (err instanceof api.ApiUnavailable) {
+        setStatus("offline", "Waiting for engine");
+        showEmpty(`${err.message} The files are loaded from the workspace folder it serves.`);
+      } else {
+        console.error(err);
+        setStatus("error", "Something went wrong");
+        showEmpty(`Something went wrong opening the project: ${(err as Error).message}`);
+      }
       await new Promise((r) => setTimeout(r, 1500));
     }
   }

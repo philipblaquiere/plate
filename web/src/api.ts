@@ -8,6 +8,7 @@ export type ConfigData = Record<string, unknown>;
 async function post(path: string, body: unknown, signal?: AbortSignal): Promise<Response> {
   try {
     return await fetch(`/api${path}`, {
+      cache: "no-store",
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(body),
@@ -22,7 +23,9 @@ async function post(path: string, body: unknown, signal?: AbortSignal): Promise<
 async function json<T>(res: Response): Promise<T> {
   // The Vite proxy answers with a non-JSON error page while the engine is down or compiling.
   if (!res.headers.get("content-type")?.includes("application/json")) {
-    throw new ApiUnavailable("Waiting for the plate engine. The first build takes a few minutes.");
+    throw new ApiUnavailable(
+      `Waiting for the plate engine (${res.url} answered ${res.status}). The first build takes a few minutes.`,
+    );
   }
   return (await res.json()) as T;
 }
@@ -96,14 +99,16 @@ const projectUrl = (name: string) => `/projects/${encodeURIComponent(name)}`;
 
 async function files<T>(res: Response): Promise<T> {
   const body = (await res.json().catch(() => null)) as ({ ok: boolean; error?: string } & T) | null;
-  if (!body) throw new ApiUnavailable("Waiting for the plate engine.");
+  if (!body) throw new ApiUnavailable(`Waiting for the plate engine (${res.url} answered ${res.status}).`);
   if (!res.ok || body.ok === false) throw new Error(body.error ?? `request failed (${res.status})`);
   return body;
 }
 
 async function call(path: string, init?: RequestInit): Promise<Response> {
   try {
-    return await fetch(`/api${path}`, init);
+    // Never from the browser's cache: the files on disk are the answer, and an answer kept from
+    // an older server (its web page, say) would otherwise be believed for days.
+    return await fetch(`/api${path}`, { cache: "no-store", ...init });
   } catch {
     throw new ApiUnavailable("Waiting for the plate engine. Start it with `npm run dev`.");
   }
