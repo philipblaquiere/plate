@@ -60,6 +60,7 @@ use plate_core::Diagnostic;
 use serde::Deserialize;
 use serde_json::json;
 use tower_http::services::{ServeDir, ServeFile};
+use tower_http::set_header::SetResponseHeader;
 
 #[derive(Debug, Deserialize)]
 pub struct SourceRequest {
@@ -98,15 +99,31 @@ pub fn app_with(web_dir: Option<PathBuf>, projects: Option<projects::Projects>) 
         .route("/projects/{project}/rename", post(rename_file))
         .route("/projects/{project}/folders", post(make_folder))
         .route("/projects/{project}/folders/{*path}", axum::routing::delete(remove_folder))
+        // Not the web app's page: a page from an older build would take that for an answer.
+        .fallback(|| async {
+            (StatusCode::NOT_FOUND, Json(json!({ "ok": false, "error": "no such API route" })))
+        })
         .with_state(state);
 
     let router = Router::new().nest("/api", api);
     match web_dir {
         Some(dir) if dir.join("index.html").exists() => {
             let index = dir.join("index.html");
-            router.fallback_service(ServeDir::new(dir).fallback(ServeFile::new(index)))
+            // Always ask whether the page is current (an unchanged file costs a 304): left to
+            // guess, a browser keeps an old page for days, and it calls routes long gone.
+            let web = SetResponseHeader::overriding(
+                ServeDir::new(dir).fallback(ServeFile::new(index)),
+                header::CACHE_CONTROL,
+                header::HeaderValue::from_static("no-cache"),
+            );
+            router.fallback_service(web)
         }
-        _ => router,
+        _ => router.fallback(|| async {
+            (
+                StatusCode::NOT_FOUND,
+                "This is the plate API. In development the app is at http://localhost:5173. `npm start` serves it here.",
+            )
+        }),
     }
 }
 
@@ -614,6 +631,18 @@ mod tests {
                 .unwrap()
         };
         let get = |uri: &str| Request::get(uri).body(Body::empty()).unwrap();
+
+        // An unknown API route says so, as JSON, even with a web app to fall back on.
+        let web = std::env::temp_dir().join(format!("plate-web-{}", std::process::id()));
+        std::fs::create_dir_all(&web).unwrap();
+        std::fs::write(web.join("index.html"), "<!doctype html>").unwrap();
+        let res = app_with(Some(web.clone()), None).oneshot(get("/api/files")).await.unwrap();
+        assert_eq!(res.status(), StatusCode::NOT_FOUND);
+        assert!(res.headers()[header::CONTENT_TYPE].to_str().unwrap().contains("json"));
+        let res = app_with(Some(web.clone()), None).oneshot(get("/")).await.unwrap();
+        assert_eq!(res.status(), StatusCode::OK, "the app's page is still served");
+        assert_eq!(res.headers()[header::CACHE_CONTROL], "no-cache", "and never reused unchecked");
+        let _ = std::fs::remove_dir_all(&web);
 
         // A new workspace holds nothing; the examples are on offer.
         let (status, body) = send(get("/api/projects")).await;

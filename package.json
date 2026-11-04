@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -k -n api,web -c yellow,cyan \"npm:dev:api\" \"npm:dev:web\"",
     "predev": "npm install --no-audit --no-fund --loglevel=error && npm run build:wasm",
-    "dev:api": "cargo run -p plate-server --bin plate -- serve",
+    "dev:api": "cargo run -p plate-server --bin plate -- serve --web none",
     "dev:web": "vite",
     "build:wasm": "node scripts/build-wasm.mjs",
     "build": "npm run build:wasm && tsc --noEmit -p web && vite build",

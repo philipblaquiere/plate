@@ -102,6 +102,9 @@ The wasm build takes about 2 minutes from cold; give it a long timeout. The dev 
 - **Switching order.** `workbench.leaveProject()` first (it saves cursors and empties the groups),
   then `store.open(name, { announce: false })`, then `showProject`, which calls `enterProject`. While
   `switching` is set, the workbench neither persists nor closes tabs of files it can't find.
+- **`web/dist` goes stale.** It's only rebuilt by `npm run build` or `npm start`, so `npm run dev` doesn't
+  serve it on `:7878` (`--web none`): an old page there polls routes that no longer exist. In
+  development the app is on `:5173`.
 - **Windows paths.** `canonicalize` gives `\\?\C:\…` paths, where `/` and `..` mean nothing: walk
   import specs part by part (`import_target` in `main.rs`). Nickel's in-memory root needs a drive on
   native Windows (`ROOT` in `plate-config`).
