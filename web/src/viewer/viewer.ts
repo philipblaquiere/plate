@@ -1,5 +1,6 @@
 import type { Element, Layout, Point, System, Units } from "../types";
 import { degrees, Lengths } from "./format";
+import { doorSymbol } from "./door";
 import {
   edgeNormal,
   isNoop,
@@ -1451,7 +1452,7 @@ export class Viewer {
     }
   }
 
-  /** Doors as a gap with a swing; windows as a thin double line in the wall. */
+  /** Doors as a gap with jambs, an open leaf and its swing; windows as a thin double line in the wall. */
   private renderOpenings(parent: SVGElement): void {
     const byId = new Map(this.layout!.elements.map((e) => [e.id, e]));
     const g = el("g", { class: "openings" }, parent);
@@ -1485,21 +1486,21 @@ export class Viewer {
         );
         continue;
       }
-      // The leaf swings into the first space it connects.
+      // The leaf opens into the first space it connects.
       const into = o.opening?.between[0];
       const space = into ? byId.get(into) : undefined;
-      const c = space ? centroid(space.points.map((p) => this.toScreen(p))) : null;
-      const ux = (b.x - a.x) / len;
-      const uy = (b.y - a.y) / len;
-      let [nx, ny] = [-uy, ux];
-      if (c && (c.x - a.x) * nx + (c.y - a.y) * ny < 0) [nx, ny] = [-nx, -ny];
-      const leaf = { x: a.x + nx * len, y: a.y + ny * len };
-      const sweep = ux * ny - uy * nx > 0 ? 1 : 0;
+      const room = space ? space.points.map((p) => this.toScreen(p)) : null;
+      const d = doorSymbol(a, b, room, depth ? depth - 1 : 0);
+      if (!d) continue;
+      const door = el("g", { class: "door" }, g);
+      el("path", { d: d.sweep, class: "door-sweep" }, door);
+      el("path", { d: d.swing, class: "door-swing" }, door);
       el(
         "path",
-        { d: `M${a.x},${a.y}L${leaf.x},${leaf.y}A${len},${len} 0 0 ${sweep} ${b.x},${b.y}`, class: "door" },
-        g,
+        { d: d.jambs.map(([p, q]) => `M${p.x},${p.y}L${q.x},${q.y}`).join(""), class: "door-jamb" },
+        door,
       );
+      el("polygon", { points: d.leaf.map((p) => `${p.x},${p.y}`).join(" "), class: "door-leaf" }, door);
     }
   }
 
