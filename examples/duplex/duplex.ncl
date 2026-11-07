@@ -10,14 +10,19 @@
 # - plumbing claims what it needs, and the solver makes room: a plumbing wall in every wet room,
 #   water fixtures against it, drains no further than 4 m from a stack.
 #
-# Pick a service above the drawing to see it on its own: its parts, and its circuits or runs.
+# - power's circuits are sized from what's on them: the range and the dryer (plans/flat.ncl) say
+#   what they need (`load`), and each cable is the thinnest of the code's cable that carries it.
+#
+# Pick a service above the drawing to see it on its own: its parts, and where its cables run (in
+# the walls, over the doors, across the ceilings). Press A there for the schematic.
 
 let flat_plan = import "plans/flat.ncl" in
 {
   name = "Duplex",
   system = 'imperial, # lengths shown in feet and inches
   units = 'ft, # plain numbers are feet, in this file and the plan
-  seed = 25,
+  seed = 4,
+  height = "8 ft", # floor to ceiling: how far a cable climbs to reach the ceiling
   start = {
     mode = 'boundary,
     points = [[0, 0], [60, 0], [60, 36], [0, 36]],

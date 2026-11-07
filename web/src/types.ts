@@ -89,6 +89,8 @@ export interface WallInfo {
   because: string;
   /** Its centreline. */
   line: [Point, Point];
+  /** Whether services' runs may pass through it. */
+  cross?: "yes" | "firestop" | "no";
 }
 
 /** A part a service placed (elements of kind "part"). */
@@ -104,10 +106,46 @@ export interface PartInfo {
   placed: string;
   /** Its group in a network (a circuit), once connected. */
   group?: string;
-  /** The network that group is in: group numbers start over in each. */
+  /** The network that group is in. */
   network?: string;
+  /** The service whose circuit powers it, when that's another service: it's drawn in that
+   * service's view too. */
+  fedBy?: string;
+  /** What it draws. */
+  load?: Load;
   /** Where it stands. */
   at: Point;
+}
+
+/** What a terminal asks of a service: for power, a current at a voltage. */
+export interface Load {
+  current?: number;
+  watts?: number;
+  voltage?: number;
+  conductors?: number;
+}
+
+/** A point of note on a routed run. */
+export interface RunMark {
+  at: Point;
+  /** `riser`: up or down a wall; `cross`: through a wall; `firestop`: through a fire separation. */
+  kind: "riser" | "cross" | "firestop";
+  /** Along the wall it passes through. */
+  along?: Point;
+}
+
+/** One group of a network (a circuit), for a panel schedule. */
+export interface Circuit {
+  service: string;
+  network: string;
+  scope: string;
+  group: string;
+  rating?: number;
+  voltage?: number;
+  medium?: string;
+  devices: [string, number][];
+  load: number;
+  length: number;
 }
 
 /** A run of a service's network (elements of kind "run"). */
@@ -115,9 +153,26 @@ export interface RunInfo {
   service: string;
   network: string;
   group?: string;
-  /** The last leg toward the source: drawn with an arrow. */
+  /** The last leg toward the source: drawn with an arrow (arcs), or numbered where it starts
+   * (routed). */
   home?: boolean;
+  /** The schematic (`arcs`) or where it runs (`routed`); both are made. */
   draw: "arcs" | "routed";
+  /** The drawing its network didn't ask for: left out of exports. */
+  alt?: boolean;
+  /** Routed: where this piece goes. */
+  along?: "wall" | "header" | "ceiling" | "drop";
+  /** The cable it's a piece of, and that cable's length. */
+  cable?: number;
+  length?: number;
+  /** What it's made of (`"14/2"`), and its jacket's colour. */
+  medium?: string;
+  colour?: "white" | "black" | "grey" | "red" | "yellow" | "orange" | "blue";
+  /** A switch leg, not a circuit. */
+  control?: boolean;
+  /** The service whose circuit powers it, when that's another service. */
+  fedBy?: string;
+  marks?: RunMark[];
 }
 
 /** A symbol drawn in a space: flattened paths in drawing units. */
@@ -190,6 +245,8 @@ export interface Layout {
   units: Units;
   elements: Element[];
   bounds: Bounds;
+  /** Every circuit of every network, for a panel schedule. */
+  circuits?: Circuit[];
 }
 
 export interface Span {

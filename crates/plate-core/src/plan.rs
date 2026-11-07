@@ -227,6 +227,10 @@ pub struct Space {
     /// Labels rules and services select it by (`"#sleep"`), whatever it's called.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    /// Fixtures: what it asks of each service, by service name (`load.power`). Only read once
+    /// the plan is solved: left out of the fingerprint, like `symbol`.
+    #[serde(default, skip_serializing)]
+    pub load: BTreeMap<String, crate::service::Load>,
 }
 
 fn yes() -> bool {

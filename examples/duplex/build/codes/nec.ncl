@@ -5,6 +5,7 @@
 # written, not certified.
 
 {
+  media = (import "../media/nm-b.ncl").media, # the cable it's wired with
   params = {
     wall_spacing = "12 ft", # 210.52(A)(1): no point along the floor line more than 6 ft from a receptacle
     usable_wall = "2 ft", # 210.52(A)(2): walls 2 ft wide or more count

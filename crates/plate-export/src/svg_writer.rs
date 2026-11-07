@@ -49,7 +49,7 @@ pub fn to_svg(layout: &Layout) -> String {
         r##"  <g transform="scale(1,-1)" fill="none" stroke="#1d2125" stroke-width="{}">"##,
         num(stroke)
     );
-    for element in &layout.elements {
+    for element in layout.elements.iter().filter(|e| e.exported()) {
         let points: Vec<String> =
             element.points.iter().map(|p| format!("{},{}", num(p.x), num(p.y))).collect();
         let (id, layer) = (escape(&element.id), escape(&element.cad_layer()));
@@ -156,12 +156,37 @@ pub fn to_svg(layout: &Layout) -> String {
                 writeln!(svg, "{g}</g>")
             }
             ElementKind::Run => {
-                let dash = "";
+                // Coloured by its medium's jacket; dashed where it isn't low in a wall.
+                let run = element.run.as_ref();
+                let colour = match run.and_then(|r| r.colour) {
+                    Some("white") => "#8d8d8d",
+                    Some("black") => "#222222",
+                    Some("grey") => "#6f7780",
+                    Some("red") => "#c8442c",
+                    Some("yellow") => "#d9a400",
+                    Some("orange") => "#e07b1f",
+                    Some("blue") => "#2f6fd0",
+                    _ => "#5b4fb3",
+                };
+                let control = run.is_some_and(|r| r.control);
+                let dash = match run.and_then(|r| r.along) {
+                    _ if control => {
+                        format!(r#" stroke-dasharray="{} {}""#, num(stroke * 2.0), num(stroke * 1.5))
+                    }
+                    Some("ceiling") => {
+                        format!(r#" stroke-dasharray="{} {}""#, num(stroke * 6.0), num(stroke * 3.0))
+                    }
+                    Some("header") => {
+                        format!(r#" stroke-dasharray="{} {}""#, num(stroke * 3.0), num(stroke * 2.0))
+                    }
+                    _ => String::new(),
+                };
+                let width = if control { 0.5 } else { 0.8 };
                 writeln!(
                     svg,
-                    r##"    <polyline id="{id}" data-layer="{layer}" points="{}" stroke="#5b4fb3" stroke-width="{}"{dash} />"##,
+                    r##"    <polyline id="{id}" data-layer="{layer}" points="{}" stroke="{colour}" stroke-width="{}"{dash} />"##,
                     points.join(" "),
-                    num(stroke * 0.6)
+                    num(stroke * width)
                 )
             }
             ElementKind::Door | ElementKind::Window => {

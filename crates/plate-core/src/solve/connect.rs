@@ -1,25 +1,31 @@
 //! The connect pass: each service's networks, once its parts are placed.
 //!
-//! A network (`connect`) joins parts (or tagged fixtures) back to a source, one network per
-//! scope (a panel per flat). Terminals are taken in order, room by room from the source out, and
-//! cut into groups of at most `max` (circuits). A network is drawn one of two ways:
+//! A **feed** network (`connect`, the default role) joins terminals (parts, or tagged fixtures)
+//! back to a source, one network per scope (a panel per flat). Terminals are taken room by room
+//! from the source out and cut into groups (circuits) by `max`, by load (at most 80 % of the
+//! breaker) and by voltage; `dedicated` terminals get a group each. Each group is a tree: its
+//! terminals joined by the shortest runs between them (boxes branch, as real ones do), plus one
+//! home run back to the source. Each joint of the tree is one cable, made of the thinnest medium
+//! that meets its group's breaker and conductors (or the one a `feed` or the network names).
 //!
-//! - `'arcs`, the electrical convention: an arc from part to part in a group and a home run
-//!   toward the source, numbered. Each wall part must still be on a wall it can run in.
-//! - `'routed`: along the walls it can run in (a cavity at least `via.cavity` deep) and across the
-//!   ceilings of the spaces `via.ceilings` names, by the shortest way, each run checked against
-//!   `limit`.
+//! A **control** network (`role = 'control`) joins, in each room, its switches to the lights
+//! they control. The lights' load goes on the circuit of the room's first switch, and they're
+//! drawn in that circuit's service view as well as their own.
+//!
+//! Runs are laid on [`super::route`]: in the walls, up over doors, across ceilings. Every
+//! network is also drawn as the schematic (`'arcs`, the electrical convention); `draw` says which
+//! one exports keep.
 
-use std::cmp::Ordering;
-use std::collections::BinaryHeap;
+use std::collections::{BTreeMap, HashMap};
 
-use crate::geometry::{interior_point, point_segment_distance, Point};
-use crate::layout::{Element, ElementKind, RunInfo};
+use crate::geometry::{point_segment_distance, Point};
+use crate::layout::{Circuit, Element, ElementKind, RunInfo, RunMark};
 use crate::plan::{tag_of, Selector};
-use crate::service::{Draw, Network};
+use crate::service::{Draw, Feed, Load, Medium, Network, Role};
 
 use super::fit::{Instance, Issues, Model, Placed};
 use super::num;
+use super::route::{Along, Edge, Route, Spot};
 
 /// Something a network joins: a placed part, or a fixture.
 #[derive(Debug, Clone)]
@@ -28,11 +34,32 @@ struct Node {
     room: String,
     label: String,
     part: Option<usize>,
+    /// The fixture it is, or is on (an element index).
+    fixture: Option<usize>,
     /// The room it's in, as an index into the model's rooms.
     in_room: Option<usize>,
     /// The face it's against (room index, face index), if it's against a wall.
     face: Option<(usize, usize)>,
+    ceiling: bool,
+    above: Option<f64>,
+    load: Option<Load>,
 }
+
+impl Node {
+    fn spot(&self) -> Spot {
+        Spot { at: self.at, face: self.face, room: self.in_room, above: self.above, ceiling: self.ceiling }
+    }
+}
+
+/// Shortest ways from one node: distances, and the way back.
+type Ways = (Vec<f64>, Vec<Option<(usize, usize)>>);
+
+/// Standard breaker sizes, in amps.
+const BREAKERS: &[f64] = &[15.0, 20.0, 25.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0, 100.0];
+/// A circuit carries at most this share of its breaker (continuous loads).
+const CONTINUOUS: f64 = 0.8;
+/// Cables side by side in one cavity are drawn this far apart.
+const LANE_MM: f64 = 25.0;
 
 pub fn run(
     model: &Model,
@@ -40,16 +67,79 @@ pub fn run(
     placed: &mut [Placed],
     elements: &mut Vec<Element>,
     issues: &mut Issues,
-) {
-    let mut runs: Vec<Element> = Vec::new();
-    for inst in instances {
-        for (ni, net) in inst.def.connect.iter().enumerate() {
-            let pointer = format!("{}/connect/{ni}", inst.def.source.clone().unwrap_or_default());
-            let job = Job { model, inst, ni, net, pointer: &pointer };
-            job.connect(placed, elements, &mut runs, issues);
+) -> Vec<Circuit> {
+    // A part on a fixture with no load of its own takes the fixture's, for its service.
+    for p in placed.iter_mut() {
+        if p.load.is_none() {
+            if let Some(info) = p.fixture.and_then(|f| elements[f].space.as_ref()) {
+                p.load = info.load.get(&p.service).copied();
+            }
         }
     }
-    elements.extend(runs);
+    let mut out = Out::default();
+    // Switches and what they control, per room.
+    let controls = controls(model, instances, placed, elements);
+    for c in &controls {
+        let lights: f64 = c.lights.iter().filter_map(|&k| placed[k].load).map(|l| l.amps()).sum();
+        if let Some(&first) = c.switches.first() {
+            *out.extra.entry(first).or_default() += lights;
+        }
+    }
+    for inst in instances {
+        let mut number = 0;
+        for (ni, net) in inst.def.connect.iter().enumerate() {
+            if net.role != Role::Feed {
+                continue;
+            }
+            let pointer = format!("{}/connect/{ni}", inst.def.source.clone().unwrap_or_default());
+            let job = Job { model, inst, ni, net, pointer: &pointer, pool: pool(inst, net, instances) };
+            job.feed(placed, elements, &mut out, issues, &mut number);
+        }
+    }
+    // Control networks, once the circuits that feed them are known.
+    let mut by_net: BTreeMap<(usize, usize), Vec<&Control>> = BTreeMap::new();
+    for c in &controls {
+        by_net.entry((c.inst, c.ni)).or_default().push(c);
+    }
+    for ((ii, ni), list) in by_net {
+        let inst = &instances[ii];
+        let net = &inst.def.connect[ni];
+        let pointer = format!("{}/connect/{ni}", inst.def.source.clone().unwrap_or_default());
+        let job = Job { model, inst, ni, net, pointer: &pointer, pool: pool(inst, net, instances) };
+        job.control(&list, placed, elements, &mut out);
+    }
+    elements.extend(out.runs);
+    out.circuits
+}
+
+/// What the pass builds up.
+#[derive(Default)]
+struct Out {
+    runs: Vec<Element>,
+    circuits: Vec<Circuit>,
+    /// Load a part carries for others (a switch, its room's lights), in amps.
+    extra: BTreeMap<usize, f64>,
+    /// The circuit feeding a part of another service: (service, network, group, breaker).
+    fed: BTreeMap<usize, (String, String, String, Option<f64>)>,
+    /// Cables already drawn along each stretch, to draw the next beside them.
+    lanes: HashMap<(i64, i64, i64, i64, u8), u32>,
+    /// Cables drawn so far.
+    cables: u32,
+}
+
+/// The media a network can use: its service's own. A control network with none uses another
+/// service's in scope (the switch legs of lighting are wired with power's cable).
+fn pool<'a>(inst: &'a Instance, net: &Network, instances: &'a [Instance]) -> &'a BTreeMap<String, Medium> {
+    if !inst.def.media.is_empty() || net.role != Role::Control {
+        return &inst.def.media;
+    }
+    instances
+        .iter()
+        .find(|i| {
+            !i.def.media.is_empty()
+                && (inst.prefix.starts_with(&i.prefix) || i.prefix.starts_with(&inst.prefix))
+        })
+        .map_or(&inst.def.media, |i| &i.def.media)
 }
 
 /// The parts and fixtures in this instance a selector names.
@@ -83,8 +173,12 @@ fn nodes(
                             room: room.path.clone(),
                             label: info.label.clone(),
                             part: None,
+                            fixture: Some(f.element),
                             in_room: Some(r),
                             face,
+                            ceiling: false,
+                            above: None,
+                            load: info.load.get(&inst.service).copied(),
                         });
                     }
                 }
@@ -94,14 +188,57 @@ fn nodes(
         let (service, part) = item.split_once('.').unwrap_or((inst.service.as_str(), item));
         for (k, p) in placed.iter().enumerate() {
             if p.service == service && p.part == part && inst.covers(&p.room) {
-                out.push(Node {
-                    at: p.at,
-                    room: p.room.clone(),
-                    label: p.part.replace('_', " "),
-                    part: Some(k),
-                    in_room: model.rooms.iter().position(|r| r.path == p.room),
-                    face: p.face,
-                });
+                out.push(part_node(model, k, p));
+            }
+        }
+    }
+    out
+}
+
+fn part_node(model: &Model, k: usize, p: &Placed) -> Node {
+    Node {
+        at: p.at,
+        room: p.room.clone(),
+        label: p.label.clone(),
+        part: Some(k),
+        fixture: p.fixture,
+        in_room: model.rooms.iter().position(|r| r.path == p.room),
+        face: p.face,
+        ceiling: p.mount == crate::service::Mount::Ceiling,
+        above: p.above,
+        load: p.load,
+    }
+}
+
+/// One room's switches and the lights they control, for a control network.
+struct Control {
+    inst: usize,
+    ni: usize,
+    switches: Vec<usize>,
+    lights: Vec<usize>,
+}
+
+fn controls(model: &Model, instances: &[Instance], placed: &[Placed], elements: &[Element]) -> Vec<Control> {
+    let mut out = Vec::new();
+    for (ii, inst) in instances.iter().enumerate() {
+        for (ni, net) in inst.def.connect.iter().enumerate().filter(|(_, n)| n.role == Role::Control) {
+            let from = nodes(model, inst, &net.from, placed, elements);
+            let to = nodes(model, inst, &net.to, placed, elements);
+            let mut rooms: Vec<&str> = to.iter().map(|n| n.room.as_str()).collect();
+            rooms.dedup();
+            let mut seen: Vec<&str> = Vec::new();
+            for room in rooms {
+                if seen.contains(&room) {
+                    continue;
+                }
+                seen.push(room);
+                let switches: Vec<usize> =
+                    from.iter().filter(|n| n.room == room).filter_map(|n| n.part).collect();
+                let lights: Vec<usize> =
+                    to.iter().filter(|n| n.room == room).filter_map(|n| n.part).collect();
+                if !switches.is_empty() && !lights.is_empty() {
+                    out.push(Control { inst: ii, ni, switches, lights });
+                }
             }
         }
     }
@@ -114,15 +251,76 @@ struct Job<'a> {
     ni: usize,
     net: &'a Network,
     pointer: &'a str,
+    pool: &'a BTreeMap<String, Medium>,
+}
+
+/// A group being formed: a circuit.
+struct Group {
+    members: Vec<usize>,
+    volts: f64,
+    /// Whether any member says what it draws.
+    loaded: bool,
+    load: f64,
+    rating: Option<f64>,
+    conductors: u32,
+    /// A medium a feed asks for, and the feed's pointer.
+    medium: Option<(String, String)>,
+    dedicated: bool,
+}
+
+/// One cable to draw: its pieces, where it turns up or through a wall, and its length.
+struct Laid {
+    pieces: Vec<(Along, Vec<Point>)>,
+    marks: Vec<RunMark>,
+    length: f64,
 }
 
 impl Job<'_> {
-    fn connect(
+    fn network(&self) -> String {
+        self.net.label.clone().unwrap_or_else(|| self.inst.service.clone())
+    }
+
+    /// Does a feed select this terminal?
+    fn selects(&self, f: &Feed, t: &Node, placed: &[Placed], elements: &[Element]) -> bool {
+        if f.network.as_ref().is_some_and(|n| Some(n) != self.net.label.as_ref()) {
+            return false;
+        }
+        let fixture = t.fixture.and_then(|e| elements[e].space.as_ref());
+        f.feed.items().iter().any(|item| {
+            if let Some(info) = fixture {
+                let one = Selector::One((*item).to_owned());
+                if one.matches_tagged(&info.name, &info.type_key, &info.tags, info.kind) {
+                    return true;
+                }
+            }
+            t.part.is_some_and(|k| {
+                let p = &placed[k];
+                let (service, part) = item.split_once('.').unwrap_or((self.inst.service.as_str(), item));
+                p.service == service && p.part == part
+            })
+        })
+    }
+
+    /// The thinnest medium with at least this rating and these conductors.
+    fn thinnest(&self, rating: Option<f64>, conductors: u32) -> Option<String> {
+        self.pool
+            .iter()
+            .filter(|(_, m)| m.rating.0 + 1e-9 >= rating.unwrap_or(0.0) && m.conductors >= conductors)
+            .min_by(|a, b| a.1.rating.0.total_cmp(&b.1.rating.0).then(a.1.conductors.cmp(&b.1.conductors)))
+            .map(|(k, _)| k.clone())
+    }
+
+    fn colour(&self, medium: Option<&str>) -> Option<&'static str> {
+        medium.and_then(|m| self.pool.get(m)).and_then(|m| m.colour).map(|c| c.name())
+    }
+
+    fn feed(
         &self,
         placed: &mut [Placed],
         elements: &[Element],
-        runs: &mut Vec<Element>,
+        out: &mut Out,
         issues: &mut Issues,
+        number: &mut u32,
     ) {
         let (model, inst, net, pointer) = (self.model, self.inst, self.net, self.pointer);
         let units = model.units;
@@ -142,38 +340,8 @@ impl Job<'_> {
             );
             return;
         };
-        let network = net.label.clone().unwrap_or_else(|| inst.service.clone());
-        let need = net.via.cavity.map_or(0.0, |c| c.0.to(units));
-
-        // What's on a wall must be on a wall the network can run in: terminals, and the sources
-        // it uses (arcs start from the one, routed runs from any).
-        let shallow = |t: &Node| {
-            let (r, f) = t.face?;
-            let face = &model.rooms[r].faces[f];
-            (face.cavity + 1e-9 < need).then_some(face)
-        };
-        let starts = if net.draw == Draw::Arcs { &sources[..1] } else { &sources[..] };
-        let mut said: Vec<usize> = Vec::new();
-        for t in starts.iter().chain(&terminals) {
-            let Some(face) = shallow(t) else { continue };
-            // A part can be both a source and a terminal.
-            if let Some(k) = t.part {
-                if said.contains(&k) {
-                    continue;
-                }
-                said.push(k);
-            }
-            let wall = face
-                .wall
-                .and_then(|w| elements[w].wall.as_ref())
-                .map_or_else(|| "it".to_owned(), |w| w.label.clone());
-            issues.add(
-                pointer,
-                format!("a {} is on a wall it can't run in ({wall} has a cavity of {}; it needs {})", t.label, num(face.cavity), num(need)),
-                &t.room,
-                Some("Give that wall's assembly a cavity, or keep the part off it (`wall.cavity` on a `one` placement).".into()),
-            );
-        }
+        let network = self.network();
+        self.shallow(&sources, &terminals, elements, issues);
 
         // Terminals in order: from the source out, room by room.
         let mut order: Vec<usize> = Vec::new();
@@ -194,103 +362,578 @@ impl Job<'_> {
             room = terminals[t].room.clone();
             order.push(t);
         }
-        let size = net.max.map_or(order.len(), |n| n.max(1) as usize).max(1);
-        let groups: Vec<Vec<usize>> = order.chunks(size).map(|c| c.to_vec()).collect();
-        let grouped = net.max.is_some();
-        if grouped {
-            for (g, group) in groups.iter().enumerate() {
-                for &t in group {
-                    if let Some(k) = terminals[t].part {
-                        placed[k].group = Some(format!("{}", g + 1));
-                        placed[k].network = Some(network.clone());
+
+        // Groups: by count, load and voltage; dedicated terminals alone.
+        let feeds: Vec<(usize, &Feed)> = inst.def.feeds.iter().enumerate().collect();
+        let feed_pointer = |i: usize| format!("{}/feeds/{i}", inst.def.source.clone().unwrap_or_default());
+        let max = net.max.map(|n| n.max(1) as usize);
+        let mut groups: Vec<Group> = Vec::new();
+        let mut open: BTreeMap<String, usize> = BTreeMap::new();
+        let extra = out.extra.clone();
+        let amps_of = |t: &Node| {
+            t.load.map_or(0.0, |l| l.amps()) + t.part.and_then(|k| extra.get(&k)).copied().unwrap_or(0.0)
+        };
+        for &t in &order {
+            let node = &terminals[t];
+            let mine: Vec<&(usize, &Feed)> =
+                feeds.iter().filter(|(_, f)| self.selects(f, node, placed, elements)).collect();
+            let dedicated = net.dedicated || mine.iter().any(|(_, f)| f.dedicated);
+            let rating = mine
+                .iter()
+                .filter_map(|(_, f)| f.rating.map(|r| r.0))
+                .fold(None, |a: Option<f64>, r| Some(a.map_or(r, |a| a.max(r))));
+            let medium = mine.iter().find_map(|(i, f)| f.medium.clone().map(|m| (m, feed_pointer(*i))));
+            let amps = amps_of(node);
+            let volts = node.load.map_or(120.0, |l| l.volts());
+            let conductors = node.load.and_then(|l| l.conductors).unwrap_or(2);
+            let key = format!("{volts}|{rating:?}|{medium:?}|{conductors}");
+            let cap = rating.or(net.rating.map(|r| r.0)).map(|r| r * CONTINUOUS);
+            let loaded = node.load.is_some() || amps > 0.0;
+            if !dedicated {
+                if let Some(&g) = open.get(&key) {
+                    let grp = &groups[g];
+                    let room_ok = max.is_none_or(|n| grp.members.len() < n);
+                    let load_ok = cap.is_none_or(|c| grp.load + amps <= c + 1e-9);
+                    if room_ok && load_ok {
+                        let grp = &mut groups[g];
+                        grp.members.push(t);
+                        grp.load += amps;
+                        grp.loaded |= loaded;
+                        continue;
                     }
                 }
             }
+            groups.push(Group {
+                members: vec![t],
+                volts,
+                loaded,
+                load: amps,
+                rating,
+                conductors,
+                medium,
+                dedicated,
+            });
+            if !dedicated {
+                open.insert(key, groups.len() - 1);
+            }
         }
-        let mut push = |points: Vec<Point>, group: Option<String>, home: bool, draw: &'static str| {
-            let mut e = Element::new(
-                format!("run:{}:{}:{scope}#{}", inst.service, self.ni, runs.len()),
-                ElementKind::Run,
-                points,
-                false,
-            );
-            e.source = Some(pointer.to_owned());
-            e.run =
-                Some(RunInfo { service: inst.service.clone(), network: network.clone(), group, home, draw });
-            runs.push(e);
-        };
 
-        match net.draw {
-            Draw::Arcs => {
-                for (g, group) in groups.iter().enumerate() {
-                    let label = grouped.then(|| format!("{}", g + 1));
-                    for pair in group.windows(2) {
-                        push(arc(terminals[pair[0]].at, terminals[pair[1]].at), label.clone(), false, "arcs");
+        // The route, and every group laid on it.
+        let spots: Vec<Spot> = sources.iter().chain(&terminals).map(Node::spot).collect();
+        let route = Route::build(model, inst, &net.via, elements, &spots);
+        let source_ids = &route.spots[..sources.len()];
+        let term_ids = &route.spots[sources.len()..];
+        let starts: Vec<usize> =
+            if net.draw == Draw::Arcs { source_ids[..1].to_vec() } else { source_ids.to_vec() };
+        let (dist0, prev0) = route.shortest(&starts);
+        let limit = net.limit.map(|l| l.0.to(units));
+        for grp in &groups {
+            *number += 1;
+            let label = format!("{number}");
+            // The breaker: as asked, else as the loads need.
+            let biggest = grp.members.iter().map(|&t| amps_of(&terminals[t])).fold(0.0, f64::max);
+            let rating = grp.rating.or(net.rating.map(|r| r.0)).or_else(|| {
+                (grp.load > 0.0).then(|| {
+                    let need = biggest.max(grp.load / CONTINUOUS);
+                    BREAKERS.iter().copied().find(|&b| b + 1e-9 >= need).unwrap_or(need)
+                })
+            });
+            // A terminal asking for a circuit (`current`) asks for that breaker.
+            let rating = match (grp.dedicated, rating) {
+                (true, r) => {
+                    let asked = grp
+                        .members
+                        .iter()
+                        .filter_map(|&t| terminals[t].load.and_then(|l| l.current))
+                        .map(|a| a.0)
+                        .fold(None, |a: Option<f64>, x| Some(a.map_or(x, |a| a.max(x))));
+                    match (grp.rating, asked) {
+                        (Some(r), _) => Some(r),
+                        (None, Some(a)) => Some(a),
+                        (None, None) => r,
                     }
-                    // A home run, toward the source.
-                    let first = terminals[group[0]].at;
-                    let d = first.distance(source.at);
-                    if d > 1e-9 {
-                        let len = (0.6 * m).min(d * 0.5);
-                        let u = Point::new((source.at.x - first.x) / d, (source.at.y - first.y) / d);
-                        push(
-                            vec![first, Point::new(first.x + u.x * len, first.y + u.y * len)],
-                            label,
-                            true,
-                            "arcs",
+                }
+                (false, r) => r,
+            };
+            if let Some(r) =
+                rating.filter(|r| grp.load > r * if grp.dedicated { 1.0 } else { CONTINUOUS } + 1e-9)
+            {
+                let what = &terminals[grp.members[0]].label;
+                issues.add(
+                    pointer,
+                    format!("circuit {label} carries {} A, more than its {} A breaker allows", num(grp.load), num(r)),
+                    &terminals[grp.members[0]].room,
+                    Some(format!("Give the {what} its own circuit (`plate.feed` with `dedicated = true`), or raise the network's `rating`.")),
+                );
+            }
+            // The medium: as asked, else the thinnest that does.
+            let asked =
+                grp.medium.clone().or_else(|| net.medium.clone().map(|m| (m, format!("{pointer}/medium"))));
+            let medium = match asked {
+                Some((name, at)) => {
+                    if let Some(md) = self.pool.get(&name) {
+                        if let Some(r) = rating.filter(|r| md.rating.0 + 1e-9 < *r) {
+                            issues.add(
+                                &at,
+                                format!("{name} is rated {} A, but circuit {label} is on {} A", num(md.rating.0), num(r)),
+                                &terminals[grp.members[0]].room,
+                                Some("Name a heavier medium, or leave `medium` out to pick the thinnest that does.".into()),
+                            );
+                        }
+                        if md.conductors < grp.conductors {
+                            issues.add(
+                                &at,
+                                format!(
+                                    "{name} has {} conductors; circuit {label} needs {}",
+                                    md.conductors, grp.conductors
+                                ),
+                                &terminals[grp.members[0]].room,
+                                None,
+                            );
+                        }
+                    }
+                    Some(name)
+                }
+                None => {
+                    let found = self.thinnest(rating, grp.conductors);
+                    if found.is_none() && !self.pool.is_empty() {
+                        issues.add(
+                            pointer,
+                            format!(
+                                "no medium carries circuit {label}: {} A with {} conductors",
+                                num(rating.unwrap_or(0.0)),
+                                grp.conductors
+                            ),
+                            &terminals[grp.members[0]].room,
+                            Some("Add a heavier medium to the service's `media`.".into()),
+                        );
+                    }
+                    found
+                }
+            };
+            for &t in &grp.members {
+                if let Some(k) = terminals[t].part {
+                    placed[k].group = Some(label.clone());
+                    placed[k].network = Some(network.clone());
+                    if placed[k].service != inst.service {
+                        placed[k].fed_by = Some(inst.service.clone());
+                        out.fed.insert(k, (inst.service.clone(), network.clone(), label.clone(), rating));
+                    }
+                }
+            }
+
+            // The tree: each terminal joined to the nearest one already in it.
+            let ids: Vec<usize> = grp.members.iter().map(|&t| term_ids[t]).collect();
+            let ways: Vec<Ways> = ids.iter().map(|&i| route.shortest(&[i])).collect();
+            let mut joined = vec![false; ids.len()];
+            let mut tree: Vec<(usize, usize)> = Vec::new();
+            let mut homes: Vec<usize> = Vec::new();
+            while let Some(first) = joined.iter().position(|j| !j) {
+                // A new part of the tree starts from whichever is nearest the source.
+                let start = (0..ids.len())
+                    .filter(|&i| !joined[i])
+                    .min_by(|&a, &b| dist0[ids[a]].total_cmp(&dist0[ids[b]]).then(a.cmp(&b)))
+                    .unwrap_or(first);
+                joined[start] = true;
+                homes.push(start);
+                loop {
+                    let next = (0..ids.len())
+                        .filter(|&i| joined[i])
+                        .flat_map(|i| (0..ids.len()).filter(|&j| !joined[j]).map(move |j| (i, j)))
+                        .map(|(i, j)| (i, j, ways[i].0[ids[j]]))
+                        .filter(|x| x.2.is_finite())
+                        .min_by(|a, b| a.2.total_cmp(&b.2).then(a.1.cmp(&b.1)));
+                    let Some((i, j, _)) = next else { break };
+                    joined[j] = true;
+                    tree.push((i, j));
+                }
+            }
+            let mut length = 0.0;
+            let colour = self.colour(medium.as_deref());
+            let info = |home: bool, draw: &'static str| RunInfo {
+                service: inst.service.clone(),
+                network: network.clone(),
+                group: Some(label.clone()),
+                home,
+                draw,
+                alt: (draw == "arcs") != (net.draw == Draw::Arcs),
+                along: None,
+                cable: None,
+                length: None,
+                medium: medium.clone(),
+                colour,
+                control: false,
+                fed_by: None,
+                layer: medium.as_deref().and_then(|m| self.pool.get(m)).and_then(|m| m.layer.clone()),
+                marks: Vec::new(),
+            };
+            for &(i, j) in &tree {
+                let steps = route.path(&ways[i].1, ids[j]);
+                let laid = self.lay(&route, &steps, elements, &mut out.lanes);
+                length += laid.length;
+                self.emit(laid, info(false, "routed"), &scope, out);
+                self.push(
+                    arc(terminals[grp.members[i]].at, terminals[grp.members[j]].at),
+                    info(false, "arcs"),
+                    &scope,
+                    out,
+                );
+            }
+            for &h in &homes {
+                let t = &terminals[grp.members[h]];
+                if dist0[ids[h]].is_finite() {
+                    // From the terminal back to the source, so the cable starts at the circuit.
+                    let mut steps = route.path(&prev0, ids[h]);
+                    reverse(&route, &mut steps, ids[h]);
+                    let laid = self.lay(&route, &steps, elements, &mut out.lanes);
+                    length += laid.length;
+                    self.emit(laid, info(true, "routed"), &scope, out);
+                } else if self.shallow_one(t, elements).is_none() {
+                    let hint = match net.via.ceilings {
+                        Some(_) => "No wall it can run in leads there: give the walls on the way a cavity deep enough.",
+                        None => "No wall it can run in leads there: give the walls on the way a cavity, or let it cross ceilings (`via.ceilings`).",
+                    };
+                    issues.add(
+                        pointer,
+                        format!("can't reach a {} from the {}", t.label, source.label),
+                        &t.room,
+                        Some(hint.into()),
+                    );
+                }
+                // The schematic's home run: an arrow toward the source.
+                let d = t.at.distance(source.at);
+                if d > 1e-9 {
+                    let len = (0.6 * m).min(d * 0.5);
+                    let u = Point::new((source.at.x - t.at.x) / d, (source.at.y - t.at.y) / d);
+                    self.push(
+                        vec![t.at, Point::new(t.at.x + u.x * len, t.at.y + u.y * len)],
+                        info(true, "arcs"),
+                        &scope,
+                        out,
+                    );
+                }
+            }
+            if let Some(limit) = limit {
+                for &t in &grp.members {
+                    let d = dist0[term_ids[t]];
+                    if d.is_finite() && d > limit + 1e-9 {
+                        let what = &terminals[t].label;
+                        issues.add(
+                            pointer,
+                            format!("a {what} is {} from the {} (at most {})", num(d), source.label, num(limit)),
+                            &terminals[t].room,
+                            Some(format!("Bring the {what} closer to the {} (a claim such as `plate.near`), or allow a longer run.", source.label)),
                         );
                     }
                 }
             }
-            Draw::Routed => {
-                // Every source starts a run: each terminal is joined to its nearest one.
-                let graph = Graph::build(model, inst, net, &sources, &terminals, elements, need);
-                let limit = net.limit.map(|l| l.0.to(units));
-                let (dist, prev) = graph.shortest(&graph.sources);
-                for (g, group) in groups.iter().enumerate() {
-                    let label = grouped.then(|| format!("{}", g + 1));
-                    for &t in group {
-                        let node = graph.terminals[t];
-                        let what = &terminals[t].label;
-                        if !dist[node].is_finite() {
-                            // On a wall it can't run in: said already.
-                            if shallow(&terminals[t]).is_some() {
-                                continue;
-                            }
-                            let hint = match net.via.ceilings {
-                                Some(_) => "No wall it can run in leads there: give the walls on the way a cavity deep enough.",
-                                None => "No wall it can run in leads there: give the walls on the way a cavity, or let it cross ceilings (`via.ceilings`).",
-                            };
-                            issues.add(
-                                pointer,
-                                format!("can't reach a {what} from the {}", source.label),
-                                &terminals[t].room,
-                                Some(hint.into()),
-                            );
-                            continue;
-                        }
-                        if let Some(limit) = limit.filter(|l| dist[node] > l + 1e-9) {
-                            issues.add(
-                                pointer,
-                                format!("a {what} is {} from the {} (at most {})", num(dist[node]), source.label, num(limit)),
-                                &terminals[t].room,
-                                Some(format!("Bring the {what} closer to the {} (a claim such as `plate.near`), or allow a longer run.", source.label)),
-                            );
-                        }
-                        let mut path = vec![graph.points[node]];
-                        let mut n = node;
-                        while let Some(p) = prev[n] {
-                            path.push(graph.points[p]);
-                            n = p;
-                        }
-                        path.dedup_by(|a, b| a.distance(*b) < 1e-9);
-                        path.reverse();
-                        push(path, label.clone(), false, "routed");
-                    }
+            let mut devices: Vec<(String, u32)> = Vec::new();
+            for &t in &grp.members {
+                let l = &terminals[t].label;
+                match devices.iter_mut().find(|d| &d.0 == l) {
+                    Some(d) => d.1 += 1,
+                    None => devices.push((l.clone(), 1)),
                 }
+            }
+            out.circuits.push(Circuit {
+                service: inst.service.clone(),
+                network: network.clone(),
+                scope: scope.clone(),
+                group: label,
+                rating,
+                voltage: grp.loaded.then_some(grp.volts),
+                medium,
+                devices,
+                load: grp.load,
+                length,
+            });
+        }
+    }
+
+    /// Switch legs: in each room, its switches and lights joined in a tree.
+    fn control(&self, list: &[&Control], placed: &mut [Placed], elements: &[Element], out: &mut Out) {
+        let (model, inst, net) = (self.model, self.inst, self.net);
+        let network = net.label.clone().unwrap_or_else(|| "Switch legs".into());
+        let scope = inst.space.clone().unwrap_or_default();
+        let mut all: Vec<usize> = Vec::new();
+        for c in list {
+            all.extend(&c.switches);
+            all.extend(&c.lights);
+        }
+        let spots: Vec<Spot> = all.iter().map(|&k| part_node(model, k, &placed[k]).spot()).collect();
+        let route = Route::build(model, inst, &net.via, elements, &spots);
+        let id_of = |k: usize| route.spots[all.iter().position(|&x| x == k).unwrap_or(0)];
+        for c in list {
+            let fed = c.switches.iter().find_map(|k| out.fed.get(k).cloned());
+            for &l in &c.lights {
+                if let Some((service, network, group, _)) = &fed {
+                    placed[l].fed_by = Some(service.clone());
+                    placed[l].group = Some(group.clone());
+                    placed[l].network = Some(network.clone());
+                }
+            }
+            let members: Vec<usize> = c.switches.iter().chain(&c.lights).copied().collect();
+            let ids: Vec<usize> = members.iter().map(|&k| id_of(k)).collect();
+            // A room switched from two places needs travellers: three conductors.
+            let conductors = if c.switches.len() > 1 { 3 } else { 2 };
+            let rating = fed.as_ref().and_then(|f| f.3);
+            let medium = net.medium.clone().or_else(|| self.thinnest(rating, conductors));
+            let colour = self.colour(medium.as_deref());
+            let info = |draw: &'static str| RunInfo {
+                service: inst.service.clone(),
+                network: network.clone(),
+                group: fed.as_ref().map(|f| f.2.clone()),
+                home: false,
+                draw,
+                alt: (draw == "arcs") != (net.draw == Draw::Arcs),
+                along: None,
+                cable: None,
+                length: None,
+                medium: medium.clone(),
+                colour,
+                control: true,
+                fed_by: fed.as_ref().map(|f| f.0.clone()),
+                layer: None,
+                marks: Vec::new(),
+            };
+            let ways: Vec<_> = ids.iter().map(|&i| route.shortest(&[i])).collect();
+            let mut joined = vec![false; ids.len()];
+            joined[0] = true;
+            loop {
+                let next = (0..ids.len())
+                    .filter(|&i| joined[i])
+                    .flat_map(|i| (0..ids.len()).filter(|&j| !joined[j]).map(move |j| (i, j)))
+                    .map(|(i, j)| (i, j, ways[i].0[ids[j]]))
+                    .filter(|x| x.2.is_finite())
+                    .min_by(|a, b| a.2.total_cmp(&b.2).then(a.1.cmp(&b.1)));
+                let Some((i, j, _)) = next else { break };
+                joined[j] = true;
+                let steps = route.path(&ways[i].1, ids[j]);
+                let laid = self.lay(&route, &steps, elements, &mut out.lanes);
+                self.emit(laid, info("routed"), &scope, out);
+                self.push(arc(placed[members[i]].at, placed[members[j]].at), info("arcs"), &scope, out);
             }
         }
     }
+
+    /// Wall parts on walls the network can't run in: said once each.
+    fn shallow(&self, sources: &[Node], terminals: &[Node], elements: &[Element], issues: &mut Issues) {
+        let starts = if self.net.draw == Draw::Arcs { &sources[..1] } else { sources };
+        let mut said: Vec<usize> = Vec::new();
+        let need = self.net.via.cavity.map_or(0.0, |c| c.0.to(self.model.units));
+        for t in starts.iter().chain(terminals) {
+            let Some(cavity) = self.shallow_one(t, elements) else { continue };
+            if let Some(k) = t.part {
+                if said.contains(&k) {
+                    continue;
+                }
+                said.push(k);
+            }
+            let (r, f) = t.face.expect("a shallow part is on a face");
+            let face = &self.model.rooms[r].faces[f];
+            let wall = face
+                .wall
+                .and_then(|w| elements[w].wall.as_ref())
+                .map_or_else(|| "it".to_owned(), |w| w.label.clone());
+            issues.add(
+                self.pointer,
+                format!("a {} is on a wall it can't run in ({wall} has a cavity of {}; it needs {})", t.label, num(cavity), num(need)),
+                &t.room,
+                Some("Give that wall's assembly a cavity, or keep the part off it (`wall.cavity` on a `one` placement).".into()),
+            );
+        }
+    }
+
+    /// The cavity of the wall a part is on, if the network can't run in it.
+    fn shallow_one(&self, t: &Node, elements: &[Element]) -> Option<f64> {
+        let need = self.net.via.cavity.map_or(0.0, |c| c.0.to(self.model.units));
+        let (r, f) = t.face?;
+        let face = &self.model.rooms[r].faces[f];
+        let blocked = face
+            .wall
+            .and_then(|w| elements[w].wall.as_ref())
+            .is_some_and(|w| w.cross == crate::assembly::Cross::No.name());
+        (face.cavity + 1e-9 < need || blocked).then_some(face.cavity)
+    }
+
+    /// A way through the route as pieces to draw: where it turns up a wall or passes through
+    /// one, beside the cables already drawn there.
+    fn lay(
+        &self,
+        route: &Route,
+        steps: &[(usize, Edge)],
+        elements: &[Element],
+        lanes: &mut HashMap<(i64, i64, i64, i64, u8), u32>,
+    ) -> Laid {
+        let units = self.model.units;
+        let q = |v: f64| (v / (units.tolerance() * 100.0)).round() as i64;
+        let key = |a: Point, b: Point, level: u8| {
+            let (a, b) = if (q(a.x), q(a.y)) <= (q(b.x), q(b.y)) { (a, b) } else { (b, a) };
+            (q(a.x), q(a.y), q(b.x), q(b.y), level)
+        };
+        // Its lane: beside every cable already along any stretch of it.
+        let stretches: Vec<_> = steps
+            .iter()
+            .filter(|(_, e)| matches!(e.along, Along::Wall | Along::Header | Along::Ceiling))
+            .map(|(n, e)| key(route.nodes[*n].at, route.nodes[e.to].at, e.along as u8))
+            .collect();
+        let lane = stretches.iter().map(|k| lanes.get(k).copied().unwrap_or(0)).max().unwrap_or(0);
+        for k in stretches {
+            *lanes.entry(k).or_default() += 1;
+        }
+        let offset = {
+            let n = lane.div_ceil(2) as f64;
+            let sign = if lane % 2 == 1 { 1.0 } else { -1.0 };
+            sign * n * LANE_MM / units.to_mm()
+        };
+        let mut laid = Laid { pieces: Vec::new(), marks: Vec::new(), length: 0.0 };
+        let mut last_ceiling: Option<usize> = None;
+        for (n, e) in steps {
+            laid.length += e.length;
+            let (a, b) = (route.nodes[*n].at, route.nodes[e.to].at);
+            if e.along == Along::Riser {
+                laid.marks.push(RunMark { at: a, kind: "riser", along: None });
+                continue;
+            }
+            // From a part on a wall up to the high band (or down from it): it climbs the wall.
+            if e.along == Along::Drop {
+                let (from, to) = (route.nodes[*n], route.nodes[e.to]);
+                let wall = if to.level == 1 {
+                    Some(b)
+                } else if from.level == 1 {
+                    Some(a)
+                } else {
+                    None
+                };
+                if let Some(w) = wall {
+                    laid.marks.push(RunMark { at: w, kind: "riser", along: None });
+                }
+            }
+            if e.along == Along::Ceiling {
+                // Over a wall, from one room's ceiling to another's.
+                if let (Some(prev), Some(room)) = (last_ceiling, e.room) {
+                    if prev != room {
+                        let node = route.nodes[*n];
+                        if let Some(w) = node.wall.and_then(|w| elements[w].wall.as_ref()) {
+                            let [c, d] = w.line;
+                            let l = c.distance(d).max(1e-12);
+                            let kind = if w.cross == crate::assembly::Cross::Firestop.name() {
+                                "firestop"
+                            } else {
+                                "cross"
+                            };
+                            laid.marks.push(RunMark {
+                                at: a,
+                                kind,
+                                along: Some(Point::new((d.x - c.x) / l, (d.y - c.y) / l)),
+                            });
+                        }
+                    }
+                }
+                last_ceiling = e.room;
+            } else if e.along != Along::Drop {
+                last_ceiling = None;
+            }
+            let mut pts = vec![a];
+            pts.extend(e.bend);
+            pts.push(b);
+            match laid.pieces.last_mut() {
+                Some((along, p)) if *along == e.along && p.last().is_some_and(|l| l.distance(a) < 1e-9) => {
+                    p.extend(pts.into_iter().skip(1));
+                }
+                _ => laid.pieces.push((e.along, pts)),
+            }
+        }
+        if offset != 0.0 {
+            for (along, p) in &mut laid.pieces {
+                if *along != Along::Drop {
+                    *p = shift(p, offset);
+                }
+            }
+        }
+        laid
+    }
+
+    /// One element per piece of a laid cable.
+    fn emit(&self, laid: Laid, info: RunInfo, scope: &str, out: &mut Out) {
+        let cable = out.cables;
+        out.cables += 1;
+        let n = laid.pieces.len();
+        let mut marks = Some(laid.marks);
+        for (i, (along, pts)) in laid.pieces.into_iter().enumerate() {
+            let mut info = info.clone();
+            info.along = Some(along.name());
+            info.cable = Some(cable);
+            info.length = Some(laid.length);
+            // The circuit's number goes where its home run starts.
+            info.home = info.home && i == 0;
+            if i + 1 == n {
+                info.marks = marks.take().unwrap_or_default();
+            }
+            self.push(pts, info, scope, out);
+        }
+    }
+
+    fn push(&self, points: Vec<Point>, info: RunInfo, scope: &str, out: &mut Out) {
+        let mut e = Element::new(
+            format!("run:{}:{}:{scope}#{}", self.inst.service, self.ni, out.runs.len()),
+            ElementKind::Run,
+            points,
+            false,
+        );
+        e.source = Some(self.pointer.to_owned());
+        e.run = Some(info);
+        out.runs.push(e);
+    }
+}
+
+/// Turn a way from the source into a way to it.
+fn reverse(route: &Route, steps: &mut Vec<(usize, Edge)>, end: usize) {
+    let mut nodes: Vec<usize> = steps.iter().map(|s| s.0).collect();
+    nodes.push(end);
+    let edges: Vec<Edge> = steps.iter().map(|s| s.1).collect();
+    let mut out = Vec::with_capacity(edges.len());
+    for k in (0..edges.len()).rev() {
+        let mut e = edges[k];
+        e.to = nodes[k];
+        out.push((nodes[k + 1], e));
+    }
+    let _ = route;
+    *steps = out;
+}
+
+/// A polyline moved sideways by `d` (to its left), corners mitred.
+fn shift(p: &[Point], d: f64) -> Vec<Point> {
+    let normal = |a: Point, b: Point| {
+        let l = a.distance(b);
+        if l <= 1e-12 {
+            None
+        } else {
+            Some(Point::new(-(b.y - a.y) / l, (b.x - a.x) / l))
+        }
+    };
+    let mut out = Vec::with_capacity(p.len());
+    for i in 0..p.len() {
+        let before = if i > 0 { normal(p[i - 1], p[i]) } else { None };
+        let after = if i + 1 < p.len() { normal(p[i], p[i + 1]) } else { None };
+        let n = match (before, after) {
+            (Some(a), Some(b)) => {
+                let m = Point::new(a.x + b.x, a.y + b.y);
+                let l = (m.x * m.x + m.y * m.y).sqrt();
+                if l < 1e-6 {
+                    a
+                } else {
+                    let m = Point::new(m.x / l, m.y / l);
+                    let c = (m.x * a.x + m.y * a.y).max(0.5);
+                    Point::new(m.x / c, m.y / c)
+                }
+            }
+            (Some(a), None) | (None, Some(a)) => a,
+            (None, None) => Point::new(0.0, 0.0),
+        };
+        out.push(Point::new(p[i].x + n.x * d, p[i].y + n.y * d));
+    }
+    out
 }
 
 /// An arc from `a` to `b`, bowed to the left, as a polyline.
@@ -309,223 +952,4 @@ fn arc(a: Point, b: Point) -> Vec<Point> {
             Point::new(u * a.x + v * c.x + w * b.x, u * a.y + v * c.y + w * b.y)
         })
         .collect()
-}
-
-/// Where a network can run, as a graph.
-struct Graph {
-    points: Vec<Point>,
-    edges: Vec<Vec<(usize, f64)>>,
-    sources: Vec<usize>,
-    terminals: Vec<usize>,
-}
-
-#[derive(PartialEq)]
-struct Item(f64, usize);
-impl Eq for Item {}
-impl PartialOrd for Item {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
-impl Ord for Item {
-    fn cmp(&self, other: &Self) -> Ordering {
-        other.0.total_cmp(&self.0).then(other.1.cmp(&self.1))
-    }
-}
-
-/// The nearest point of segment a–b to p, and how far along it.
-fn project(p: Point, a: Point, b: Point) -> (Point, f64) {
-    let (dx, dy) = (b.x - a.x, b.y - a.y);
-    let len2 = (dx * dx + dy * dy).max(1e-18);
-    let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0);
-    (Point::new(a.x + dx * t, a.y + dy * t), t)
-}
-
-impl Graph {
-    fn node(&mut self, p: Point, tol: f64) -> usize {
-        if let Some(i) = self.points.iter().position(|q| q.distance(p) < tol) {
-            return i;
-        }
-        self.points.push(p);
-        self.edges.push(Vec::new());
-        self.points.len() - 1
-    }
-
-    fn link(&mut self, a: usize, b: usize) {
-        if a == b || self.edges[a].iter().any(|e| e.0 == b) {
-            return;
-        }
-        let d = self.points[a].distance(self.points[b]);
-        self.edges[a].push((b, d));
-        self.edges[b].push((a, d));
-    }
-
-    fn build(
-        model: &Model,
-        inst: &Instance,
-        net: &Network,
-        sources: &[Node],
-        terminals: &[Node],
-        elements: &[Element],
-        need: f64,
-    ) -> Graph {
-        let tol = model.units.tolerance() * 100.0;
-        let mut g =
-            Graph { points: Vec::new(), edges: Vec::new(), sources: Vec::new(), terminals: Vec::new() };
-        // Walls it can run in, in this scope, with their thickness and their element.
-        let segments: Vec<(Point, Point, f64, usize)> = model
-            .walls
-            .iter()
-            .filter_map(|&e| elements[e].wall.as_ref().map(|w| (e, w)))
-            .filter(|(_, w)| w.cavity + 1e-9 >= need)
-            .filter(|(_, w)| w.between.iter().any(|n| !n.starts_with('\'') && inst.covers(n)))
-            .map(|(e, w)| (w.line[0], w.line[1], w.thickness, e))
-            .collect();
-        let mut stops: Vec<Vec<f64>> = vec![vec![0.0, 1.0]; segments.len()];
-        let mut extra: Vec<(Point, Point)> = Vec::new();
-        for (k, &(a, b, ..)) in segments.iter().enumerate() {
-            for p in [a, b] {
-                // Walls that meet here (one's end on another's line).
-                let mut met = false;
-                for (j, &(c, d, ..)) in segments.iter().enumerate() {
-                    if j != k && point_segment_distance(p, c, d) < tol {
-                        stops[j].push(project(p, c, d).1);
-                        met = true;
-                    }
-                }
-                // A wall inside a space stops at the face of the wall around it, half that
-                // wall's thickness short of its centreline: join it across.
-                if !met {
-                    let near = segments
-                        .iter()
-                        .enumerate()
-                        .filter(|(j, _)| *j != k)
-                        .map(|(j, &(c, d, t, _))| (j, project(p, c, d), t))
-                        .filter(|(_, (q, _), t)| q.distance(p) <= t / 2.0 + tol * 10.0)
-                        .min_by(|x, y| x.1 .0.distance(p).total_cmp(&y.1 .0.distance(p)));
-                    if let Some((j, (q, s), _)) = near {
-                        stops[j].push(s);
-                        extra.push((p, q));
-                    }
-                }
-            }
-        }
-        // Where each thing joins. Against a wall: that wall, if it can run in it. Off the walls
-        // (on the floor, on the ceiling): the nearest wall of its room it can run in. No further:
-        // a run doesn't cross a room's floor to get to another wall.
-        let things: Vec<&Node> = sources.iter().chain(terminals).collect();
-        let joins: Vec<Option<Point>> = things
-            .iter()
-            .map(|t| {
-                let may_join = |wall: usize| match (t.face, t.in_room) {
-                    (Some((r, f)), _) => model.rooms[r].faces[f].wall == Some(wall),
-                    (None, Some(r)) => model.rooms[r].faces.iter().any(|f| f.wall == Some(wall)),
-                    (None, None) => false,
-                };
-                segments
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, s)| may_join(s.3))
-                    .map(|(k, &(a, b, ..))| (k, project(t.at, a, b)))
-                    .min_by(|x, y| x.1 .0.distance(t.at).total_cmp(&y.1 .0.distance(t.at)))
-                    .map(|(k, (q, s))| {
-                        stops[k].push(s);
-                        q
-                    })
-            })
-            .collect();
-        for (k, &(a, b, ..)) in segments.iter().enumerate() {
-            let len = a.distance(b);
-            if len <= tol {
-                continue;
-            }
-            let mut s = std::mem::take(&mut stops[k]);
-            s.sort_by(f64::total_cmp);
-            s.dedup_by(|x, y| (*x - *y).abs() * len < tol);
-            let at = |t: f64| Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
-            for pair in s.windows(2) {
-                let (p, q) = (g.node(at(pair[0]), tol), g.node(at(pair[1]), tol));
-                g.link(p, q);
-            }
-        }
-        for (p, q) in extra {
-            let (p, q) = (g.node(p, tol), g.node(q, tol));
-            g.link(p, q);
-        }
-        // Ceilings it can cross: a hub in the middle of each such space, joined to the walls round it.
-        let mut hubs: Vec<(usize, usize)> = Vec::new();
-        if let Some(ceilings) = &net.via.ceilings {
-            for (r, room) in model.rooms.iter().enumerate().filter(|(_, r)| inst.covers(&r.path)) {
-                if !ceilings.matches_tagged(&room.name, &room.key, &room.tags, room.kind) {
-                    continue;
-                }
-                let reach = room
-                    .faces
-                    .iter()
-                    .filter_map(|f| f.wall.and_then(|w| elements[w].wall.as_ref()).map(|w| w.thickness))
-                    .fold(0.0, f64::max)
-                    + tol * 10.0;
-                let wall_nodes = g.points.len();
-                let hub = g.node(interior_point(&room.loops[0], &room.loops[1..]), tol);
-                hubs.push((r, hub));
-                let around: Vec<usize> = (0..wall_nodes)
-                    .filter(|&i| {
-                        room.loops.iter().any(|l| {
-                            (0..l.len()).any(|k| {
-                                point_segment_distance(g.points[i], l[k], l[(k + 1) % l.len()]) <= reach
-                            })
-                        })
-                    })
-                    .collect();
-                for i in around {
-                    g.link(hub, i);
-                }
-            }
-        }
-        // The source and terminals: joined where they can be, else across their room's ceiling.
-        let mut ids = Vec::new();
-        for (t, j) in things.iter().zip(&joins) {
-            let id = g.node(t.at, tol);
-            match j {
-                Some(q) => {
-                    let on = g.node(*q, tol);
-                    g.link(id, on);
-                }
-                None => {
-                    if let Some(&(_, hub)) = hubs.iter().find(|(r, _)| t.in_room == Some(*r)) {
-                        g.link(id, hub);
-                    }
-                }
-            }
-            ids.push(id);
-        }
-        g.sources = ids[..sources.len()].to_vec();
-        g.terminals = ids[sources.len()..].to_vec();
-        g
-    }
-
-    fn shortest(&self, from: &[usize]) -> (Vec<f64>, Vec<Option<usize>>) {
-        let n = self.points.len();
-        let mut dist = vec![f64::INFINITY; n];
-        let mut prev = vec![None; n];
-        let mut heap = BinaryHeap::new();
-        for &f in from {
-            dist[f] = 0.0;
-            heap.push(Item(0.0, f));
-        }
-        while let Some(Item(d, u)) = heap.pop() {
-            if d > dist[u] {
-                continue;
-            }
-            for &(v, w) in &self.edges[u] {
-                let nd = d + w;
-                if nd < dist[v] - 1e-12 {
-                    dist[v] = nd;
-                    prev[v] = Some(u);
-                    heap.push(Item(nd, v));
-                }
-            }
-        }
-        (dist, prev)
-    }
 }

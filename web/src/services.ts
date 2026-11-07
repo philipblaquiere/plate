@@ -1,7 +1,7 @@
 // What a solved plate's services placed, for the views above the drawing and their legend. Kept
 // free of the DOM so tests can use it.
 
-import type { Diagnostic, Layout } from "./types";
+import type { Circuit, Diagnostic, Layout, Load } from "./types";
 
 export interface PartCount {
   part: string;
@@ -84,6 +84,54 @@ export function nextView(current: string | null, names: string[]): string | null
   if (current === null) return names[0];
   const i = names.indexOf(current);
   return i < 0 || i === names.length - 1 ? null : names[i + 1];
+}
+
+/** A load in words: "30 A at 240 V", "60 W". */
+export function loadText(l: Load): string {
+  const v = l.voltage ?? 120;
+  if (l.current !== undefined) return `${num(l.current)} A at ${num(v)} V`;
+  if (l.watts !== undefined) return `${num(l.watts)} W at ${num(v)} V`;
+  return `${num(v)} V`;
+}
+
+/** One row of a panel schedule. */
+export interface ScheduleRow {
+  circuit: string;
+  network: string;
+  breaker: string;
+  medium: string;
+  devices: string;
+  load: string;
+  length: number;
+}
+
+/** A service's circuits in one scope (the first that has any, unless named), as a panel
+ * schedule: one row per circuit, in number order. */
+export function schedule(
+  circuits: Circuit[] | undefined,
+  service: string,
+  scope?: string,
+): { scope: string; scopes: string[]; rows: ScheduleRow[] } {
+  const mine = (circuits ?? []).filter((c) => c.service === service);
+  const scopes = [...new Set(mine.map((c) => c.scope))];
+  const at = scope !== undefined && scopes.includes(scope) ? scope : (scopes[0] ?? "");
+  const rows = mine
+    .filter((c) => c.scope === at)
+    .sort((a, b) => Number(a.group) - Number(b.group) || a.group.localeCompare(b.group))
+    .map((c) => ({
+      circuit: c.group,
+      network: c.network,
+      breaker: c.rating !== undefined ? `${num(c.rating)} A${c.voltage && c.voltage > 150 ? " 2P" : ""}` : "",
+      medium: c.medium ?? "",
+      devices: c.devices.map(([d, n]) => (n > 1 ? `${d} ×${n}` : d)).join(", "),
+      load: c.load > 0 ? `${num(c.load)} A` : "",
+      length: c.length,
+    }));
+  return { scope: at, scopes, rows };
+}
+
+function num(v: number): string {
+  return String(Math.round(v * 10) / 10);
 }
 
 function title(name: string): string {

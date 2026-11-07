@@ -396,8 +396,11 @@ and power, lighting, heat or plumbing is placed on the result and connected.
   stacks) where the solved plan says: `plate.every` along walls, `plate.beside` doors or windows,
   `plate.over` a room's floor or ceiling (one, a count, or a grid by spacing, cut to the room's
   shape: an L-shaped hall gets a line down each leg), `plate.on` the back of a fixture, `plate.one` in the
-  best place. **Networks** connect them: circuits drawn the electrical way (arcs and numbered
-  home runs) or runs routed through walls with a deep enough cavity. What a service needs from
+  best place. **Networks** connect them: circuits as trees of cables, routed low in the walls,
+  up and over the doors and across the ceilings (or drawn the electrical way, arcs and numbered
+  home runs: press `A`). Each circuit's cable is the thinnest of the service's **media** that
+  carries its breaker and what's on it (a range's `load`, a heater's watts), and switches are
+  joined to the lights they control. What a service needs from
   the layout (a stretch of wall for the panel, a drain in each bath) it **claims**, and the
   solver makes room for it like any rule.
 - **Tags** let a service fit any plan: it names `"#wet"` or `"#dwelling"`, and each plan tags its
@@ -407,7 +410,7 @@ In the drawing, walls are drawn with their hatch; hover one for its assembly and
 one. A **views bar** at the top left switches between the plan and each service (`S` cycles):
 in a service's view the plan is faded, its parts and runs are drawn with a legend, and the
 service's unmet requirements are counted on its chip. Hover a part for what it is and how it got
-there; right-click a wall or a part for **Show in file**. Opening an assemblies or service file
+there, a cable for its circuit, medium and length; the legend holds the panel schedule; right-click a wall or a part for **Show in file**. Opening an assemblies or service file
 on its own shows a card of what's in it, and which plates use it.
 
 See the reference guides _Assemblies_, _Services_ and _Tags_.

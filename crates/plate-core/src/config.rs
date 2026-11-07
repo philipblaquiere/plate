@@ -57,6 +57,11 @@ pub struct Config {
     #[serde(default)]
     pub services: BTreeMap<String, Service>,
 
+    /// Floor to ceiling. Services use it for the cable that runs up a wall to the ceiling.
+    /// Defaults to 2.4 m (metric) or 8 ft (imperial).
+    #[serde(default)]
+    pub height: Option<LengthSer>,
+
     /// A plan file's own fields: what it needs from its space, and how to preview it.
     #[serde(default)]
     pub needs: Needs,
@@ -190,6 +195,18 @@ impl Config {
     /// The unit bare numbers are measured in, which is also the unit of the output geometry.
     pub fn units(&self) -> Units {
         self.units.unwrap_or_else(|| self.system.default_units())
+    }
+
+    /// Floor to ceiling, in `units`.
+    pub fn height(&self) -> f64 {
+        let units = self.units();
+        match self.height {
+            Some(h) => h.0.to(units),
+            None => match self.system {
+                System::Metric => 2400.0 / units.to_mm(),
+                System::Imperial => 2438.4 / units.to_mm(),
+            },
+        }
     }
 
     /// A plan file (no `start`), shown on its own rather than as a plate.

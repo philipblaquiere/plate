@@ -75,7 +75,7 @@ const PRELUDE: &str = r#"{
           let result = std.contract.check (either others msg) label value in
           result |> match { 'Ok _ => result, _ => 'Error { message = msg } }
       ),
-    service_fields = ["parts", "place", "connect", "claims", "scope", "params"],
+    service_fields = ["parts", "place", "connect", "claims", "scope", "params", "media", "feeds"],
     plan_fields = ["start", "spaces", "rules", "needs", "preview", "goals", "engine", "grid", "assemblies", "services"],
     is_library = fun v =>
       std.is_record v && !(std.array.any (fun f => std.record.has_field f v) plan_fields),
@@ -154,7 +154,7 @@ pub enum FileKind {
     Assemblies,
 }
 
-const SERVICE_FIELDS: &[&str] = &["parts", "place", "connect", "claims", "scope", "params"];
+const SERVICE_FIELDS: &[&str] = &["parts", "place", "connect", "claims", "scope", "params", "media", "feeds"];
 const PLAN_FIELDS: &[&str] =
     &["start", "spaces", "rules", "needs", "preview", "goals", "engine", "grid", "assemblies", "services"];
 

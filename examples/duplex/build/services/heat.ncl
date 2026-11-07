@@ -4,7 +4,8 @@
 {
   label = "Heat",
   parts = {
-    baseboard = { above = "150 mm", depth = "90 mm", symbol = 'baseboard }, # as wide as the window
+    # As wide as the window; 1000 W at 240 V, on the power service's heat circuits.
+    baseboard = { above = "150 mm", depth = "90 mm", symbol = 'baseboard, load = { watts = 1000, voltage = 240 } },
     thermostat = { above = "1500 mm", symbol = 'thermostat },
   },
   place = [

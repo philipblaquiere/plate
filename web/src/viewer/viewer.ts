@@ -1,5 +1,6 @@
 import type { Element, Layout, Point, System, Units } from "../types";
 import { degrees, Lengths } from "./format";
+import { loadText } from "../services";
 import { doorSymbol } from "./door";
 import { clearOf, type Box } from "./labels";
 import {
@@ -68,6 +69,7 @@ type Hover =
   | { type: "space"; element: Element }
   | { type: "wall"; element: Element }
   | { type: "part"; element: Element }
+  | { type: "run"; element: Element }
   | null;
 
 /** What a right-click landed on. */
@@ -75,7 +77,8 @@ export type ContextTarget =
   | { type: "space"; element: Element }
   | { type: "edge"; element: Element; index: number }
   | { type: "wall"; element: Element }
-  | { type: "part"; element: Element };
+  | { type: "part"; element: Element }
+  | { type: "run"; element: Element };
 
 /**
  * The starting geometry, which the user edits by dragging; everything else is solved. A plan's
@@ -199,6 +202,10 @@ export class Viewer {
   onContextMenu: (target: ContextTarget, clientX: number, clientY: number) => void = () => {};
   /** S was pressed in the drawing: show the next view. */
   onCycleView: () => void = () => {};
+  /** A was pressed in a service view: the schematic was switched on or off. */
+  onSchematic: (on: boolean) => void = () => {};
+  /** In a service view: draw networks as the schematic (arcs) rather than where they run. */
+  schematic = false;
 
   /** Port roles of the boundary's edges, for styling and tooltips. */
   private edgeRoles: string[][] = [];
@@ -239,6 +246,29 @@ export class Viewer {
     this.serviceView = name;
     this.hover = null;
     this.request();
+  }
+
+  /** Draw networks as the schematic (arcs and home runs) or where they run. */
+  setSchematic(on: boolean): void {
+    if (this.schematic === on) return;
+    this.schematic = on;
+    this.hover = null;
+    this.onSchematic(on);
+    this.request();
+  }
+
+  /** Whether a part is drawn in the current service view: its own, or one its circuits feed. */
+  private partShown(e: Element): boolean {
+    const sv = this.serviceView;
+    return e.kind === "part" && !!sv && (e.part?.service === sv || e.part?.fedBy === sv);
+  }
+
+  /** Whether a run is drawn in the current service view, as the current drawing. */
+  private runShown(e: Element): boolean {
+    const sv = this.serviceView;
+    const r = e.run;
+    if (e.kind !== "run" || !r || !sv || (r.service !== sv && r.fedBy !== sv)) return false;
+    return this.schematic ? r.draw === "arcs" : r.draw === "routed";
   }
 
   /** Port roles of the boundary edges, in order (`facade` when not given). */
@@ -708,7 +738,7 @@ export class Viewer {
         this.undoDrawPoint();
       } else if (
         this.tool === "select" &&
-        (h?.type === "space" || h?.type === "wall" || h?.type === "part")
+        (h?.type === "space" || h?.type === "wall" || h?.type === "part" || h?.type === "run")
       ) {
         this.tooltip.hidden = true;
         this.onContextMenu({ type: h.type, element: h.element }, e.clientX, e.clientY);
@@ -799,6 +829,10 @@ export class Viewer {
       case "s":
         if (this.drawing) return false;
         this.onCycleView();
+        return true;
+      case "a":
+        if (this.drawing || !this.serviceView) return false;
+        this.setSchematic(!this.schematic);
         return true;
       case "v":
         if (this.drawing) return false;
@@ -1038,7 +1072,7 @@ export class Viewer {
       let part: Element | null = null;
       let near = 9;
       for (const e of this.layout.elements) {
-        if (e.kind !== "part" || e.part?.service !== this.serviceView) continue;
+        if (!this.partShown(e)) continue;
         // As drawn: grown from where it stands (see renderService).
         const shape = this.partShape(e);
         const inside = pointInPolygon({ x, y }, shape);
@@ -1050,6 +1084,21 @@ export class Viewer {
         }
       }
       if (part) return { type: "part", element: part };
+      // A cable: within a few pixels of its line.
+      let run: Element | null = null;
+      let nearRun = 5;
+      for (const e of this.layout.elements) {
+        if (!this.runShown(e)) continue;
+        const pts = e.points.map((p) => this.toScreen(p));
+        for (let i = 1; i < pts.length; i++) {
+          const d = segmentDistance({ x, y }, pts[i - 1], pts[i]);
+          if (d < nearRun) {
+            nearRun = d;
+            run = e;
+          }
+        }
+      }
+      if (run) return { type: "run", element: run };
     }
     // Walls take floor between the spaces' clear outlines.
     for (const e of this.layout.elements) {
@@ -1310,37 +1359,107 @@ export class Viewer {
     }
   }
 
-  /** A service over the plan: its networks, then its parts. */
+  /** A service over the plan: its networks, then its parts (its own, and those its circuits
+   * feed). Routed runs are drawn by where they go: solid low in a wall, dashed up over a door,
+   * long dashes across a ceiling, in their medium's colour; a ring where a cable climbs a wall, a
+   * tick where it passes through one. */
   private renderService(parent: SVGElement, service: string): void {
     const g = el("g", { class: "service" }, parent);
-    for (const r of this.layout!.elements) {
-      if (r.kind !== "run" || r.run?.service !== service) continue;
+    const runs = this.layout!.elements.filter((e) => this.runShown(e));
+    const marks = el("g", { class: "run-marks" }, g);
+    const labels: { at: Point; text: string; len: number }[] = [];
+    // Each cable's longest piece gets its medium's name.
+    const longest = new Map<string, { at: Point; len: number; text: string }>();
+    for (const r of runs) {
+      const info = r.run!;
       const pts = r.points.map((p) => this.toScreen(p));
-      el(
-        "path",
-        { d: pathOf(pts, false), class: `run run-${r.run.draw}${r.run.home ? " run-home" : ""}` },
-        g,
-      );
-      if (r.run.home && pts.length >= 2) {
+      const routed = info.draw === "routed";
+      const cls = [
+        "run",
+        `run-${info.draw}`,
+        info.home ? "run-home" : "",
+        info.along ? `run-${info.along}` : "",
+        info.colour ? `run-c-${info.colour}` : "",
+        info.control ? "run-control" : "",
+        info.service !== service ? "run-fed" : "",
+      ]
+        .filter(Boolean)
+        .join(" ");
+      const d = pathOf(pts, false);
+      if (routed && info.along !== "drop" && !info.control) el("path", { d, class: "run-casing" }, g);
+      el("path", { d, class: cls }, g);
+      if (!routed && info.home && pts.length >= 2) {
         // A home run: an arrow toward the source, with its group's number.
         const [a, b] = [pts[pts.length - 2], pts[pts.length - 1]];
         const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
         const [ux, uy] = [(b.x - a.x) / len, (b.y - a.y) / len];
         const head = `M${b.x - ux * 7 - uy * 3.5},${b.y - uy * 7 + ux * 3.5}L${b.x},${b.y}L${b.x - ux * 7 + uy * 3.5},${b.y - uy * 7 - ux * 3.5}`;
         el("path", { d: head, class: "run run-head" }, g);
-        if (r.run.group) {
+        if (info.group) {
           const t = el("text", { x: b.x + ux * 6, y: b.y + uy * 6 + 3, class: "run-label" }, g);
-          t.textContent = r.run.group;
+          t.textContent = info.group;
+        }
+      }
+      if (routed && info.home && info.group && pts.length) {
+        // Where a circuit's home run starts: its number, in a tag.
+        labels.push({ at: pts[0], text: info.group, len: -1 });
+      }
+      if (routed && info.medium && info.along !== "drop" && info.cable !== undefined) {
+        let best = { len: 0, at: pts[0] };
+        for (let i = 1; i < pts.length; i++) {
+          const l = Math.hypot(pts[i].x - pts[i - 1].x, pts[i].y - pts[i - 1].y);
+          if (l > best.len)
+            best = { len: l, at: { x: (pts[i].x + pts[i - 1].x) / 2, y: (pts[i].y + pts[i - 1].y) / 2 } };
+        }
+        const key = `${info.service}:${info.cable}`;
+        const cur = longest.get(key);
+        if (!cur || best.len > cur.len) longest.set(key, { ...best, text: info.medium });
+      }
+      for (const m of info.marks ?? []) {
+        const p = this.toScreen(m.at);
+        if (m.kind === "riser") {
+          el("circle", { cx: p.x, cy: p.y, r: 3.2, class: "run-riser" }, marks);
+          el("circle", { cx: p.x, cy: p.y, r: 1, class: "run-riser-dot" }, marks);
+        } else if (m.kind === "firestop") {
+          el(
+            "path",
+            {
+              d: `M${p.x},${p.y - 4.5}L${p.x + 4.5},${p.y}L${p.x},${p.y + 4.5}L${p.x - 4.5},${p.y}Z`,
+              class: "run-firestop",
+            },
+            marks,
+          );
+        } else if (m.along) {
+          // A tick across the run, along the wall it passes through.
+          const a = this.toScreen({ x: m.at.x + m.along.x, y: m.at.y + m.along.y });
+          const len = Math.hypot(a.x - p.x, a.y - p.y) || 1;
+          const [ux, uy] = [((a.x - p.x) / len) * 5, ((a.y - p.y) / len) * 5];
+          el("path", { d: `M${p.x - ux},${p.y - uy}L${p.x + ux},${p.y + uy}`, class: "run-cross" }, marks);
         }
       }
     }
+    // Medium names, where there's room, except the most common one: "14/2 unless marked", as
+    // electrical drawings say. Circuit numbers always.
+    const common = this.commonMedium(runs);
+    for (const l of longest.values()) if (l.len >= 46 && l.text !== common) labels.push(l);
+    const tags = el("g", { class: "run-tags" }, g);
+    for (const l of labels) {
+      const circuit = l.len < 0;
+      const t = el(
+        "text",
+        { x: l.at.x, y: l.at.y + (circuit ? -7 : -4), class: circuit ? "run-number" : "run-medium" },
+        tags,
+      );
+      t.textContent = l.text;
+    }
     for (const p of this.layout!.elements) {
-      if (p.kind !== "part" || p.part?.service !== service) continue;
+      if (!this.partShown(p)) continue;
+      const part = p.part!;
       const { grow, at } = this.partGrowth(p);
       const pg = el(
         "g",
         {
-          class: `part part-${p.part.mount}`,
+          class: `part part-${part.mount}${part.service !== service ? " part-fed" : ""}`,
           ...(grow > 1
             ? { transform: `translate(${at.x},${at.y}) scale(${grow}) translate(${-at.x},${-at.y})` }
             : {}),
@@ -1360,6 +1479,19 @@ export class Viewer {
       );
       if (p.symbol) this.renderSymbol(pg, p);
     }
+  }
+
+  /** The medium most of these runs are made of (by pieces), if any. */
+  commonMedium(runs?: Element[]): string | null {
+    const list = runs ?? this.layout?.elements.filter((e) => this.runShown(e)) ?? [];
+    const n = new Map<string, number>();
+    for (const r of list) {
+      const m = r.run?.draw === "routed" ? r.run.medium : undefined;
+      if (m) n.set(m, (n.get(m) ?? 0) + 1);
+    }
+    let best: string | null = null;
+    for (const [m, c] of n) if (best === null || c > n.get(best)!) best = m;
+    return best;
   }
 
   /** A closed element as a path, holes included (draw it with `fill-rule: evenodd`). */
@@ -1520,7 +1652,7 @@ export class Viewer {
     // In a service view its parts are drawn over the plan: labels move off them.
     const parts: Box[] = [];
     for (const p of this.serviceView ? this.layout!.elements : []) {
-      if (p.kind !== "part" || p.part?.service !== this.serviceView) continue;
+      if (!this.partShown(p)) continue;
       const shape = this.partShape(p);
       const xs = shape.map((q) => q.x);
       const ys = shape.map((q) => q.y);
@@ -1686,6 +1818,31 @@ export class Viewer {
       : this.hover;
     if (!h || this.pan?.moved || this.edgeDrag?.moved) return;
     const g = el("g", { class: "hover" }, parent);
+    if (h.type === "run") {
+      // The whole cable: every piece of it.
+      const r = h.element.run!;
+      for (const e of this.layout!.elements) {
+        const o = e.run;
+        if (!o || !this.runShown(e)) continue;
+        const same =
+          o.cable !== undefined
+            ? o.cable === r.cable && o.service === r.service
+            : o.service === r.service && o.network === r.network && o.group === r.group;
+        if (same)
+          el(
+            "path",
+            {
+              d: pathOf(
+                e.points.map((p) => this.toScreen(p)),
+                false,
+              ),
+              class: "hover-run",
+            },
+            g,
+          );
+      }
+      return;
+    }
     if (h.type === "wall" || h.type === "part") {
       const d = pathOf(
         h.type === "part" ? this.partShape(h.element) : h.element.points.map((p) => this.toScreen(p)),
@@ -2116,8 +2273,42 @@ export class Viewer {
         rows.push(["Height", `${L.thickness(p.above)} above the floor`]);
       else rows.push(["On", p.mount === "cavity" ? "in the wall" : `the ${p.mount}`]);
       if (p.group) rows.push([p.network ?? "Group", p.group]);
+      if (p.load) rows.push(["Load", loadText(p.load)]);
+      if (p.fedBy) rows.push(["Fed by", p.fedBy]);
       rows.push(["Placed", p.placed]);
       html = card(p.label, p.service, rows, "Right-click: show where it's placed");
+    } else if (h?.type === "run") {
+      const r = h.element.run!;
+      const rows: [string, string][] = [];
+      if (r.group) rows.push([r.control ? "On circuit" : "Circuit", r.group]);
+      const pieces = this.layout!.elements.filter(
+        (e) => e.run && e.run.cable !== undefined && e.run.cable === r.cable && e.run.service === r.service,
+      );
+      const where = [...new Set(pieces.map((e) => e.run!.along).filter((a) => a && a !== "drop"))];
+      const words: Record<string, string> = {
+        wall: "in the wall, low",
+        header: "in the wall, over a door",
+        ceiling: "across the ceiling",
+      };
+      if (where.length) rows.push(["Runs", where.map((w) => words[w!] ?? w).join(", ")]);
+      const risers = pieces.reduce(
+        (n, e) => n + (e.run!.marks ?? []).filter((m) => m.kind === "riser").length,
+        0,
+      );
+      const through = pieces.reduce(
+        (n, e) => n + (e.run!.marks ?? []).filter((m) => m.kind !== "riser").length,
+        0,
+      );
+      if (risers) rows.push(["Climbs", `${risers} wall${risers > 1 ? "s" : ""}`]);
+      if (through) rows.push(["Through", `${through} wall${through > 1 ? "s" : ""}`]);
+      if (r.length !== undefined) rows.push(["Length", len(r.length)]);
+      if (r.fedBy) rows.push(["Fed by", r.fedBy]);
+      html = card(
+        r.medium ? `${r.medium} ${r.control ? "switch leg" : "cable"}` : r.network,
+        r.network,
+        rows,
+        "Right-click: show its network",
+      );
     } else if (h?.type === "space") {
       const info = h.element.space!;
       const b = boundsOf(h.element.points);

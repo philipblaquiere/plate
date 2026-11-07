@@ -1345,6 +1345,20 @@
         {"line": [75, 77, 75, 100]}
       ]
     },
+    "receptacle_240": {
+      "label": "240 V receptacle",
+      "category": "Services",
+      "tags": ["outlet", "plug", "power", "range", "dryer", "appliance"],
+      "size": [150, 100],
+      "fit": "contain",
+      "shapes": [
+        {"circle": [75, 45, 32]},
+        {"line": [47, 30, 103, 30]},
+        {"line": [43, 45, 107, 45]},
+        {"line": [47, 60, 103, 60]},
+        {"line": [75, 77, 75, 100]}
+      ]
+    },
     "switch": {
       "label": "Switch",
       "category": "Services",

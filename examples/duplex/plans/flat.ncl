@@ -1,6 +1,7 @@
 # A two-bedroom flat, as a plan. Its spaces are tagged, so services find what they need without
 # knowing their names: 'wet rooms get a plumbing wall, 'water fixtures stand on it, 'drain
-# fixtures are drained, 'utility is where the panel goes, 'counter and 'appliance get power.
+# fixtures are drained, 'utility is where the panel goes, 'counter and 'appliance get power, and
+# 'cooking and 'laundry get a 240 V receptacle sized by their `load`.
 # duplex.ncl puts two of these side by side. Plain numbers are feet, the plate's units.
 
 let kitchen_plan = {
@@ -23,8 +24,19 @@ let kitchen_plan = {
       symbol = 'fridge,
       tags = ['appliance],
     },
+    range = {
+      kind = 'fixture,
+      width = "30 in",
+      depth = "26 in",
+      against = 'wall,
+      clearance.front = 3,
+      symbol = 'stove,
+      tags = ['cooking],
+      # From its spec sheet: a 50 A, 240 V circuit with a neutral. Power sizes the cable from it.
+      load.power = { current = "50 A", voltage = 240, conductors = 3 },
+    },
   },
-  rules = [plate.touches "fridge" "counter"],
+  rules = [plate.touches "fridge" "counter", plate.touches "range" "counter"],
 } in
 let bath_plan = {
   spaces = {
@@ -58,7 +70,22 @@ let bath_plan = {
     kitchen = { area = { min = 90, max = 130 }, side.min = "8 ft 6 in", tags = ['wet], plan = kitchen_plan },
     bedroom = { count = 2, area = { min = 110, max = 140 }, side.min = 10, tags = ['sleep] },
     bath = { area = { min = 50, max = 70 }, side.min = "6 ft 3 in", walls = 'wet, tags = ['wet], plan = bath_plan },
-    utility = { label = "Utility", area = { min = 22, max = 38 }, side.min = 4, tags = ['utility] },
+    utility = {
+      label = "Utility",
+      area = { min = 22, max = 38 },
+      side.min = 4,
+      tags = ['utility],
+      plan.spaces.dryer = {
+        kind = 'fixture,
+        width = "27 in",
+        depth = "28 in",
+        against = 'wall,
+        clearance.front = 3,
+        symbol = 'dryer,
+        tags = ['laundry],
+        load.power = { current = "30 A", voltage = 240, conductors = 3 },
+      },
+    },
   },
   rules = [
     plate.touches "hall" 'door, # meets the door the building gives the flat

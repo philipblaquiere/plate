@@ -3718,3 +3718,166 @@ button {
   text-decoration: underline;
   cursor: pointer;
 }
+
+/* Routed runs: where a cable goes. A pale casing under each so it reads over walls. */
+.run-casing {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 4;
+  stroke-linejoin: round;
+  opacity: 0.85;
+}
+
+.run-routed.run-wall {
+  stroke-width: 2;
+}
+
+.run-routed.run-header {
+  stroke-width: 1.6;
+  stroke-dasharray: 5 3;
+}
+
+.run-routed.run-ceiling {
+  stroke-width: 1.4;
+  stroke-dasharray: 9 4;
+}
+
+.run-routed.run-drop {
+  stroke-width: 1;
+  opacity: 0.7;
+}
+
+.run-control {
+  stroke-width: 1 !important;
+  stroke-dasharray: 2 2.5 !important;
+}
+
+/* Jacket colours: white cable is drawn a mid violet so it shows on white paper. */
+.run-c-white {
+  stroke: #6b5fc7;
+}
+.run-c-black {
+  stroke: #26282b;
+}
+.run-c-grey {
+  stroke: #6f7780;
+}
+.run-c-red {
+  stroke: #c8442c;
+}
+.run-c-yellow {
+  stroke: #d39b00;
+}
+.run-c-orange {
+  stroke: #e0701a;
+}
+.run-c-blue {
+  stroke: #2f6fd0;
+}
+
+.run-fed {
+  opacity: 0.6;
+}
+
+.run-riser {
+  fill: #fff;
+  stroke: var(--service-ink);
+  stroke-width: 1.2;
+}
+
+.run-riser-dot {
+  fill: var(--service-ink);
+}
+
+.run-cross {
+  stroke: var(--service-ink);
+  stroke-width: 1.6;
+}
+
+.run-firestop {
+  fill: #c8442c;
+  stroke: #fff;
+  stroke-width: 1;
+}
+
+.run-medium,
+.run-number {
+  font: 600 9px var(--ui);
+  fill: var(--service-ink);
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+}
+
+.run-number {
+  font-size: 10px;
+  fill: #fff;
+  stroke: var(--service-ink);
+  stroke-width: 6px;
+  stroke-linejoin: round;
+}
+
+.part-fed .part-box,
+.part-fed .symbol path {
+  opacity: 0.7;
+}
+
+.hover-run {
+  fill: none;
+  stroke: var(--redline);
+  stroke-width: 3;
+  stroke-linejoin: round;
+  opacity: 0.6;
+}
+
+/* The panel schedule in a service's legend. */
+.legend .legend-schedule {
+  margin-top: 6px;
+  border-collapse: collapse;
+  font-variant-numeric: tabular-nums;
+}
+
+.legend .legend-schedule th,
+.legend .legend-schedule td {
+  padding: 1px 6px 1px 0;
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.legend .legend-schedule th {
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.legend .legend-schedule td.devices {
+  white-space: normal;
+  max-width: 200px;
+  color: var(--ink-soft);
+}
+
+.legend .legend-hint {
+  margin-top: 6px;
+  color: var(--ink-soft);
+}
+
+.legend .legend-swatch {
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  margin-right: 6px;
+  border-top: 2px solid var(--service-ink);
+  vertical-align: middle;
+}
+
+.legend .legend-details {
+  margin-top: 4px;
+  padding-top: 4px;
+  border-top: 1px solid rgb(31 35 40 / 0.1);
+}
+
+.legend .legend-details summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+}

@@ -740,10 +740,11 @@ fn a_scope_gets_its_own_parts_and_networks() {
             runs.iter().map(|r| &r.id).collect::<Vec<_>>()
         );
         let panel = panels.iter().find(|p| p.part.as_ref().unwrap().space.starts_with(flat)).unwrap();
-        // Home runs are arrows from each circuit toward its own panel.
+        // The schematic's home runs are arrows from each circuit toward its own panel.
         let home: Vec<_> = runs
             .iter()
-            .filter(|r| r.id.contains(&format!(":{flat}#")) && r.run.as_ref().unwrap().home)
+            .filter(|r| r.id.contains(&format!(":{flat}#")))
+            .filter(|r| r.run.as_ref().is_some_and(|i| i.home && i.draw == "arcs"))
             .collect();
         assert!(!home.is_empty());
         let to = panel.part.as_ref().unwrap().at;
@@ -780,7 +781,9 @@ fn a_routed_run_too_long_is_said() {
     assert_eq!(s.report.unmet, 0, "{:?}", messages(&s));
     let runs = of_kind(&s, ElementKind::Run);
     assert!(!runs.is_empty());
-    assert!(runs.iter().all(|r| r.run.as_ref().unwrap().draw == "routed"));
+    // Routed, and the schematic beside it, which exports leave out.
+    assert!(runs.iter().any(|r| r.run.as_ref().unwrap().draw == "routed"));
+    assert!(runs.iter().all(|r| (r.run.as_ref().unwrap().draw == "routed") == r.exported()));
     let s = run(with_service("plumbing", service(1.0)));
     assert!(
         messages(&s)
@@ -958,7 +961,12 @@ fn a_fixture_on_a_wall_too_shallow_does_not_cross_the_room() {
             continue;
         }
         tried += 1;
-        assert!(of_kind(&s, ElementKind::Run).is_empty(), "seed {seed}: {:?}", messages(&s));
+        // Only the schematic: no run is routed across the room.
+        assert!(
+            of_kind(&s, ElementKind::Run).iter().all(|r| r.run.as_ref().unwrap().draw == "arcs"),
+            "seed {seed}: {:?}",
+            messages(&s)
+        );
         assert!(
             messages(&s).iter().any(|(_, m)| m.contains("can't run in")),
             "seed {seed}: {:?}",
@@ -1022,8 +1030,190 @@ fn a_part_says_which_network_its_group_is_in() {
         }),
     ));
     let info = |part: &str| parts(&s, part)[0].part.as_ref().unwrap();
+    // Circuits are numbered across a panel's networks, as on its schedule.
     assert_eq!(info("outlet").group.as_deref(), Some("1"));
-    assert_eq!(info("counter").group.as_deref(), Some("1"));
+    assert_eq!(info("counter").group.as_deref(), Some("2"));
     assert_eq!(info("outlet").network.as_deref(), Some("Circuits"));
     assert_eq!(info("counter").network.as_deref(), Some("Counter circuits"));
+}
+
+/// Power in the flat: a panel in the hall, receptacles round the rooms, switches by the doors
+/// and lights on the ceilings, on circuits that cross the ceilings.
+fn wired(extra: Value) -> Value {
+    let mut v = flat(json!({}));
+    v["assemblies"]["party"]["cavity"] = json!(0.09);
+    let mut power = json!({
+        "media": {
+            "14/2": { "conductors": 2, "rating": 15, "colour": "white" },
+            "14/3": { "conductors": 3, "rating": 15, "colour": "white" },
+            "12/2": { "conductors": 2, "rating": "20 A", "colour": "yellow" },
+            "10/3": { "conductors": 3, "rating": "30 A", "colour": "orange" },
+        },
+        "parts": {
+            "panel": { "above": 1.5 },
+            "outlet": { "above": 0.3 },
+            "heater": { "above": 0.15, "load": { "watts": 1500, "voltage": 240 } },
+        },
+        "place": [
+            { "place": "one", "part": "panel", "spaces": "hall", "wall": { "cavity": 0.09 } },
+            { "place": "every", "part": "outlet", "spaces": ["living", "#sleep"], "spacing": 3 },
+            { "place": "beside", "part": "heater", "opening": "window" },
+        ],
+        "connect": [
+            { "label": "General", "from": "panel", "to": ["outlet", "lighting.switch"], "rating": "15 A", "max": 8,
+              "via": { "cavity": 0.09, "ceilings": ["#room", "#circulation"] } },
+            { "label": "Heat", "from": "panel", "to": "heater", "via": { "cavity": 0.09, "ceilings": "#room" } },
+        ]
+    });
+    if let (Some(extra), Some(obj)) = (extra.as_object(), power.as_object_mut()) {
+        for (k, val) in extra {
+            obj.insert(k.clone(), val.clone());
+        }
+    }
+    v["services"] = json!({
+        "power": power,
+        "lighting": {
+            "parts": { "light": { "mount": "ceiling", "load": { "watts": 60 } }, "switch": { "above": 1.1 } },
+            "place": [
+                { "place": "over", "part": "light", "spaces": ["#room", "#circulation"] },
+                { "place": "beside", "part": "switch", "opening": "door", "spaces": "#room" },
+            ],
+            "connect": [{ "label": "Switch legs", "role": "control", "from": "switch", "to": "light",
+                          "via": { "ceilings": ["#room", "#circulation"] } }]
+        }
+    });
+    v
+}
+
+fn routed<'a>(s: &'a Solution, service: &str) -> Vec<&'a Element> {
+    of_kind(s, ElementKind::Run)
+        .into_iter()
+        .filter(|e| e.run.as_ref().is_some_and(|r| r.service == service && r.draw == "routed"))
+        .collect()
+}
+
+#[test]
+fn circuits_are_routed_in_the_walls_and_over_the_doors_never_through_them() {
+    let s = run(wired(json!({})));
+    assert_eq!(s.report.unmet, 0, "{:?}", messages(&s));
+    let runs = routed(&s, "power");
+    let along = |a: &str| runs.iter().any(|r| r.run.as_ref().unwrap().along == Some(a));
+    assert!(
+        along("wall") && along("ceiling"),
+        "{:?}",
+        runs.iter().map(|r| r.run.as_ref().unwrap().along).collect::<Vec<_>>()
+    );
+    // Nothing low in a wall passes a doorway: sample every low piece against every door.
+    for door in of_kind(&s, ElementKind::Door) {
+        let (a, b) = (door.points[0], door.points[1]);
+        let len = a.distance(b);
+        let u = Point::new((b.x - a.x) / len, (b.y - a.y) / len);
+        let (a, b) =
+            (Point::new(a.x + u.x * 0.05, a.y + u.y * 0.05), Point::new(b.x - u.x * 0.05, b.y - u.y * 0.05));
+        for r in runs.iter().filter(|r| r.run.as_ref().unwrap().along == Some("wall")) {
+            for w in r.points.windows(2) {
+                for k in 0..=20 {
+                    let t = k as f64 / 20.0;
+                    let p = Point::new(w[0].x + (w[1].x - w[0].x) * t, w[0].y + (w[1].y - w[0].y) * t);
+                    assert!(
+                        crate::geometry::point_segment_distance(p, a, b) > 0.06,
+                        "{} runs low through the door {}",
+                        r.id,
+                        door.id
+                    );
+                }
+            }
+        }
+    }
+    // Lights are reached from the ceiling, and a cable that climbs a wall says where.
+    assert!(runs.iter().any(|r| r.run.as_ref().unwrap().marks.iter().any(|m| m.kind == "riser")));
+    // Each circuit is one home run back to the panel, and its cables' lengths add up.
+    for c in s.layout.circuits.iter().filter(|c| c.service == "power") {
+        let homes = runs
+            .iter()
+            .filter(|r| {
+                r.run.as_ref().is_some_and(|i| i.home && i.group.as_deref() == Some(c.group.as_str()))
+            })
+            .count();
+        assert_eq!(homes, 1, "circuit {}", c.group);
+        assert!(c.length > 0.0);
+    }
+}
+
+#[test]
+fn each_circuit_gets_the_thinnest_cable_that_carries_it() {
+    let s = run(wired(json!({})));
+    let circuits: Vec<_> = s.layout.circuits.iter().filter(|c| c.service == "power").collect();
+    let general: Vec<_> = circuits.iter().filter(|c| c.network == "General").collect();
+    assert!(!general.is_empty());
+    assert!(general.iter().all(|c| c.medium.as_deref() == Some("14/2") && c.rating == Some(15.0)));
+    // Heaters: 1500 W at 240 V each, no breaker named: the smallest that carries them, 2-wire.
+    let heat: Vec<_> = circuits.iter().filter(|c| c.network == "Heat").collect();
+    assert!(!heat.is_empty());
+    for c in heat {
+        assert_eq!(c.voltage, Some(240.0));
+        let r = c.rating.unwrap();
+        assert!(c.load <= r * 0.8 + 1e-9, "{c:?}");
+        assert_eq!(c.medium.as_deref(), Some(if r <= 15.0 { "14/2" } else { "12/2" }), "{c:?}");
+    }
+}
+
+#[test]
+fn a_feed_gives_a_terminal_its_own_circuit_and_a_cable_too_small_is_said() {
+    let s = run(wired(
+        json!({ "feeds": [{ "feed": "heater", "dedicated": true, "rating": "30 A", "medium": "14/2" }] }),
+    ));
+    let heat: Vec<_> = s.layout.circuits.iter().filter(|c| c.network == "Heat").collect();
+    let heaters = parts(&s, "heater").len();
+    assert_eq!(heat.len(), heaters, "one circuit each");
+    assert!(heat.iter().all(|c| c.rating == Some(30.0) && c.medium.as_deref() == Some("14/2")));
+    assert!(
+        messages(&s).iter().any(|(p, m)| p.as_deref() == Some("/services/power/feeds/0")
+            && m.contains("14/2 is rated 15 A")),
+        "{:?}",
+        messages(&s)
+    );
+}
+
+#[test]
+fn switches_control_their_rooms_lights_on_the_power_circuits() {
+    let s = run(wired(json!({})));
+    let legs = routed(&s, "lighting");
+    assert!(!legs.is_empty());
+    assert!(legs.iter().all(|r| r.run.as_ref().unwrap().control));
+    // The switches are on power's circuits, and so are their lights.
+    for sw in parts(&s, "switch") {
+        let p = sw.part.as_ref().unwrap();
+        assert_eq!(p.fed_by.as_deref(), Some("power"), "{}", p.space);
+        assert!(p.group.is_some());
+    }
+    let fed = parts(&s, "light").into_iter().filter(|l| l.part.as_ref().unwrap().fed_by.is_some()).count();
+    assert!(fed > 0);
+    // Their load is on the circuit: 60 W a light.
+    let lit: f64 = s.layout.circuits.iter().filter(|c| c.network == "General").map(|c| c.load).sum();
+    assert!(lit > 0.0);
+    assert!(legs.iter().all(|r| r.run.as_ref().unwrap().fed_by.as_deref() == Some("power")));
+}
+
+#[test]
+fn a_wall_that_lets_nothing_through_carries_nothing() {
+    let mut v = wired(json!({}));
+    v["assemblies"]["partition"]["cross"] = json!("no");
+    let s = run(v);
+    let partitions: Vec<_> = of_kind(&s, ElementKind::Wall)
+        .into_iter()
+        .filter(|w| w.wall.as_ref().unwrap().assembly == "partition")
+        .map(|w| w.wall.as_ref().unwrap().line)
+        .collect();
+    assert!(!partitions.is_empty());
+    for r in routed(&s, "power").iter().filter(|r| r.run.as_ref().unwrap().along == Some("wall")) {
+        for p in &r.points {
+            for [a, b] in &partitions {
+                let on = crate::geometry::point_segment_distance(*p, *a, *b) < 1e-6;
+                // A point can sit where a partition meets another wall; a run along one can't.
+                let inner = p.distance(*a) > 0.2 && p.distance(*b) > 0.2;
+                assert!(!(on && inner), "{} runs in a partition", r.id);
+            }
+        }
+    }
 }

@@ -12,7 +12,7 @@ import { ConfigEngine } from "./engine/engine";
 import { download, pickFile, pickZip, takeLegacyDraft } from "./files";
 import { openMenu, type MenuItem } from "./menu";
 import { libraryCard } from "./library";
-import { nextView, summarize, type ServiceSummary } from "./services";
+import { nextView, schedule, summarize, type ServiceSummary } from "./services";
 import { place } from "./reference/insert";
 import type { Cursor } from "./reference/locate";
 import { ReferencePanel } from "./reference/panel";
@@ -440,7 +440,14 @@ viewer.onCycleView = () =>
     ),
   );
 
-/** What the shown service placed, and how it's connected. */
+/** The scope whose panel schedule the legend shows (a flat), when there are several. */
+let legendScope: string | undefined;
+/** Whether the panel schedule is open in the legend. */
+let scheduleOpen = false;
+
+viewer.onSchematic = () => renderLegend();
+
+/** What the shown service placed, how it's connected, and its circuits (a panel schedule). */
 function renderLegend(): void {
   const legend = $("legend");
   const s = services.find((x) => x.name === serviceView);
@@ -459,7 +466,42 @@ function renderLegend(): void {
         `<div class="legend-net">${esc(n.name)}${n.groups ? ` · ${n.groups} group${n.groups > 1 ? "s" : ""}` : ""}</div>`,
     )
     .join("");
-  legend.innerHTML = `<ul>${parts || "<li>Nothing placed</li>"}</ul>${nets}`;
+  const sched = schedule(lastLayout?.circuits, s.name, legendScope);
+  let table = "";
+  if (sched.rows.some((r) => r.breaker || r.medium)) {
+    const lengths = lastLayout ? Lengths.for(lastLayout) : null;
+    const scopes =
+      sched.scopes.length > 1
+        ? `<div class="legend-hint">${sched.scopes
+            .map((sc) =>
+              sc === sched.scope ? `<b>${esc(sc)}</b>` : `<a href="#" data-scope="${esc(sc)}">${esc(sc)}</a>`,
+            )
+            .join(" · ")}</div>`
+        : "";
+    const rows = sched.rows
+      .map(
+        (r) =>
+          `<tr><td>${esc(r.circuit)}</td><td>${esc(r.breaker)}</td><td>${esc(r.medium)}</td><td>${esc(r.load)}</td><td>${lengths && r.length ? esc(lengths.length(r.length)) : ""}</td><td class="devices">${esc(r.devices)}</td></tr>`,
+      )
+      .join("");
+    table = `<details class="legend-details"${scheduleOpen ? " open" : ""}><summary>Panel schedule · ${sched.rows.length} circuit${sched.rows.length > 1 ? "s" : ""}</summary>${scopes}<table class="legend-schedule"><tr><th>#</th><th>Breaker</th><th>Cable</th><th>Load</th><th>Length</th><th>On it</th></tr>${rows}</table></details>`;
+  }
+  const routed = !viewer.schematic;
+  const common = routed ? viewer.commonMedium() : null;
+  const key = routed
+    ? `<div class="legend-hint"><span class="legend-swatch"></span>in a wall <span class="legend-swatch" style="border-top-style:dashed"></span>over a door or across a ceiling<br>◦ up a wall · ┼ through a wall${common ? ` · ${esc(common)} unless marked` : ""}</div>`
+    : "";
+  const hint = `<div class="legend-hint">${routed ? "Where cables run" : "Schematic"} · press A for the ${routed ? "schematic" : "routes"}</div>`;
+  legend.innerHTML = `<ul>${parts || "<li>Nothing placed</li>"}</ul>${nets}${table}${s.networks.length ? key + hint : ""}`;
+  const details = legend.querySelector<HTMLDetailsElement>("details.legend-details");
+  if (details) details.ontoggle = () => (scheduleOpen = details.open);
+  for (const a of legend.querySelectorAll<HTMLAnchorElement>("a[data-scope]")) {
+    a.onclick = (e) => {
+      e.preventDefault();
+      legendScope = a.dataset.scope;
+      renderLegend();
+    };
+  }
 }
 
 /** A library file: what it is, and which plates use it, instead of a drawing. */
@@ -1392,6 +1434,16 @@ viewer.onContextMenu = (target: ContextTarget, x: number, y: number) => {
       x,
       y,
     );
+    return;
+  }
+  if (target.type === "run") {
+    const r = target.element.run!;
+    const source = target.element.source;
+    const items: MenuItem[] = [];
+    if (source) items.push({ label: `Show the ${r.network} network`, action: () => showInFile(source) });
+    const service = source?.match(/^(.*\/services\/[^/]+)/)?.[1];
+    if (service) items.push({ label: `Show the ${r.service} service`, action: () => showInFile(service) });
+    openMenu(`${r.medium ?? r.network}${r.group ? `, circuit ${r.group}` : ""}`, items, x, y);
     return;
   }
   if (target.type === "part") {

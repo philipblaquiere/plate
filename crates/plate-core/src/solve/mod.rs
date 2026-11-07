@@ -26,6 +26,7 @@ pub mod frame;
 mod grid;
 pub mod outline;
 pub mod ports;
+pub mod route;
 mod spine;
 pub mod spread;
 
@@ -419,14 +420,14 @@ fn solve_plate(config: &Config, start: &Start) -> Solution {
         let sub = host.solve_plan(&plan, &slot, &ctx);
         let levels = sub.services.clone();
         let (leftover, spaces) = host.finish(sub, &world, &mut elements, &mut diagnostics);
-        fit::run(&levels, units, &mut elements, &mut diagnostics);
+        let circuits = fit::run(&levels, units, config.height(), &mut elements, &mut diagnostics);
         let floor = match start {
             Start::Boundary { .. } => crate::geometry::signed_area(&points).abs(),
             Start::Spine { .. } => 0.0,
         };
         let report = report(&diagnostics, leftover, floor, spaces);
         return Solution {
-            layout: Layout::new(config.name.clone(), config.system, units, elements),
+            layout: Layout::new(config.name.clone(), config.system, units, elements).with_circuits(circuits),
             diagnostics,
             report,
         };
@@ -580,9 +581,13 @@ fn solve_preview(config: &Config, view: &View) -> Solution {
             host.finish(sub, &child.canon.inverse(), &mut elements, &mut diagnostics)
         }
     };
-    fit::run(&levels, units, &mut elements, &mut diagnostics);
+    let circuits = fit::run(&levels, units, config.height(), &mut elements, &mut diagnostics);
     let report = report(&diagnostics, leftover, setup.w * setup.h, spaces);
-    Solution { layout: Layout::new(config.name.clone(), setup.system, units, elements), diagnostics, report }
+    Solution {
+        layout: Layout::new(config.name.clone(), setup.system, units, elements).with_circuits(circuits),
+        diagnostics,
+        report,
+    }
 }
 
 /// A slot for a plan with no `preview`: sized from its `needs` (or, failing that, from the
@@ -1071,6 +1076,7 @@ impl Host {
                     .map(|f| [f.front.0, f.front.1])
                     .or_else(|| entered_from(placed)),
                 symbol: space.symbol.clone(),
+                load: space.load.clone(),
                 fill: space.fill,
                 tone: space.symbol.as_deref().filter(|_| space.fill).and_then(crate::symbols::tone),
                 tags: space.tags.clone(),
@@ -1355,6 +1361,7 @@ fn wall_info(w: &build::BuiltWall, between: Vec<String>, units: Units) -> WallIn
             })
             .collect(),
         pattern: a.pattern.unwrap_or_default().name(),
+        cross: a.crossing().name(),
         roles: w.roles.clone(),
         between,
         because: w.because.clone(),
@@ -1641,6 +1648,9 @@ fn view_key(plan: &Plan) -> String {
         for (key, space) in &plan.spaces {
             if let Some(symbol) = &space.symbol {
                 out.push_str(&format!("{key}={symbol};"));
+            }
+            if !space.load.is_empty() {
+                out.push_str(&format!("{key}~{:?};", space.load));
             }
             if let Some(child) = &space.plan {
                 out.push_str(&format!("{key}{{"));

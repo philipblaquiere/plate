@@ -37,7 +37,7 @@ SERVER                    validate (serde) ──► Solver ──► Layout ─
 - **Schema**: `schema/plate.schema.json` (JSON Schema 2020-12) is the single definition of the format. It drives validation, defaults, editor hover/completions and the in-app reference.
 - **Solver**: recursive. A plan places spaces in a slot; a space with its own `plan` is solved inside it. Identical slots are solved once (typicals) and cached.
 - **Engines**: `grid` (simulated annealing over cells, with a fill space for leftovers) and `spine_stack` (corridor along a spine, bays on each side).
-- **Walls and services**: assemblies turn edges into walls with a thickness (the thinnest type that meets what each wall's roles and rules ask), and services (power, lighting, heat, plumbing) place their parts on the solved plan and connect them, each with its own view.
+- **Walls and services**: assemblies turn edges into walls with a thickness (the thinnest type that meets what each wall's roles and rules ask), and services (power, lighting, heat, plumbing) place their parts on the solved plan and connect them, each with its own view: circuits routed in the walls and across the ceilings, each cable sized from what's on it (a range's 50 A gets 6/3), switches joined to their lights, and a panel schedule.
 - **Report**: every solve is `perfect`, `solved`, `incomplete` or `empty`, with diagnostics that point back to the line to change.
 - **Deterministic**: same file and seed, same layout.
 

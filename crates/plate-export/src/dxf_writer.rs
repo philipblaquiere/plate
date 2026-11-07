@@ -18,7 +18,8 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
         System::Metric => DrawingUnits::Metric,
     };
 
-    let mut layers: Vec<String> = layout.elements.iter().map(|e| e.cad_layer()).collect();
+    let mut layers: Vec<String> =
+        layout.elements.iter().filter(|e| e.exported()).map(|e| e.cad_layer()).collect();
     layers.sort_unstable();
     layers.dedup();
     for name in layers {
@@ -35,7 +36,7 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
     let span = b.width().max(b.height()).max(1000.0 / layout.units.to_mm());
     let height = span / 40.0;
 
-    for element in &layout.elements {
+    for element in layout.elements.iter().filter(|e| e.exported()) {
         let layer = element.cad_layer();
         // A symbol, or a part drawn with one: one polyline per path, on its own layer.
         if let (ElementKind::Symbol | ElementKind::Part, Some(symbol)) = (element.kind, &element.symbol) {
