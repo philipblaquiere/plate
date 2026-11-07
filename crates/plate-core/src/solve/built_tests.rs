@@ -495,6 +495,113 @@ fn over_puts_one_in_the_middle_or_one_per_area() {
     assert!(down.len() as f64 <= (area / 6.0).ceil() + 2.0, "{} for {area} m²", down.len());
 }
 
+/// How far a point is from the nearest edge of a space's outline.
+fn from_edges(points: &[Point], p: Point) -> f64 {
+    (0..points.len())
+        .map(|k| crate::geometry::point_segment_distance(p, points[k], points[(k + 1) % points.len()]))
+        .fold(f64::INFINITY, f64::min)
+}
+
+#[test]
+fn over_keeps_off_the_walls_of_rooms_that_arent_rectangles() {
+    // The hall is a fill: an L or worse at most seeds. The middle of its bounds was once on a wall.
+    for seed in 1..=6 {
+        let mut v = with_service(
+            "lighting",
+            json!({
+                "parts": { "light": { "mount": "ceiling" }, "downlight": { "mount": "ceiling" } },
+                "place": [
+                    { "place": "over", "part": "light", "spaces": ["hall", "#sleep", "#wet"] },
+                    { "place": "over", "part": "downlight", "spaces": "living", "spacing": 1.5 },
+                ]
+            }),
+        );
+        v["seed"] = json!(seed);
+        let s = run(v);
+        let lights = of_kind(&s, ElementKind::Part);
+        assert!(!lights.is_empty());
+        for p in lights {
+            let info = p.part.as_ref().unwrap();
+            let room = element(&s, &info.space);
+            assert!(crate::geometry::contains(&room.points, info.at), "seed {seed}: {} outside", info.space);
+            let d = from_edges(&room.points, info.at);
+            assert!(d >= 0.5, "seed {seed}: a {} {d:.2} from a wall of {}", info.part, info.space);
+        }
+        let living = element(&s, "living");
+        let down: Vec<Point> =
+            in_space(&parts(&s, "downlight"), "living").iter().map(|p| p.part.as_ref().unwrap().at).collect();
+        // A grid at most 1.5 m apart: every point of the room is near one.
+        let b = Bounds::from_points(&living.points);
+        let (mut x, mut far) = (b.min_x + 0.05, 0.0f64);
+        while x < b.max_x {
+            let mut y = b.min_y + 0.05;
+            while y < b.max_y {
+                let q = Point::new(x, y);
+                if crate::geometry::contains(&living.points, q) {
+                    far = far.max(down.iter().map(|d| d.distance(q)).fold(f64::INFINITY, f64::min));
+                }
+                y += 0.25;
+            }
+            x += 0.25;
+        }
+        assert!(far <= 1.5 / 2f64.sqrt() + 0.1, "seed {seed}: a spot {far:.2} from the nearest downlight");
+    }
+}
+
+#[test]
+fn over_puts_exactly_the_count_and_says_when_they_dont_fit() {
+    let s = run(with_service(
+        "lighting",
+        json!({
+            "parts": { "light": { "mount": "ceiling", "width": 0.3, "depth": 0.3 } },
+            "place": [
+                { "place": "over", "part": "light", "spaces": "living", "count": 7 },
+                { "place": "over", "part": "light", "spaces": "#wet", "count": 200 },
+            ]
+        }),
+    ));
+    let lights = parts(&s, "light");
+    assert_eq!(in_space(&lights, "living").len(), 7);
+    let bath = in_space(&lights, "bath").len();
+    assert!(bath > 1 && bath < 200, "{bath}");
+    let m = messages(&s);
+    assert!(
+        m.iter().any(|(p, t)| p.as_deref() == Some("/services/lighting/place/1")
+            && t.contains(&format!("only {bath} lights fit over the room, not 200"))),
+        "{m:?}"
+    );
+    let at: Vec<Point> = in_space(&lights, "bath").iter().map(|p| p.part.as_ref().unwrap().at).collect();
+    assert!(super::spread::closest(&at) >= 0.3 - 1e-9);
+}
+
+#[test]
+fn over_fixtures_puts_them_in_a_line_above() {
+    let mut v = with_service(
+        "lighting",
+        json!({
+            "parts": { "pendant": { "mount": "ceiling", "width": 0.2, "depth": 0.2 } },
+            "place": [{ "place": "over", "part": "pendant", "spaces": "#island", "count": 3 }]
+        }),
+    );
+    v["spaces"]["living"]["plan"] = json!({
+        "spaces": { "island": { "kind": "fixture", "width": 2.4, "depth": 1.0, "tags": ["island"] } }
+    });
+    let s = run(v);
+    assert_eq!(s.report.unmet, 0, "{:?}", messages(&s));
+    let island = &element(&s, "living.island").points;
+    let at: Vec<Point> = parts(&s, "pendant").iter().map(|p| p.part.as_ref().unwrap().at).collect();
+    assert_eq!(at.len(), 3);
+    for p in &at {
+        assert!(crate::geometry::contains(island, *p), "{p:?} isn't over the island");
+    }
+    // In a line along it: all three on its long axis, 0.8 m apart.
+    let b = Bounds::from_points(island);
+    let along_x = b.width() > b.height();
+    let across: Vec<f64> = at.iter().map(|p| if along_x { p.y } else { p.x }).collect();
+    assert!(across.iter().all(|c| (c - across[0]).abs() < 1e-6), "{at:?}");
+    assert!((super::spread::closest(&at) - 0.8).abs() < 1e-6, "{at:?}");
+}
+
 #[test]
 fn on_puts_one_behind_each_fixture_even_on_its_wall() {
     let mut v = with_service(

@@ -1703,7 +1703,7 @@
       ]
     },
     "PlaceOver": {
-      "description": "In the spaces, on the floor or ceiling: one in the middle, or a grid of them.",
+      "description": "In the spaces, on the ceiling or floor: one in the middle of the biggest part of each, or spread over all of it. A space that isn't a rectangle (an L, a U) is cut into rectangles and each gets its share: a grid, or a line where it's narrow. A selector that names fixtures puts them over the fixtures instead (pendants over an island).",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -1721,23 +1721,47 @@
           "type": "string"
         },
         "spaces": {
-          "description": "The spaces.",
+          "description": "The spaces, or fixtures to put them over.",
           "$ref": "#/$defs/Selector"
         },
+        "count": {
+          "description": "How many in each space: exactly, or `{ min, max }` to bound what `spacing` or `per` gives. Without `spacing` or `per`, one.",
+          "$ref": "#/$defs/Count"
+        },
         "per": {
-          "description": "Floor area each covers (m² or ft²): a grid of as many as that takes.",
+          "description": "Floor area each covers (m²): as many as that takes, spread over the space.",
           "type": "number",
           "exclusiveMinimum": 0
         },
         "spacing": {
-          "description": "A grid this far apart.",
+          "description": "At most this far apart, and about half that from the walls: a grid in each part of the space, a line where a part is narrower than this.",
+          "$ref": "#/$defs/Length"
+        },
+        "layout": {
+          "description": "How they're arranged in each part of the space. Defaults to `'grid`.",
+          "enum": [
+            "grid",
+            "line",
+            "centre"
+          ],
+          "x-enumDescriptions": {
+            "grid": "A grid as close to square as fits; a part too narrow for two rows gets a line.",
+            "line": "One row along each part.",
+            "centre": "One in the middle of each part (an L gets two)."
+          }
+        },
+        "margin": {
+          "description": "Never closer than this to a wall, where the share of each leaves room for it. Defaults to 300 mm.",
           "$ref": "#/$defs/Length"
         }
       },
       "x-docs": "services",
       "x-examples": [
         "plate.over \"light\" \"#room\",",
-        "plate.over \"downlight\" \"#living\" & { per = 4 },"
+        "plate.over \"downlight\" \"#living\" & { count = 6 },",
+        "plate.over \"downlight\" \"#kitchen\" & { spacing = \"1.5 m\", count = { min = 2, max = 8 } },",
+        "plate.over \"light\" \"#circulation\" & { spacing = \"2.4 m\", layout = 'line },",
+        "plate.over \"pendant\" \"#island\" & { count = 3 },  # over fixtures"
       ]
     },
     "PlaceOn": {

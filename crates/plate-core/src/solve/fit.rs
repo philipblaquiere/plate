@@ -11,10 +11,11 @@ use std::collections::BTreeMap;
 use crate::diagnostic::{Code, Diagnostic};
 use crate::geometry::{interior_point, point_segment_distance, signed_area, Point};
 use crate::layout::{Element, ElementKind, PartInfo, SymbolInfo};
-use crate::plan::{role_matches, tag_of, Selector, SpaceKind};
+use crate::plan::{role_matches, tag_of, Count, Selector, SpaceKind};
 use crate::service::{Mount, OpeningKind, Part, Placement, Service, Side};
 use crate::units::Units;
 
+use super::spread::{self, Arrange, Ask};
 use super::{num, ServiceLevel};
 
 /// A side of a room, or the part of it one wall makes.
@@ -574,10 +575,32 @@ fn place(model: &Model, instances: &[Instance], elements: &[Element], issues: &m
                     }
                 }
             }
-            Placement::Over { spaces, per, spacing, .. } => {
+            Placement::Over { spaces, count, per, spacing, layout, margin, .. } => {
+                let (exactly, min, max) = match count {
+                    Some(Count::Exactly(n)) => (Some(*n), None, None),
+                    Some(Count::Range { min, max }) => (None, *min, *max),
+                    None => (None, None, None),
+                };
+                let ask = Ask {
+                    exactly,
+                    min,
+                    max,
+                    spacing: spacing.map(|v| v.0.to(units).max(ctx.m * 0.3)),
+                    per: per.map(|a| a * ctx.m * ctx.m),
+                    arrange: layout.map_or(Arrange::Grid, Into::into),
+                    margin: margin.map_or(0.3 * ctx.m, |v| v.0.to(units).max(0.0)),
+                };
                 for &r in &rooms {
                     if model.rooms[r].selected_by(spaces) {
-                        over(&mut ctx, &job, r, *per, spacing.map(|v| v.0.to(units)), elements);
+                        over(&mut ctx, &job, r, None, &ask, elements);
+                    }
+                    // Over fixtures: a pendant over an island, a light over a table.
+                    if job.part.mount != Mount::Floor {
+                        for fi in 0..model.rooms[r].fixtures.len() {
+                            if fixture_selected(&elements[model.rooms[r].fixtures[fi].element], spaces) {
+                                over(&mut ctx, &job, r, Some(fi), &ask, elements);
+                            }
+                        }
                     }
                 }
             }
@@ -948,58 +971,89 @@ fn beside(ctx: &mut Ctx, job: &Job, r: usize, kind: OpeningKind, side: Option<Si
     }
 }
 
-fn over(ctx: &mut Ctx, job: &Job, r: usize, per: Option<f64>, spacing: Option<f64>, elements: &[Element]) {
+/// Spread a part over a room's floor or ceiling, or over one of its fixtures (`fixture`).
+fn over(ctx: &mut Ctx, job: &Job, r: usize, fixture: Option<usize>, ask: &Ask, elements: &[Element]) {
     let room = &ctx.model.rooms[r];
     let path = room.path.clone();
-    let outer = room.loops[0].clone();
-    let holes: Vec<Vec<Point>> = room.loops[1..].to_vec();
-    let b = crate::geometry::Bounds::from_points(&outer);
-    let (bw, bh) = (b.width(), b.height());
-    let m2 = ctx.m * ctx.m;
-    let (nx, ny) = match (per, spacing) {
-        (_, Some(sp)) if sp > 0.0 => {
-            (((bw / sp) - 1e-9).ceil().max(1.0) as usize, ((bh / sp) - 1e-9).ceil().max(1.0) as usize)
+    let (outer, holes, what) = match fixture {
+        Some(fi) => {
+            let e = &elements[room.fixtures[fi].element];
+            let name = e.space.as_ref().map_or_else(|| "fixture".to_owned(), |s| s.label.clone());
+            (e.points.clone(), Vec::new(), format!("the {name}"))
         }
-        (Some(a), _) if a > 0.0 => {
-            let count = ((room.area / (a * m2)) - 1e-9).ceil().max(1.0);
-            let nx = (count * bw / bh.max(1e-9)).sqrt().round().max(1.0);
-            let ny = (count / nx).ceil().max(1.0);
-            (nx as usize, ny as usize)
+        None => (room.loops[0].clone(), room.loops[1..].to_vec(), "the room".to_owned()),
+    };
+    // Rooms are cut where they turn; a fixture is one piece.
+    let min_side = if fixture.is_some() { 0.0 } else { 0.6 * ctx.m };
+    let zones = crate::geometry::zones(&outer, &holes, min_side);
+    let mut points =
+        if zones.is_empty() { vec![interior_point(&outer, &holes)] } else { spread::spread(&zones, ask) };
+    // Parts can't overlap: ask for fewer until they don't.
+    let (w, d) = job.part.size(ctx.units);
+    let size = w.max(d);
+    let asked = points.len();
+    if asked > 1 && spread::closest(&points) < size - 1e-9 {
+        let mut n = asked - 1;
+        loop {
+            let fewer = Ask { exactly: Some(n as u32), min: None, max: None, ..*ask };
+            points = spread::spread(&zones, &fewer);
+            if n <= 1 || spread::closest(&points) >= size - 1e-9 {
+                break;
+            }
+            n -= 1;
         }
-        _ => (1, 1),
+        ctx.issues.add(
+            job.pointer,
+            format!("only {} {} fit over {what}, not {asked}", points.len(), plural(&job.label())),
+            &path,
+            Some(format!(
+                "Each is {} across. Ask for fewer, a wider spacing, or a smaller margin.",
+                num(size)
+            )),
+        );
+    }
+    let parts = zones.len() > 1;
+    let mut how = match (ask.arrange, ask.exactly, ask.spacing, ask.per) {
+        (Arrange::Centre, ..) if parts => format!("in the middle of each part of {what}"),
+        (Arrange::Centre, ..) => format!("in the middle of {what}"),
+        (_, Some(_), ..) | (_, None, None, None) if points.len() > 1 => {
+            format!("one of {}, spread over {what}", points.len())
+        }
+        (_, None, Some(sp), _) => format!("at most {} apart over {what}", num(sp)),
+        (_, None, None, Some(a)) => format!("one per {} m² over {what}", num(a / (ctx.m * ctx.m))),
+        _ if parts => format!("in the middle of the biggest part of {what}"),
+        _ => format!("in the middle of {what}"),
     };
-    let how = match (per, spacing) {
-        (_, Some(sp)) => format!("{} apart over the room", num(sp)),
-        (Some(a), _) => format!("one per {} m² of floor", num(a)),
-        _ => "in the middle of the room".to_owned(),
-    };
+    if ask.arrange == Arrange::Line && points.len() > 1 {
+        how.push_str(", in a line");
+    }
     let floor = job.part.mount == Mount::Floor;
     let fixtures: Vec<Vec<Point>> =
         room.fixtures.iter().map(|f| elements[f.element].points.clone()).collect();
-    let inside = |p: Point| {
-        crate::geometry::contains(&outer, p) && !holes.iter().any(|h| crate::geometry::contains(h, p))
-    };
     let blocked = |p: Point| floor && fixtures.iter().any(|f| crate::geometry::contains(f, p));
     let mut put = 0;
-    for j in 0..ny {
-        for i in 0..nx {
-            let c = Point::new(
-                b.min_x + bw * (i as f64 + 0.5) / nx as f64,
-                b.min_y + bh * (j as f64 + 0.5) / ny as f64,
-            );
-            if inside(c) && !blocked(c) {
-                ctx.in_room(job, &how, r, c);
-                put += 1;
-            }
+    for &c in &points {
+        if !blocked(c) {
+            ctx.in_room(job, &how, r, c);
+            put += 1;
         }
     }
-    if put == 0 {
+    if put == 0 && !points.is_empty() {
         let c = interior_point(&outer, &holes);
         if blocked(c) {
             ctx.issues.add(job.pointer, format!("no free floor for a {}", job.label()), &path, None);
         } else {
             ctx.in_room(job, &how, r, c);
         }
+    }
+}
+
+/// A part's name, more than one: "lights", "switches".
+fn plural(label: &str) -> String {
+    if ["s", "x", "z", "ch", "sh"].iter().any(|e| label.ends_with(e)) {
+        format!("{label}es")
+    } else {
+        format!("{label}s")
     }
 }
 

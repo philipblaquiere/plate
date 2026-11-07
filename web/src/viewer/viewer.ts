@@ -1,6 +1,7 @@
 import type { Element, Layout, Point, System, Units } from "../types";
 import { degrees, Lengths } from "./format";
 import { doorSymbol } from "./door";
+import { clearOf, type Box } from "./labels";
 import {
   edgeNormal,
   isNoop,
@@ -1516,6 +1517,15 @@ export class Viewer {
       if (dot > 0 && s.space!.kind !== "fixture") divided.add(s.id.slice(0, dot));
     }
     const tags: { x: number; y: number; w: number }[] = [];
+    // In a service view its parts are drawn over the plan: labels move off them.
+    const parts: Box[] = [];
+    for (const p of this.serviceView ? this.layout!.elements : []) {
+      if (p.kind !== "part" || p.part?.service !== this.serviceView) continue;
+      const shape = this.partShape(p);
+      const xs = shape.map((q) => q.x);
+      const ys = shape.map((q) => q.y);
+      parts.push({ x0: Math.min(...xs), y0: Math.min(...ys), x1: Math.max(...xs), y1: Math.max(...ys) });
+    }
     for (const s of spaces) {
       const info = s.space!;
       const pts = s.points.map((p) => this.toScreen(p));
@@ -1561,7 +1571,10 @@ export class Viewer {
       const small = w > name.length * 5.6 + 6 && h > 14;
       if (!big && !small) continue;
       // A shape that isn't a rectangle (a fill) says where its label fits.
-      const c = s.labelAt ? this.toScreen(s.labelAt) : centroid(pts);
+      const at = s.labelAt ? this.toScreen(s.labelAt) : centroid(pts);
+      const c = big
+        ? clearOf(at, Math.max(name.length, area.length) * 6.4, 28, 12, parts, pts)
+        : clearOf(at, name.length * 5.6, 13, 6, parts, pts);
       const t = el("text", { x: c.x, y: big ? c.y - 2 : c.y + 4, class: "space-name" }, g);
       t.textContent = name;
       if (big) {
