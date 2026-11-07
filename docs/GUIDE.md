@@ -394,7 +394,8 @@ and power, lighting, heat or plumbing is placed on the result and connected.
   line between two plates.
 - **Services** never move a wall. They place **parts** (receptacles, switches, lights, panels,
   stacks) where the solved plan says: `plate.every` along walls, `plate.beside` doors or windows,
-  `plate.over` a room's floor or ceiling, `plate.on` the back of a fixture, `plate.one` in the
+  `plate.over` a room's floor or ceiling (one, a count, or a grid by spacing, cut to the room's
+  shape: an L-shaped hall gets a line down each leg), `plate.on` the back of a fixture, `plate.one` in the
   best place. **Networks** connect them: circuits drawn the electrical way (arcs and numbered
   home runs) or runs routed through walls with a deep enough cavity. What a service needs from
   the layout (a stretch of wall for the panel, a drain in each bath) it **claims**, and the

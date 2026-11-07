@@ -19,7 +19,7 @@ use std::collections::BTreeMap;
 use serde::{Deserialize, Serialize};
 
 use crate::assembly::Requirement;
-use crate::plan::{LengthSer, Plan, RuleItem, Selector};
+use crate::plan::{Count, LengthSer, Plan, RuleItem, Selector};
 use crate::units::Units;
 
 #[derive(Debug, Clone, Default, Deserialize, Serialize)]
@@ -155,14 +155,25 @@ pub enum Placement {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         offset: Option<LengthSer>,
     },
-    /// In the spaces: one in the middle, or a grid of them by `per` (area each) or `spacing`.
+    /// In the spaces (or over fixtures), on the ceiling or floor: one in the middle of the
+    /// biggest part of each, or spread over all of it by `count`, `spacing` or `per`.
     Over {
         part: String,
         spaces: Selector,
+        /// How many in each space: exactly, or bounds on what `spacing` or `per` gives.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        count: Option<Count>,
+        /// Floor area each covers.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         per: Option<f64>,
+        /// At most this far apart, and about half that from the walls.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         spacing: Option<LengthSer>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        layout: Option<Arrange>,
+        /// Never closer than this to a wall, where there's room. Defaults to 300 mm.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        margin: Option<LengthSer>,
     },
     /// One at the back of each fixture.
     On { part: String, fixtures: Selector },
@@ -211,6 +222,28 @@ impl Placement {
             Placement::One { .. } => 2,
             Placement::Every { .. } => 3,
             Placement::Over { .. } => 4,
+        }
+    }
+}
+
+/// How `over` arranges parts in each part of a space.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Arrange {
+    /// A grid; a part of the space too narrow for two rows gets a line.
+    Grid,
+    /// One row along each part.
+    Line,
+    /// One in the middle of each part.
+    Centre,
+}
+
+impl From<Arrange> for crate::solve::spread::Arrange {
+    fn from(a: Arrange) -> Self {
+        match a {
+            Arrange::Grid => Self::Grid,
+            Arrange::Line => Self::Line,
+            Arrange::Centre => Self::Centre,
         }
     }
 }

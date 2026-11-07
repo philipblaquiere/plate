@@ -77,7 +77,7 @@ in
     = fun p o => { place = 'beside, part = p, opening = o },
 
   over
-    | doc "A service places a part in the middle of each of these spaces (on the ceiling or floor), or a grid of them. `plate.over \"light\" \"#room\"`; one per 4 m²: `& { per = 4 }`; every 2.4 m: `& { spacing = 2.4 }`"
+    | doc "A service places a part on the ceiling or floor of each of these spaces: one in the middle of its biggest part, or spread over all of it (an L gets a grid in its body and a line in its arm). `plate.over \"light\" \"#room\"`; exactly 6: `& { count = 6 }`; at most 1.5 m apart: `& { spacing = \"1.5 m\" }`; one per 4 m²: `& { per = 4 }`; in a line: `& { layout = 'line }`. Over fixtures: `plate.over \"pendant\" \"#island\" & { count = 3 }`"
     = fun p s => { place = 'over, part = p, spaces = s },
 
   on

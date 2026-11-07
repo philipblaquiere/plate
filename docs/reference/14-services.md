@@ -25,9 +25,29 @@ A part goes on a wall (`above` the floor), on the ceiling, on the floor, or in a
 
 - `plate.every part spaces spacing`: along each wall run (the perimeter, cut at doorways), at most `spacing` apart and half that from each end. On fixtures, along their backs.
 - `plate.beside part 'door` (by the latch, or `side = 'hinge`) or `'window` (under it, as wide as it).
-- `plate.over part spaces`: in the middle, or a grid (`per` area each, or `spacing`).
+- `plate.over part spaces`: on the ceiling or floor. Alone, one in the middle of the space's biggest part; with `count`, `spacing` or `per`, spread over all of it (see below). A selector that names fixtures puts them over the fixtures: `plate.over "pendant" "#island" & { count = 3 }`.
 - `plate.on part fixtures`: at the back of each.
 - `plate.one part spaces`: the best place on its walls, `near` and `apart` from port roles, `'door`, `'window`, `'entrance` or tags, on a wall that is at least `wall`.
+
+### Spreading parts over a room
+
+A room that isn't a rectangle is cut into rectangles first, biggest first: an L is its body and its arm, a U three pieces. Pieces narrower than 600 mm, or smaller than a tenth of the room, get nothing of their own. Then:
+
+```nickel
+plate.over "light" "#room",                                                   # one, in the middle of the biggest piece
+plate.over "downlight" "living" & { count = 6 },                              # exactly 6, shared by area
+plate.over "downlight" "kitchen" & { spacing = "1.5 m" },                     # at most 1.5 m apart, about 0.75 m from walls
+plate.over "light" "#room" & { per = 16, count.max = 4 },                     # one per 16 m², no more than 4
+plate.over "downlight" "#circulation" & { spacing = "2.4 m", layout = 'line }, # a line down each leg of a hall
+```
+
+- `spacing`: each piece gets a grid at most that far apart, each part in the middle of an equal share, so about half that from the walls. A piece narrower than `spacing` gets a line.
+- `count`: exactly that many, shared between the pieces by area, so each part lights about as much floor. Each piece lays its share out as evenly as it can: 6 in a 6 × 4 room is 3 × 2, 7 in a square is rows of 2, 3 and 2. Fewer than pieces: one each in the biggest. As `{ min, max }`, it bounds what `spacing` or `per` gives.
+- `per`: one per that much floor (m²).
+- `layout`: `'grid` (the default), `'line` (one row along each piece), `'centre` (one in the middle of each piece: an L gets two).
+- `margin`: never closer than this to a wall, where the shares leave room (300 mm by default).
+
+Parts never overlap: if more are asked for than fit, as many as fit are placed, and the problems list says how many.
 
 Parts of every service share the walls: anchored ones go first (`on`, `beside`, `one`), then `every` and `over` flow around them. A switch can go over a baseboard: parts 300 mm or more apart in height share a stretch of wall. A part that can't be placed is a problem, in the room it's missing from.
 

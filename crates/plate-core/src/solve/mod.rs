@@ -27,6 +27,7 @@ mod grid;
 pub mod outline;
 pub mod ports;
 mod spine;
+pub mod spread;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};

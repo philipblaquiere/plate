@@ -146,6 +146,152 @@ pub fn interior_point(outer: &[Point], holes: &[Vec<Point>]) -> Point {
     best.1
 }
 
+/// A rectangle inside a shape, in the shape's own frame: corner `origin`, sides `w` along `u`
+/// (the longer one) and `h` along `v`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Zone {
+    pub origin: Point,
+    pub u: Point,
+    pub v: Point,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl Zone {
+    /// The point `s` along it and `t` across it.
+    pub fn at(&self, s: f64, t: f64) -> Point {
+        Point::new(self.origin.x + self.u.x * s + self.v.x * t, self.origin.y + self.u.y * s + self.v.y * t)
+    }
+
+    pub fn area(&self) -> f64 {
+        self.w * self.h
+    }
+
+    pub fn centre(&self) -> Point {
+        self.at(self.w / 2.0, self.h / 2.0)
+    }
+}
+
+/// A shape cut into rectangles, biggest first: a rectangle is one zone, an L two (its body and
+/// its arm). Each zone is the biggest rectangle left in the shape; cutting stops at pieces
+/// narrower than `min_side` or smaller than a tenth of the shape. Rectangles line up with the
+/// shape's longest edge, so a turned room is cut along its own walls.
+pub fn zones(outer: &[Point], holes: &[Vec<Point>], min_side: f64) -> Vec<Zone> {
+    let n = outer.len();
+    if n < 3 {
+        return Vec::new();
+    }
+    // The frame: along the longest edge.
+    let (mut best, mut u) = (0.0, Point::new(1.0, 0.0));
+    for k in 0..n {
+        let (a, b) = (outer[k], outer[(k + 1) % n]);
+        let l = a.distance(b);
+        if l > best + 1e-9 {
+            best = l;
+            u = Point::new((b.x - a.x) / l, (b.y - a.y) / l);
+        }
+    }
+    let v = Point::new(-u.y, u.x);
+    let to = |p: &Point| Point::new(p.x * u.x + p.y * u.y, p.x * v.x + p.y * v.y);
+    let outer_f: Vec<Point> = outer.iter().map(to).collect();
+    let holes_f: Vec<Vec<Point>> = holes.iter().map(|h| h.iter().map(to).collect()).collect();
+    let b = Bounds::from_points(&outer_f);
+    let span = b.width().max(b.height());
+    if span <= 0.0 {
+        return Vec::new();
+    }
+    let tol = span * 1e-9;
+    // Grid lines through every corner; a shape with slanted edges also gets a fine even grid.
+    let mut xs: Vec<f64> = Vec::new();
+    let mut ys: Vec<f64> = Vec::new();
+    let mut slanted = false;
+    for l in std::iter::once(&outer_f).chain(holes_f.iter()) {
+        for k in 0..l.len() {
+            let (a, c) = (l[k], l[(k + 1) % l.len()]);
+            xs.push(a.x);
+            ys.push(a.y);
+            if (a.x - c.x).abs() > tol && (a.y - c.y).abs() > tol {
+                slanted = true;
+            }
+        }
+    }
+    if slanted {
+        let step = span / 48.0;
+        let mut x = b.min_x;
+        while x < b.max_x {
+            xs.push(x);
+            x += step;
+        }
+        let mut y = b.min_y;
+        while y < b.max_y {
+            ys.push(y);
+            y += step;
+        }
+        xs.push(b.max_x);
+        ys.push(b.max_y);
+    }
+    let clean = |v: &mut Vec<f64>| {
+        v.sort_by(f64::total_cmp);
+        v.dedup_by(|a, b| (*a - *b).abs() <= tol * 1e3);
+    };
+    clean(&mut xs);
+    clean(&mut ys);
+    if xs.len() < 2 || ys.len() < 2 {
+        return Vec::new();
+    }
+    let (nx, ny) = (xs.len() - 1, ys.len() - 1);
+    let mut free = vec![vec![false; ny]; nx];
+    let mut total = 0.0;
+    for (i, col) in free.iter_mut().enumerate() {
+        for (j, cell) in col.iter_mut().enumerate() {
+            let c = Point::new((xs[i] + xs[i + 1]) / 2.0, (ys[j] + ys[j + 1]) / 2.0);
+            if contains(&outer_f, c) && !holes_f.iter().any(|h| contains(h, c)) {
+                *cell = true;
+                total += (xs[i + 1] - xs[i]) * (ys[j + 1] - ys[j]);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    while out.len() < 8 {
+        // The biggest rectangle of free cells: per row, how far up each column is free, then
+        // every run of columns.
+        let mut tall = vec![0usize; nx];
+        let mut found: Option<(f64, usize, usize, usize, usize)> = None;
+        for j in 0..ny {
+            for i in 0..nx {
+                tall[i] = if free[i][j] { tall[i] + 1 } else { 0 };
+            }
+            for i0 in 0..nx {
+                let mut rows = usize::MAX;
+                for i1 in i0..nx {
+                    rows = rows.min(tall[i1]);
+                    if rows == 0 {
+                        break;
+                    }
+                    let (w, h) = (xs[i1 + 1] - xs[i0], ys[j + 1] - ys[j + 1 - rows]);
+                    if found.is_none_or(|f| w * h > f.0 + tol * span) {
+                        found = Some((w * h, i0, i1, j + 1 - rows, j));
+                    }
+                }
+            }
+        }
+        let Some((area, i0, i1, j0, j1)) = found else { break };
+        let (w, h) = (xs[i1 + 1] - xs[i0], ys[j1 + 1] - ys[j0]);
+        if w.min(h) < min_side - tol || (!out.is_empty() && area < total * 0.1) {
+            break;
+        }
+        for col in free.iter_mut().take(i1 + 1).skip(i0) {
+            for cell in col.iter_mut().take(j1 + 1).skip(j0) {
+                *cell = false;
+            }
+        }
+        let corner = Point::new(xs[i0], ys[j0]);
+        let origin = Point::new(corner.x * u.x + corner.y * v.x, corner.x * u.y + corner.y * v.y);
+        out.push(if w >= h { Zone { origin, u, v, w, h } } else { Zone { origin, u: v, v: u, w: h, h: w } });
+    }
+    out
+}
+
 pub fn point_segment_distance(p: Point, a: Point, b: Point) -> f64 {
     let (dx, dy) = (b.x - a.x, b.y - a.y);
     let len2 = dx * dx + dy * dy;
@@ -225,5 +371,89 @@ mod tests {
             Point::new(1.0, 0.0),
         ]);
         assert!(cw.signed_area() > 0.0);
+    }
+
+    fn pts(v: &[(f64, f64)]) -> Vec<Point> {
+        v.iter().map(|&(x, y)| Point::new(x, y)).collect()
+    }
+
+    fn inside_all(z: &Zone, outer: &[Point]) -> bool {
+        // Corners pulled in a hair: the zone lies in the shape.
+        let e = 1e-6;
+        [(e, e), (z.w - e, e), (z.w - e, z.h - e), (e, z.h - e), (z.w / 2.0, z.h / 2.0)]
+            .iter()
+            .all(|&(s, t)| contains(outer, z.at(s, t)))
+    }
+
+    #[test]
+    fn a_rectangle_is_one_zone() {
+        let r = pts(&[(0.0, 0.0), (5.0, 0.0), (5.0, 3.0), (0.0, 3.0)]);
+        let z = zones(&r, &[], 0.6);
+        assert_eq!(z.len(), 1);
+        assert!((z[0].w - 5.0).abs() < 1e-9 && (z[0].h - 3.0).abs() < 1e-9);
+        let c = z[0].centre();
+        assert!((c.x - 2.5).abs() < 1e-9 && (c.y - 1.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn an_l_is_its_body_and_its_arm() {
+        // A 2 m wide leg up the left, 7 m tall; a 3.5 m arm along the bottom, 2.7 m deep.
+        let l = pts(&[(0.0, 0.0), (5.5, 0.0), (5.5, 2.7), (2.0, 2.7), (2.0, 7.0), (0.0, 7.0)]);
+        let z = zones(&l, &[], 0.6);
+        assert_eq!(z.len(), 2, "{z:?}");
+        assert!(z[0].area() >= z[1].area());
+        for zone in &z {
+            assert!(inside_all(zone, &l), "{zone:?}");
+        }
+        let covered: f64 = z.iter().map(|z| z.area()).sum();
+        assert!((covered - (5.5 * 2.7 + 2.0 * 4.3)).abs() < 1e-6);
+        // Neither centre is near the inside corner (2, 2.7).
+        for zone in &z {
+            assert!(zone.centre().distance(Point::new(2.0, 2.7)) > 0.9);
+        }
+    }
+
+    #[test]
+    fn a_u_is_three_zones_and_a_hole_is_cut_round() {
+        let u = pts(&[
+            (0.0, 0.0),
+            (6.0, 0.0),
+            (6.0, 5.0),
+            (4.0, 5.0),
+            (4.0, 2.0),
+            (2.0, 2.0),
+            (2.0, 5.0),
+            (0.0, 5.0),
+        ]);
+        assert_eq!(zones(&u, &[], 0.6).len(), 3);
+        let outer = pts(&[(0.0, 0.0), (6.0, 0.0), (6.0, 6.0), (0.0, 6.0)]);
+        let hole = pts(&[(2.0, 2.0), (2.0, 4.0), (4.0, 4.0), (4.0, 2.0)]);
+        let z = zones(&outer, std::slice::from_ref(&hole), 0.6);
+        assert_eq!(z.len(), 4, "{z:?}");
+        for zone in &z {
+            assert!(!contains(&hole, zone.centre()));
+        }
+    }
+
+    #[test]
+    fn slivers_get_no_zone() {
+        // A 4 × 5 room with a 0.3 m jog along one side.
+        let r = pts(&[(0.0, 0.0), (4.0, 0.0), (4.0, 4.7), (3.7, 4.7), (3.7, 5.0), (0.0, 5.0)]);
+        let z = zones(&r, &[], 0.6);
+        assert_eq!(z.len(), 1, "{z:?}");
+        // A tiny alcove (a tenth of the room or less) gets none either.
+        let a = pts(&[(0.0, 0.0), (6.0, 0.0), (6.0, 5.0), (1.5, 5.0), (1.5, 5.8), (0.0, 5.8)]);
+        assert_eq!(zones(&a, &[], 0.6).len(), 1);
+    }
+
+    #[test]
+    fn a_turned_room_is_cut_along_its_walls() {
+        let (c, s) = (30f64.to_radians().cos(), 30f64.to_radians().sin());
+        let turn = |x: f64, y: f64| Point::new(x * c - y * s, x * s + y * c);
+        let r = vec![turn(0.0, 0.0), turn(8.0, 0.0), turn(8.0, 1.5), turn(0.0, 1.5)];
+        let z = zones(&r, &[], 0.6);
+        assert_eq!(z.len(), 1, "{z:?}");
+        assert!((z[0].w - 8.0).abs() < 1e-6 && (z[0].h - 1.5).abs() < 1e-6, "{z:?}");
+        assert!(inside_all(&z[0], &r));
     }
 }

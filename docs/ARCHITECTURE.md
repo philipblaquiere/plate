@@ -319,7 +319,9 @@ Three more passes, around the solve above. Types are in `assembly.rs` and `servi
   behind them, openings on faces, fixtures and their backs), resolves each service's `scope`
   into instances (one per `"#dwelling"`), and places parts anchored first (`on`, `beside`,
   `one`, then `every`, `over`), keeping track of what each face holds by height band (a switch
-  can sit over a baseboard). `connect` groups targets (`max`) by nearest neighbour and either
+  can sit over a baseboard). `over` cuts a room into rectangles (`geometry::zones`: the
+  biggest rectangle of free cells on a grid through its corners, repeatedly) and spreads parts
+  over them (`spread.rs`: a grid per zone by spacing, or a count shared by area). `connect` groups targets (`max`) by nearest neighbour and either
   draws arcs with numbered home runs, or routes them with Dijkstra along wall centrelines that
   have the cavity asked for, through ceiling hubs of the spaces allowed, checking `limit`.
   Issues are merged per placement across rooms.

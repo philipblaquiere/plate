@@ -243,6 +243,13 @@ pub fn to_svg(layout: &Layout) -> String {
         .filter_map(|e| e.id.rsplit_once('.').map(|(parent, _)| parent))
         .collect();
     let mut tags: Vec<(f64, f64, f64, f64)> = Vec::new();
+    // Parts on the ceiling or floor: labels move off them.
+    let parts: Vec<plate_core::Bounds> = layout
+        .elements
+        .iter()
+        .filter(|e| e.kind == ElementKind::Part)
+        .map(|e| plate_core::Bounds::from_points(&e.points))
+        .collect();
     for element in layout.elements.iter().filter(|e| e.kind == ElementKind::Space) {
         let Some(info) = &element.space else { continue };
         if info.kind == plate_core::SpaceKind::Fixture && info.symbol.is_some() {
@@ -286,6 +293,8 @@ pub fn to_svg(layout: &Layout) -> String {
         let at = element
             .label_at
             .unwrap_or(plate_core::Point::new((sb.min_x + sb.max_x) / 2.0, (sb.min_y + sb.max_y) / 2.0));
+        let at =
+            clear_of_parts(at, info.label.chars().count() as f64 * 0.6 * size, size, &parts, &element.points);
         let _ = writeln!(
             svg,
             r##"  <text x="{}" y="{}" font-family="sans-serif" font-size="{}" text-anchor="middle" fill="#1d2125">{}</text>"##,
@@ -305,6 +314,47 @@ pub fn to_svg(layout: &Layout) -> String {
     );
     let _ = writeln!(svg, "</svg>");
     svg
+}
+
+/// Where a label (`w` wide, its baseline at `at`, `size` high) goes so no part covers it: where it
+/// is, or just below or above a part in the way, still inside its space.
+fn clear_of_parts(
+    at: plate_core::Point,
+    w: f64,
+    size: f64,
+    parts: &[plate_core::Bounds],
+    space: &[plate_core::Point],
+) -> plate_core::Point {
+    let (down, up) = (0.25 * size, 0.85 * size);
+    let label = |p: plate_core::Point| (p.x - w / 2.0, p.y - down, p.x + w / 2.0, p.y + up);
+    let hits = |b: (f64, f64, f64, f64)| -> Vec<&plate_core::Bounds> {
+        parts.iter().filter(|q| b.0 < q.max_x && q.min_x < b.2 && b.1 < q.max_y && q.min_y < b.3).collect()
+    };
+    let first = hits(label(at));
+    if first.is_empty() {
+        return at;
+    }
+    let gap = 0.2 * size;
+    let mut candidates: Vec<plate_core::Point> = first
+        .iter()
+        .flat_map(|q| {
+            [
+                plate_core::Point::new(at.x, q.min_y - gap - up),
+                plate_core::Point::new(at.x, q.max_y + gap + down),
+            ]
+        })
+        .collect();
+    candidates.sort_by(|a, b| (a.y - at.y).abs().total_cmp(&(b.y - at.y).abs()));
+    candidates
+        .into_iter()
+        .find(|&p| {
+            let b = label(p);
+            hits(b).is_empty()
+                && [(b.0, b.1), (b.2, b.1), (b.2, b.3), (b.0, b.3)]
+                    .iter()
+                    .all(|&(x, y)| plate_core::geometry::contains(space, plate_core::Point::new(x, y)))
+        })
+        .unwrap_or(at)
 }
 
 /// An SVG path for a polygon and its holes.
