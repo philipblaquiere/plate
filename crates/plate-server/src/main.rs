@@ -66,14 +66,14 @@ fn serve(args: &[String]) -> Result<(), String> {
         .or_else(|| std::env::var("PLATE_WORKSPACE").ok())
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("workspace"));
-    let workspace = plate_server::workspace::Workspace::open(&ws_dir)
+    let projects = plate_server::projects::Projects::open(&ws_dir)
         .map_err(|e| format!("can't open workspace {}: {e}", ws_dir.display()))?;
 
     let runtime = tokio::runtime::Runtime::new().map_err(|e| e.to_string())?;
     runtime.block_on(async move {
         let has_web = web_dir.join("index.html").exists();
-        let root = workspace.root().canonicalize().unwrap_or_else(|_| workspace.root().to_owned());
-        let app = plate_server::app_with(Some(web_dir.clone()), Some(workspace))
+        let root = projects.root().canonicalize().unwrap_or_else(|_| projects.root().to_owned());
+        let app = plate_server::app_with(Some(web_dir.clone()), Some(projects))
             .layer(tower_http::trace::TraceLayer::new_for_http());
         let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
         let listener =
@@ -108,7 +108,7 @@ fn with_siblings(path: &str) -> Result<Files, String> {
         for (k, _) in text.match_indices("import \"") {
             let rest = &text[k + 8..];
             if let Some(end) = rest.find('"') {
-                if let Ok(p) = std::fs::canonicalize(dir.join(&rest[..end])) {
+                if let Ok(p) = std::fs::canonicalize(import_target(&dir, &rest[..end])) {
                     todo.push(p);
                 }
             }
@@ -137,6 +137,22 @@ fn with_siblings(path: &str) -> Result<Files, String> {
         files.insert(rel(&p), text);
     }
     Ok(Files { main: rel(&start), files, root })
+}
+
+/// Where an import points, from the importing file's folder. Walked part by part because
+/// `canonicalize` gives `\\?\C:\…` paths on Windows, where `/` and `..` aren't understood.
+fn import_target(dir: &std::path::Path, spec: &str) -> PathBuf {
+    let mut out = dir.to_path_buf();
+    for part in spec.split('/') {
+        match part {
+            "" | "." => {}
+            ".." => {
+                out.pop();
+            }
+            part => out.push(part),
+        }
+    }
+    out
 }
 
 /// A file to solve, the files it can import (relative to `root`), and that folder.
@@ -170,7 +186,8 @@ fn print_diagnostics(path: &str, root: &std::path::Path, diagnostics: &[Diagnost
             let path = match &d.file {
                 Some(f) => {
                     let full = root.join(f);
-                    full.strip_prefix(&cwd).unwrap_or(&full).display().to_string()
+                    let shown = full.strip_prefix(&cwd).unwrap_or(&full).display().to_string();
+                    shown.strip_prefix(r"\\?\").map(str::to_owned).unwrap_or(shown)
                 }
                 None => path.to_owned(),
             };

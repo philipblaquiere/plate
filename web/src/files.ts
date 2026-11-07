@@ -19,6 +19,18 @@ export async function pickFile(): Promise<PickedFile | null> {
   return file ? { name: file.name, text: await file.text() } : null;
 }
 
+/** Ask for a project zip on this computer. `null` when the user cancels. */
+export async function pickZip(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".zip,application/zip";
+    input.onchange = () => resolve(input.files?.[0] ?? null);
+    input.oncancel = () => resolve(null);
+    input.click();
+  });
+}
+
 export function download(blob: Blob, filename: string): void {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");

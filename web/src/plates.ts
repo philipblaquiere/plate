@@ -51,6 +51,27 @@ export function importsOf(path: string, files: Record<string, string>): Set<stri
   return seen;
 }
 
+/** The files a file imports itself (not through another), that exist, sorted. */
+export function directImports(path: string, files: Record<string, string>): string[] {
+  const text = files[path];
+  if (text === undefined) return [];
+  const dir = folderOf(path);
+  const found = new Set<string>();
+  for (const m of text.matchAll(IMPORT)) {
+    if (inComment(text, m.index)) continue;
+    const target = normalize(dir + m[2]);
+    if (files[target] !== undefined && target !== path) found.add(target);
+  }
+  return [...found].sort();
+}
+
+/** The files that import this one themselves (not through another), sorted. */
+export function directImporters(path: string, files: Record<string, string>): string[] {
+  return Object.keys(files)
+    .filter((p) => p !== path && directImports(p, files).includes(path))
+    .sort();
+}
+
 const IMPORT = /(\bimport\s+")([^"]+)"/g;
 
 /** Is position `at` inside a `#` comment? (A `#` outside a string, earlier on the line.) */

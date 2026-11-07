@@ -133,8 +133,10 @@ export class TextDoc {
   constructor(
     readonly path: string,
     text: string,
+    project = "",
   ) {
-    this.model = monaco.editor.createModel(text, "nickel", monaco.Uri.parse(`file:///workspace/${path}`));
+    const address = [project, ...path.split("/")].filter(Boolean).map(encodeURIComponent).join("/");
+    this.model = monaco.editor.createModel(text, "nickel", monaco.Uri.parse(`file:///workspace/${address}`));
   }
 
   get value(): string {

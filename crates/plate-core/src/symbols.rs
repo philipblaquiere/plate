@@ -121,7 +121,7 @@ fn arc_points(cx: f64, cy: f64, rx: f64, ry: f64, from: f64, to: f64, steps: usi
 }
 
 fn pairs(v: &[f64]) -> Vec<(f64, f64)> {
-    v.chunks_exact(2).map(|c| (c[0], c[1])).collect()
+    v.as_chunks::<2>().0.iter().map(|c| (c[0], c[1])).collect()
 }
 
 impl ShapeDef {

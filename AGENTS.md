@@ -20,9 +20,12 @@ follows the cursor), a live SVG drawing on the right.
 - `schema/plate.schema.json`: the configuration format. `schema/plate.ncl`: the `plate.*`
   helper library every file can use.
 - `web/`: Vite + TypeScript + Monaco. No framework.
-- `examples/`: seeded into a new workspace (`SEED` in `plate-server/src/workspace.rs` lists every
-  file; a test checks it). Every plate and preview in it must solve with nothing unmet and no
-  floor left over at the seed it ships with (the tests check that too).
+- `examples/`: three example projects at most, one folder each, closed under imports. `EXAMPLES`
+  in `plate-server/src/projects.rs` lists every file (a test checks it); they're copied into the
+  workspace when first opened. Every plate and preview must solve with nothing unmet and no floor
+  left over at the seed it ships with, and between them they use every schema field and `plate.*`
+  helper (`the_examples_use_every_feature`): a new feature goes in an example, or on its exempt
+  list with a reason.
 
 ## Commands
 
@@ -35,11 +38,11 @@ npm run typecheck      # tsc only
 npm run build:wasm     # rebuild the browser engine after changing plate-config or the schema
 npm run format         # prettier + rustfmt
 cargo clippy --workspace --all-targets
-cargo run -p plate-server --bin plate -- check examples/3-hotel.ncl -v [--seed N]   # PLATE_DEBUG=1 for the grid engine's runs
+cargo run -p plate-server --bin plate -- check examples/commercial/hotel.ncl -v [--seed N]   # PLATE_DEBUG=1 for the grid engine's runs
 ```
 
 The wasm build takes about 2 minutes from cold; give it a long timeout. The dev server writes to
-`./workspace/` (gitignored).
+`./workspace/` (gitignored), one folder per project.
 
 ## Before you finish
 
@@ -90,7 +93,23 @@ The wasm build takes about 2 minutes from cold; give it a long timeout. The dev 
   their own; `arrayItems` in `geometryEdits.ts` splits the array literal by text. Keep it aware
   of strings and comments.
 - **Workspace paths.** `plate-server/src/workspace.rs` only accepts relative `.ncl` paths with no
-  `..`, no backslashes and no dot-folders. Keep every file route going through `resolve()`.
+  `..`, no backslashes and no dot-folders. Keep every file route going through `resolve()`, and
+  every project name through `check_name` in `projects.rs`.
+- **Projects are closed under imports.** The evaluator only ever gets the open project's files. An
+  import reaching out of a project fails, on purpose: don't widen `store.files()` to other projects.
+- **Paths in the web app are project-relative.** `store.project` says which project. Anything keyed
+  by path that outlives a switch must be per project (or cleared in `showProject`, like `planViews`).
+- **Switching order.** `workbench.leaveProject()` first (it saves cursors and empties the groups),
+  then `store.open(name, { announce: false })`, then `showProject`, which calls `enterProject`. While
+  `switching` is set, the workbench neither persists nor closes tabs of files it can't find.
+- **`web/dist` goes stale.** It's only rebuilt by `npm run build` or `npm start`, so `npm run dev` doesn't
+  serve it on `:7878` (`--web none`): an old page there polls routes that no longer exist. In
+  development the app is on `:5173`.
+- **API answers aren't cached.** The server sends `no-store` and `api.ts` fetches with `cache: "no-store"`.
+  A browser once kept the old server's `index.html` as the answer to `/api/projects`, and no refresh cleared it.
+- **Windows paths.** `canonicalize` gives `\\?\C:\…` paths, where `/` and `..` mean nothing: walk
+  import specs part by part (`import_target` in `main.rs`). Nickel's in-memory root needs a drive on
+  native Windows (`ROOT` in `plate-config`).
 - **Monaco models can't be renamed.** A renamed file gets a new `TextDoc`; the store emits
   `{ list, renamed }` and the workbench moves tabs. Don't rename by mutating paths in place.
 - **Symbols are view-only.** `Space.symbol` is `skip_serializing` (out of the fingerprint, like
@@ -126,11 +145,15 @@ The wasm build takes about 2 minutes from cold; give it a long timeout. The dev 
 
 ## Web app map
 
-- `main.ts`: wiring (solve loop, start screen and drawing, menus, title block, keys).
-- `workspace.ts`: `WorkspaceStore`, every file as a document, dirty state, drafts in
-  localStorage (`plate:drafts`).
-- `workbench.ts`: explorer, tabs, up to two editor groups, drag and drop, layout
-  (`plate:layout`). `sidebar.ts`: the activity bar and side bar views (files, reference).
+- `main.ts`: wiring (solve loop, projects, start screen and drawing, menus, title block, keys).
+- `workspace.ts`: `WorkspaceStore`, the open project's files as documents (the last few projects
+  stay loaded), dirty state, drafts in localStorage (`plate:drafts:<project>`).
+- `workbench.ts`: tabs, up to two editor groups, drag and drop, layout (`plate:layout` for the side
+  bar, `plate:project:<project>` for the rest). `sidebar.ts`: the activity bar and side bar views
+  (files, reference). `explorer.ts`: the file tree.
+- `palette.ts`: the search box over a list, for the project switcher, quick open and names.
+  `projects.ts`: routes, recents, names, copy plans. `fuzzy.ts`, `tree.ts`: matching, and the
+  tree's rows. All three pure and tested.
 - `reference/`: the reference view. `model.ts` builds every page from the schema, `plate.ncl` and
   `docs/reference/*.md`; `locate.ts` finds what the cursor is on (inverted source map, else a
   text scan) and walks the schema; `insert.ts` places inserts. All pure and tested except

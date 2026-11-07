@@ -16,7 +16,7 @@ const MIN = 150;
 const MAX = 620;
 
 export class SideBar {
-  private state: SideState = { open: true, view: "files", widths: { files: 190, reference: 290 } };
+  private state: SideState = { open: true, view: "files", widths: { files: 230, reference: 290 } };
   private readonly listeners = new Set<(state: SideState) => void>();
 
   constructor(

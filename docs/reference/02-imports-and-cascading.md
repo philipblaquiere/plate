@@ -50,3 +50,6 @@ When both sides set the same field to different values, the merge fails. Say whi
 - `| default` on the original makes it a fallback that any merge can replace: `area.min | default = 4`.
 
 Merges work anywhere a record does: `plate.door "bath" "hall" & { width = 0.8 }` gives one door its own width.
+
+Imports stay inside a project: a plate can only read its own project's files. To reuse a file
+elsewhere, right-click it in the file tree and choose **Copy to project…**.

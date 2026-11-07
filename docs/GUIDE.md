@@ -47,10 +47,10 @@ first build takes a few minutes). Then it starts two processes side by side:
 After changing Rust code in `plate-config` or the schema, restart `npm run dev` (or run
 `npm run build:wasm`) so the browser picks it up.
 
-Your files live in the **workspace**, a folder on disk the server reads and writes: `workspace/`
-next to where you run it (created with the examples on first run), or any folder with
-`plate serve --workspace <dir>`. Edit those files with any other tool too; reload the page to see
-outside changes.
+Your work lives in the **workspace**, a folder on disk the server reads and writes: `workspace/`
+next to where you run it, or any folder with `plate serve --workspace <dir>`. Each folder at the
+top of it is a **project**. Edit those files with any other tool too; going back to the project or
+reloading the page shows outside changes.
 
 For a single optimised binary that serves everything on <http://127.0.0.1:7878>:
 
@@ -170,36 +170,63 @@ and _Reading the result_.
 
 ### Examples
 
-A new workspace starts with these (`examples/`):
+Three example projects come with the app, listed in the project switcher. Opening one makes your
+own copy to change. Between them they use every field, rule and kind of space (a test checks it).
 
-| File                               | What it shows                                                                  |
-| ---------------------------------- | ------------------------------------------------------------------------------ |
-| `1-studio.ncl`                     | The basics: an outline, three spaces, a door and a window                      |
-| `2-apartment.ncl`                  | Edge roles, a fill hall, `count`, a furnished bedroom plan, preferences, goals |
-| `3-hotel.ncl`                      | A whole ground floor across files: wings of typical rooms, a café, a lobby     |
-| `scenarios/small-apartment.ncl`    | A furnished one-bedroom flat with an open-plan living room and kitchen (zones) |
-| `scenarios/family-house.ncl`       | An L-shaped house with a garage                                                |
-| `scenarios/beach-villa.ncl`        | A villa on its plot: terrace, pool, parking and a garden that takes the rest   |
-| `scenarios/mansion.ncl`            | Three pinned wings round a courtyard, suites, galleries meeting at their doors |
-| `scenarios/office-building.ncl`    | A small office floor: core, meeting rooms, benches of desks                    |
-| `scenarios/office-tower-floor.ncl` | A tower floor round a pinned core, team zones in an open floor                 |
-| `4-walls.ncl`                      | Walls with thickness: two assemblies, rooms drawn to their faces, lighting     |
-| `5-duplex.ncl`                     | Two flats on wood-frame assemblies, with power, heat, plumbing and lighting    |
+| Project      | Plate             | What it shows                                                                   |
+| ------------ | ----------------- | ------------------------------------------------------------------------------- |
+| `home`       | `studio.ncl`      | The basics: an outline, three spaces, a door and a window                       |
+|              | `apartment.ncl`   | Edge roles, a fill hall, `count` and typicals, zones, furnished plans, previews |
+|              | `villa.ncl`       | A villa on its plot: terrace, pool, parking and a garden that takes the rest    |
+| `commercial` | `hotel.ncl`       | A whole ground floor, five plans deep: `spine_stack`, typicals, a café, a lobby |
+|              | `annex.ncl`       | Grown from a `spine` instead of an outline, reusing the hotel's guest room      |
+|              | `office.ncl`      | A tower floor round a pinned core: voids, rows of lifts, team zones             |
+| `duplex`     | `one-bedroom.ncl` | Walls with thickness: two assemblies, rooms drawn to their faces, lighting      |
+|              | `duplex.ncl`      | Wood-frame assemblies, power, heat and plumbing, in feet and inches             |
 
-The plans they share are in `plans/` and `plans/rooms/` (bedroom, kitchen, living room).
-`build/` has what plates are built with: wall types in `build/assemblies/` (`basic.ncl` and a
-layered `wood-frame.ncl`), services in `build/services/` (`lighting.ncl`, the simplest; `power.ncl`,
-written in terms of a code's numbers), and the codes' numbers in `build/codes/`.
+In `duplex`, `build/` has what plates are built with: wall types in `build/assemblies/`
+(`basic.ncl` and a layered `wood-frame.ncl`), services in `build/services/` (`lighting.ncl`, the
+simplest; `power.ncl`, written in terms of a code's numbers), and the codes' numbers in
+`build/codes/`.
+
+## Projects
+
+A project is a folder of files that belong together. The file tree, the tabs and the plate in the
+drawing are always those of one project, and switching project changes all of them.
+
+- **Switch** with the project's name at the top of the side bar, or `Ctrl+Alt+P`. Type to narrow,
+  arrows and Enter to pick. Projects are listed most recent first, with a drawing of each, and then
+  the examples you haven't opened.
+- **Nothing is lost by switching**. Your tabs, cursors, closed folders, undo history and unsaved
+  text are all there when you come back. Unsaved text is kept in the browser, and the switcher
+  marks projects that have some.
+- **The address** says where you are (`#/commercial/hotel/wing.ncl`), so links work, and Back and
+  Forward move between projects.
+- **New, rename, duplicate, delete, export**: `New project…` is at the foot of the switcher;
+  right-click a project (or its `⋯`) for the rest. A deleted project goes to a hidden `.trash`
+  folder, with **Undo** for a few seconds after and the last 20 kept on disk.
+  **Import a zip…** makes a project from an exported one.
+- **Imports stay inside a project**. A plate only sees its own project's files, so editing one
+  project can never move a wall in another, and a project can be zipped or moved as it is. To reuse
+  a file, right-click it and choose **Copy to project…**: what it imports comes with it, at the same
+  paths, and a file already there with different text is left alone.
+
+Files from a workspace made before projects existed move into a project called `my-files` the first
+time the server opens it, with their imports, tabs and unsaved text intact.
 
 ## Files, tabs and imports
 
-The editor works like VS Code on the workspace folder:
+The editor works like VS Code on the project's folder:
 
 - **Side bar** on the left, with two views: the files (`Ctrl+Shift+E`) and the reference
   (`Ctrl+Shift+H`). `Ctrl+B` hides it; drag its edge to resize.
-- **Explorer**. Right-click a file to open it to the side, rename or move it (type a path such as
-  `plans/room.ncl`), duplicate, delete, or copy an import line for it. The `+` makes a new file;
-  folders are created as needed.
+- **Explorer**. The project's plates are pinned at the top, then its folders. Under them, what the
+  file in front of you **uses** and what it's **used by**, a click away. Right-click a file to open
+  it to the side, rename or move it (type a path such as `plans/room.ncl`), duplicate, delete, copy
+  it to another project, or copy an import line for it. The `+` makes a new file; folders are
+  created as needed. Arrow keys move around the tree, `F2` renames and `Del` deletes.
+- **Go to a file**: `Ctrl+P` finds any file in the project by a few letters of its name. The box at
+  the top of the tree filters it the same way.
 - **Reference**: everything you can write, generated from the schema, the `plate` helpers and the
   guides in `docs/reference/`. It follows the cursor: click into `area` and it shows the space's
   fields with `area` highlighted; click a `'facade` and it explains that port role. The pin stops
@@ -221,7 +248,7 @@ right of the sheet says which file is drawn, and switches to another.
 Share a plan between plates with Nickel's `import`, relative to the importing file:
 
 ```nickel
-let hotel_room = import "plans/guest-room.ncl" in   # see examples/3-hotel.ncl
+let hotel_room = import "plans/guest-room.ncl" in   # see examples/commercial/hotel/wing.ncl
 {
   spaces = { room = { count.min = 1, plan = hotel_room } },
   ...
@@ -308,8 +335,8 @@ never the solution. It's drawn from the space's front and fitted to it. The **Sy
 reference shows the catalog (click one to insert it), and right-clicking a space in the drawing
 offers the symbols that suit its name. Symbols are exported too (DXF layer `PLATE-SYMBOL`).
 
-`examples/plans/rooms/` has a bedroom, a kitchen and a living room to furnish any plate's rooms;
-`examples/scenarios/beach-villa.ncl` lays out a plot.
+`examples/home/plans/` has a bedroom, a kitchen, a bathroom and a living room to furnish any plate's
+rooms; `examples/home/villa.ncl` lays out a plot.
 
 ### Plans on their own
 
@@ -440,10 +467,10 @@ defaults and the editor's hover docs and completions all follow. See
 ## Command line
 
 ```powershell
-cargo run -p plate-server --bin plate -- check examples/2-apartment.ncl -v  # verdict, spaces, what's unmet
-cargo run -p plate-server --bin plate -- check examples/3-hotel.ncl --seed 4  # imports resolve; another seed
-cargo run -p plate-server --bin plate -- export examples/1-studio.ncl dxf -o studio.dxf
-cargo run -p plate-server --bin plate -- eval examples/1-studio.ncl   # the checked data, as JSON
+cargo run -p plate-server --bin plate -- check examples/home/apartment.ncl -v  # verdict, spaces, what's unmet
+cargo run -p plate-server --bin plate -- check examples/commercial/hotel.ncl --seed 4  # imports resolve; another seed
+cargo run -p plate-server --bin plate -- export examples/home/studio.ncl dxf -o studio.dxf
+cargo run -p plate-server --bin plate -- eval examples/home/studio.ncl   # the checked data, as JSON
 cargo run -p plate-server --bin plate -- schema                       # the generated Nickel contract
 cargo run -p plate-server --bin plate -- serve --workspace D:\plans   # serve another folder
 ```
