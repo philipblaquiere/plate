@@ -68,12 +68,14 @@ claims = {
 
 ```nickel
 connect = [
-  { label = "Circuits", from = "panel", to = ["outlet", "heat.baseboard"], max = 12, via.cavity = "89 mm" },
-  { label = "Drains", from = "stack", to = "#drain", via.cavity = "140 mm", limit = "4 m", draw = 'routed },
+  { label = "General", from = "panel", to = ["outlet", "lighting.switch"], rating = "15 A", max = 12, via = { cavity = "89 mm", ceilings = "#room" } },
+  { label = "Drains", from = "stack", to = "#drain", via.cavity = "140 mm", limit = "4 m" },
 ],
 ```
 
-A network joins parts (of this service, of another as `"service.part"`, or tagged fixtures) back to its source, room by room, in groups of at most `max` (circuits). `'arcs` draws the electrical convention: an arc from part to part and a numbered home run. `'routed` runs in the walls whose cavity is at least `via.cavity`, and across the ceilings of `via.ceilings`, by the shortest way, each to its nearest source; `limit` caps a run. What stands against a wall joins that wall, or crosses its room's ceiling if `via.ceilings` allows it, never the floor to another wall. What's on the floor or ceiling joins the nearest wall of its room.
+A network joins parts (of this service, of another as `"service.part"`, or tagged fixtures) back to its source, room by room, in groups (circuits): at most `max` in each, at most 80 % of `rating` in load, and one each when `dedicated`. Each group is a tree of runs, as an electrician wires it, plus one home run to the source; `limit` caps how far a terminal is from the source. `role = 'control` joins switches to the lights they control instead, room by room. See [cables](cables) for loads, breakers and cable sizes, and [routing](routing) for where runs go: in the walls whose cavity is at least `via.cavity`, up and over doors and across the ceilings of `via.ceilings`, never across a floor.
+
+Every network is drawn two ways: where it runs, and the schematic (an arc from part to part and a numbered home run, the electrical convention). Press A in a service view to switch. `draw` says which one exports keep.
 
 ## Scope
 
@@ -85,6 +87,6 @@ A network joins parts (of this service, of another as `"service.part"`, or tagge
 
 ## In the drawing
 
-Above the drawing, **Plan** shows the plan on its own and each service its own view (S cycles them): the plan fades, the service's parts and networks are drawn over it, with a legend of what it placed. A badge counts its problems. Hover a part to see why it's there; right-click it to find its placement in the file.
+Above the drawing, **Plan** shows the plan on its own and each service its own view (S cycles them): the plan fades, the service's parts and networks are drawn over it, with a legend of what it placed. A badge counts its problems. Hover a part to see why it's there, and a cable to see its circuit, what it's made of and where it runs; right-click either to find it in the file. A service whose circuits feed another's parts (power feeding the lighting's switches) shows them too, and its legend has a panel schedule.
 
 Opened on its own, a service file says what it places, claims and connects, and which plates use it.

@@ -15,6 +15,36 @@ pub struct Layout {
     pub units: Units,
     pub elements: Vec<Element>,
     pub bounds: Bounds,
+    /// Every circuit (group) of every network, for a panel schedule.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub circuits: Vec<Circuit>,
+}
+
+/// One group of a network: a circuit, with what it's on and what it carries.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Circuit {
+    pub service: String,
+    pub network: String,
+    /// The scope it's in (a flat), `""` for the whole plate.
+    pub scope: String,
+    /// Its number, as drawn at the home run.
+    pub group: String,
+    /// Its breaker, in amps, if known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rating: Option<f64>,
+    /// In volts, when its terminals say what they draw.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub voltage: Option<f64>,
+    /// The medium it's made of.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub medium: Option<String>,
+    /// What's on it: part and fixture labels with counts, "receptacle ×6".
+    pub devices: Vec<(String, u32)>,
+    /// The current its terminals draw, in amps.
+    pub load: f64,
+    /// Total length of its cables, plan and vertical, in the layout's units (0 if not routed).
+    pub length: f64,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -131,6 +161,9 @@ pub struct SpaceInfo {
     /// Its tags (`tags`).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub tags: Vec<String>,
+    /// What it asks of each service (`load` in the plan).
+    #[serde(skip_serializing_if = "std::collections::BTreeMap::is_empty")]
+    pub load: std::collections::BTreeMap<String, crate::service::Load>,
     /// Floor area to its walls' centrelines, when walls take some of it (its own `area` is
     /// then the clear floor).
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -155,6 +188,8 @@ pub struct WallInfo {
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub layers: Vec<LayerInfo>,
     pub pattern: &'static str,
+    /// Whether runs may pass through it: `yes`, `firestop` or `no`.
+    pub cross: &'static str,
     /// The port roles either side sees.
     pub roles: Vec<String>,
     /// The spaces either side; one may be a port role such as `'facade`.
@@ -194,9 +229,16 @@ pub struct PartInfo {
     /// The group of its network it's in (a circuit), once connected.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
-    /// The network that group is in: group numbers start over in each.
+    /// The network that group is in.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network: Option<String>,
+    /// The service whose circuit powers it, when that's another service (a switch on power's
+    /// circuits, a light on that switch): it's drawn in that service's view too.
+    #[serde(rename = "fedBy", skip_serializing_if = "Option::is_none")]
+    pub fed_by: Option<String>,
+    /// What it draws, in amps, and at what voltage, if it draws anything.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub load: Option<crate::service::Load>,
     /// Where it stands: the middle of its wall side, or of its footprint.
     pub at: Point,
 }
@@ -213,7 +255,52 @@ pub struct RunInfo {
     /// The last leg back to the source: drawn with an arrow.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub home: bool,
+    /// `arcs` (the schematic) or `routed` (where the cable goes). Both are made; `alt` marks the
+    /// one the network didn't ask for, which exports leave out.
     pub draw: &'static str,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub alt: bool,
+    /// Routed runs: where this piece goes. `wall` (in a wall, low, at outlet height), `header`
+    /// (in a wall, high, under the ceiling, over doors and windows), `ceiling` (across a ceiling),
+    /// `drop` (from the wall or ceiling into a part).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub along: Option<&'static str>,
+    /// The cable (or pipe) it's a piece of: pieces of one cable share it, within a network.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cable: Option<u32>,
+    /// That cable's length, plan and vertical.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub length: Option<f64>,
+    /// What it's made of (`"14/2"`), and that medium's colour.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub medium: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub colour: Option<&'static str>,
+    /// A control network's run (a switch leg), not a circuit's.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub control: bool,
+    /// The service whose circuit powers it, when that's another service (a switch leg fed by
+    /// power): it's drawn in that service's view too.
+    #[serde(rename = "fedBy", skip_serializing_if = "Option::is_none")]
+    pub fed_by: Option<String>,
+    /// The CAD layer its medium asks for.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub layer: Option<String>,
+    /// Where it goes up or down a wall, or through one.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub marks: Vec<RunMark>,
+}
+
+/// A point of note on a run.
+#[derive(Debug, Clone, Serialize)]
+pub struct RunMark {
+    pub at: Point,
+    /// `up` (from the wall to the ceiling), `down`, `cross` (through a wall), `firestop`
+    /// (through a fire separation, sealed).
+    pub kind: &'static str,
+    /// For `cross` and `firestop`: along the wall it passes through.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub along: Option<Point>,
 }
 
 /// A symbol drawn in a space.
@@ -369,6 +456,11 @@ impl Element {
 
     /// The CAD layer it's exported on: its kind's, or for a wall its assembly's (`A-WALL-…`), for
     /// a service's parts and runs the service's (`PLATE-POWER`, `PLATE-POWER-RUN`).
+    /// Whether exports keep it: everything but the drawing of a network it didn't ask for.
+    pub fn exported(&self) -> bool {
+        !self.run.as_ref().is_some_and(|r| r.alt)
+    }
+
     pub fn cad_layer(&self) -> String {
         let upper = |s: &str| s.to_uppercase().replace(['_', ' ', '.'], "-");
         if let Some(w) = &self.wall {
@@ -378,7 +470,14 @@ impl Element {
             return format!("PLATE-{}", upper(&p.service));
         }
         if let Some(r) = &self.run {
-            return format!("PLATE-{}-RUN", upper(&r.service));
+            if let Some(l) = &r.layer {
+                return l.clone();
+            }
+            return match (&r.medium, r.control) {
+                (_, true) => format!("PLATE-{}-LEG", upper(&r.service)),
+                (Some(m), _) => format!("PLATE-{}-RUN-{}", upper(&r.service), upper(&m.replace('/', "-"))),
+                (None, _) => format!("PLATE-{}-RUN", upper(&r.service)),
+            };
         }
         self.layer.to_owned()
     }
@@ -422,6 +521,11 @@ impl Layout {
             .map(|e| Bounds::from_points(&e.points))
             .reduce(Bounds::union)
             .unwrap_or(Bounds::EMPTY);
-        Layout { name, system, units, elements, bounds }
+        Layout { name, system, units, elements, bounds, circuits: Vec::new() }
+    }
+
+    pub fn with_circuits(mut self, circuits: Vec<Circuit>) -> Self {
+        self.circuits = circuits;
+        self
     }
 }

@@ -39,6 +39,13 @@ pub struct Service {
     pub place: Vec<Placement>,
     #[serde(default, skip_serializing)]
     pub connect: Vec<Network>,
+    /// What its networks are made of (cables, pipes, ducts), by name: `"14/2"`, `"10/3"`. A
+    /// group gets the thinnest one that meets everything asked of it.
+    #[serde(default, skip_serializing)]
+    pub media: BTreeMap<String, Medium>,
+    /// Requirements on how some terminals are served: their own circuit, a breaker, a cable.
+    #[serde(default, skip_serializing)]
+    pub feeds: Vec<Feed>,
     /// Values the service is written in terms of (a code's numbers), to override by merging:
     /// `(import "power.ncl") & { params = import "nec.ncl" }`. The solver doesn't read them.
     #[serde(default, skip_serializing)]
@@ -88,6 +95,141 @@ pub struct Part {
     pub above: Option<LengthSer>,
     #[serde(default)]
     pub symbol: Option<String>,
+    /// What it asks of the network it's on (a heater's watts). A part placed `on` a fixture
+    /// without one takes the fixture's.
+    #[serde(default)]
+    pub load: Option<Load>,
+}
+
+/// What a terminal asks of a service: for power, a current at a voltage.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Load {
+    /// The circuit it needs, from its spec sheet: `"30 A"`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub current: Option<Amps>,
+    /// Or its power, in watts: the current is `watts / voltage`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub watts: Option<f64>,
+    /// In volts. Defaults to 120.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub voltage: Option<f64>,
+    /// Conductors its cable needs, not counting the ground: 3 for a range or a dryer (two hots
+    /// and a neutral). Defaults to 2.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conductors: Option<u32>,
+}
+
+impl Load {
+    pub fn volts(&self) -> f64 {
+        self.voltage.unwrap_or(120.0)
+    }
+
+    /// The current it draws, in amps.
+    pub fn amps(&self) -> f64 {
+        match (self.current, self.watts) {
+            (Some(a), _) => a.0,
+            (None, Some(w)) => w / self.volts(),
+            (None, None) => 0.0,
+        }
+    }
+}
+
+/// A current in amps: a number, or a string with its unit (`"30 A"`).
+#[derive(Debug, Clone, Copy, PartialEq, PartialOrd, Default, Serialize)]
+pub struct Amps(pub f64);
+
+impl<'de> Deserialize<'de> for Amps {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            N(f64),
+            S(String),
+        }
+        match Raw::deserialize(d)? {
+            Raw::N(n) => Ok(Amps(n)),
+            Raw::S(s) => {
+                let t = s.trim();
+                let t = t.strip_suffix('A').unwrap_or(t).trim();
+                t.parse::<f64>()
+                    .map(Amps)
+                    .map_err(|_| serde::de::Error::custom(format!("not a current: {s:?}")))
+            }
+        }
+    }
+}
+
+/// One kind of thing a network is made of: a cable, a pipe, a duct.
+#[derive(Debug, Clone, Default, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Medium {
+    #[serde(default)]
+    pub label: Option<String>,
+    /// The most it carries: for a cable, the largest breaker it may be on.
+    pub rating: Amps,
+    /// Conductors, not counting the ground (`/2`, `/3`).
+    #[serde(default = "two")]
+    pub conductors: u32,
+    /// Wire size (AWG), for the record.
+    #[serde(default)]
+    pub gauge: Option<f64>,
+    /// Its jacket's colour, as it's drawn.
+    #[serde(default)]
+    pub colour: Option<Colour>,
+    /// CAD layer its runs are exported on.
+    #[serde(default)]
+    pub layer: Option<String>,
+}
+
+fn two() -> u32 {
+    2
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Colour {
+    White,
+    Black,
+    Grey,
+    Red,
+    Yellow,
+    Orange,
+    Blue,
+}
+
+impl Colour {
+    pub fn name(self) -> &'static str {
+        match self {
+            Colour::White => "white",
+            Colour::Black => "black",
+            Colour::Grey => "grey",
+            Colour::Red => "red",
+            Colour::Yellow => "yellow",
+            Colour::Orange => "orange",
+            Colour::Blue => "blue",
+        }
+    }
+}
+
+/// A requirement on how the terminals it selects are served.
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct Feed {
+    /// Parts (`"dedicated"`, `"heat.baseboard"`) or the fixtures they're on (`"#cooking"`).
+    pub feed: Selector,
+    /// Only on this network (its label).
+    #[serde(default)]
+    pub network: Option<String>,
+    /// Their own circuit, one each.
+    #[serde(default)]
+    pub dedicated: bool,
+    /// The breaker their circuit is on.
+    #[serde(default)]
+    pub rating: Option<Amps>,
+    /// The medium their circuit is made of, by name.
+    #[serde(default)]
+    pub medium: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -285,6 +427,28 @@ pub struct Network {
     pub limit: Option<LengthSer>,
     #[serde(default)]
     pub draw: Draw,
+    /// What it does: feed terminals from a source (a circuit), or control them from a switch.
+    #[serde(default)]
+    pub role: Role,
+    /// Each group's breaker. With loads, a group is also cut so it carries at most 80 % of it.
+    #[serde(default)]
+    pub rating: Option<Amps>,
+    /// One terminal per group: dedicated circuits.
+    #[serde(default)]
+    pub dedicated: bool,
+    /// The medium every group is made of, by name. Leave out to pick the thinnest that does.
+    #[serde(default)]
+    pub medium: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Role {
+    /// Groups of terminals, each joined back to the source: circuits.
+    #[default]
+    Feed,
+    /// In each room, the sources (switches) joined to the terminals (lights) they control.
+    Control,
 }
 
 /// Where a network can run.
@@ -303,9 +467,9 @@ pub struct Via {
 #[serde(rename_all = "snake_case")]
 pub enum Draw {
     /// The electrical convention: an arc from device to device, a home run to the source.
-    #[default]
     Arcs,
     /// Along the walls and ceilings it runs in.
+    #[default]
     Routed,
 }
 
@@ -324,6 +488,8 @@ impl Service {
                 ("parts", serde_json::to_value(&self.parts)),
                 ("place", serde_json::to_value(&self.place)),
                 ("connect", serde_json::to_value(&self.connect)),
+                ("media", serde_json::to_value(&self.media)),
+                ("feeds", serde_json::to_value(&self.feeds)),
             ] {
                 if let Ok(f) = f {
                     m.insert(k.into(), f);
@@ -364,6 +530,22 @@ impl Service {
                         ));
                     }
                 }
+            }
+        }
+        // Media named must exist, when the service has its own (else another service's are used).
+        let known = |m: &str| self.media.is_empty() || self.media.contains_key(m);
+        let unknown = |m: &str| {
+            let names: Vec<&str> = self.media.keys().map(String::as_str).collect();
+            format!("no medium named \"{m}\" (media: {})", names.join(", "))
+        };
+        for (i, n) in self.connect.iter().enumerate() {
+            if let Some(m) = n.medium.as_deref().filter(|m| !known(m)) {
+                return Err((format!("{at}/connect/{i}/medium"), unknown(m)));
+            }
+        }
+        for (i, f) in self.feeds.iter().enumerate() {
+            if let Some(m) = f.medium.as_deref().filter(|m| !known(m)) {
+                return Err((format!("{at}/feeds/{i}/medium"), unknown(m)));
             }
         }
         // The spaces they name are checked once they're in a plan.

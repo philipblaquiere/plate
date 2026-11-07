@@ -892,6 +892,25 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
     }
 
     #[test]
+    fn the_duplex_sizes_its_appliance_circuits_from_their_loads() {
+        let files = example("duplex");
+        let kind = |name: &str| check_files(Workspace { main: name, files: &files }).unwrap().1.kind;
+        assert_eq!(kind("build/media/nm-b.ncl"), schema::FileKind::Service);
+        let (config, _) = check_files(Workspace { main: "duplex.ncl", files: &files }).unwrap();
+        let solved = plate_core::solve::solve(&config);
+        let mut big: Vec<(f64, String)> = solved
+            .layout
+            .circuits
+            .iter()
+            .filter(|c| c.scope == "flat_1" && c.network == "Appliances")
+            .map(|c| (c.rating.unwrap_or(0.0), c.medium.clone().unwrap_or_default()))
+            .collect();
+        big.sort_by(|a, b| a.0.total_cmp(&b.0));
+        // The fridge on 20 A (a feed), the dryer on 30 A, the range on 50 A (US cable).
+        assert_eq!(big, vec![(20.0, "12/2".to_owned()), (30.0, "10/3".to_owned()), (50.0, "6/3".to_owned())]);
+    }
+
+    #[test]
     fn a_plan_file_is_the_same_plan_a_plate_imports() {
         let files = example("commercial");
         let (hotel, _) = check_files(Workspace { main: "hotel.ncl", files: &files }).unwrap();

@@ -321,16 +321,37 @@ Three more passes, around the solve above. Types are in `assembly.rs` and `servi
   `one`, then `every`, `over`), keeping track of what each face holds by height band (a switch
   can sit over a baseboard). `over` cuts a room into rectangles (`geometry::zones`: the
   biggest rectangle of free cells on a grid through its corners, repeatedly) and spreads parts
-  over them (`spread.rs`: a grid per zone by spacing, or a count shared by area). `connect` groups targets (`max`) by nearest neighbour and either
-  draws arcs with numbered home runs, or routes them with Dijkstra along wall centrelines that
-  have the cavity asked for, through ceiling hubs of the spaces allowed, checking `limit`.
-  Issues are merged per placement across rooms.
-- **The fingerprint** leaves out a service's `place`, `connect`, `parts` and `params` (and
-  `label`): those never change a layout, so editing them doesn't re-solve or re-seed anything.
+  over them (`spread.rs`: a grid per zone by spacing, or a count shared by area). `connect`
+  (`connect.rs`) takes a part on a fixture's `load` when it has none, then:
+  - **control** networks (`role = 'control`) find each room's switches and lights; the lights'
+    load goes on the room's first switch.
+  - **feed** networks order terminals room by room from the source and cut them into groups
+    (circuits) by `max`, voltage and load (≤ 80 % of the breaker); `dedicated` and `feeds`
+    (`plate.feed`) give terminals their own group, breaker or medium. Groups are numbered across
+    a scope's networks (one panel schedule). Each group's breaker is its `rating`, else the
+    smallest standard one its loads need; its medium is the thinnest in `media` that meets the
+    breaker and conductors (the same rule as assemblies). Each group is a tree (Prim on
+    shortest-path distances) plus one home run, every joint one cable; a `Circuit` row goes to
+    `Layout.circuits`.
+  - Then the control networks are laid, sized to the circuit that feeds their switches, and
+    the switches and lights are marked `fedBy` that service.
+    Runs are laid on `route.rs`: a graph per network and scope. Walls the network can use (cavity
+    ≥ `via.cavity`, `cross` not `'no`) have a low band (broken at doors) and, with `via.ceilings`,
+    a high band over the headers, risers between them, and L-shaped ceiling edges between the
+    high band and the ceiling parts of each room. Costs are lengths plus a little per riser. A
+    laid path becomes `run` pieces by `along` (wall, header, ceiling, drop) with `marks` (riser,
+    cross, firestop), offset sideways where earlier cables share a stretch. Every network is
+    also drawn as the schematic (arcs, numbered home-run arrows); `alt` marks the one `draw`
+    didn't ask for, which exports skip (`Element::exported`). Issues are merged per placement
+    across rooms.
+- **The fingerprint** leaves out a service's `place`, `connect`, `parts`, `params`, `media` and
+  `feeds` (and `label`), a space's `load`, an assembly's `cross` and the plate's `height`: those never change a layout, so editing them doesn't re-solve or re-seed anything.
   They are part of the cache key (`view_key`, like symbols), so a cached child still gets the
   current parts. A service's `scope` and `claims` are in the fingerprint.
 - **Output**: `wall`, `part` and `run` elements (`WallInfo`, `PartInfo`, `RunInfo`), with CAD
-  layers (`PLATE-WALL-<ASSEMBLY>`, `PLATE-<SERVICE>`); DXF and SVG draw all three.
+  layers (`PLATE-WALL-<ASSEMBLY>`, `PLATE-<SERVICE>`, `PLATE-<SERVICE>-RUN-<MEDIUM>`,
+  `PLATE-<SERVICE>-LEG`); DXF and SVG draw all three, routed runs only (or arcs, if `draw`
+  says so). `Layout.circuits` carries the panel schedule.
 - **Library files.** A file that is a service (`parts`, `place`…) or a record of assemblies is
   told apart by shape (`FileKind`, the `by_shape` contract in the prelude): it's checked against
   its own definition, and the web app shows a card of it instead of solving it.

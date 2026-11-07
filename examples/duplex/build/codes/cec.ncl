@@ -5,6 +5,7 @@
 # written, not certified.
 
 {
+  media = (import "../media/nmd90.ncl").media, # the cable it's wired with
   params = {
     wall_spacing = "3.6 m", # 26-722 a): no point along a wall more than 1.8 m from a receptacle
     usable_wall = "900 mm", # 26-722 c): shorter walls don't count

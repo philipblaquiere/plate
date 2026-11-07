@@ -125,6 +125,14 @@ pub struct Placed {
     pub network: Option<String>,
     /// The scope it's in (a path prefix), for connecting.
     pub scope: String,
+    /// The fixture it's on (an element index), for `on` placements.
+    pub fixture: Option<usize>,
+    /// The service whose circuit powers it, when that's another service.
+    pub fed_by: Option<String>,
+    /// What it draws: its own load, else its fixture's (set when connecting).
+    pub load: Option<crate::service::Load>,
+    /// Its part's label.
+    pub label: String,
 }
 
 /// The plate as the services see it.
@@ -135,6 +143,8 @@ pub struct Model {
     pub spaces: Vec<(usize, String, String, String, SpaceKind, Vec<String>)>,
     /// Built walls: element indices.
     pub walls: Vec<usize>,
+    /// Floor to ceiling.
+    pub height: f64,
 }
 
 /// A service in a scope: where it applies.
@@ -157,24 +167,28 @@ impl Instance {
     }
 }
 
+/// Places and connects every service's parts; returns the circuits, for a panel schedule.
 pub fn run(
     levels: &[ServiceLevel],
     units: Units,
+    height: f64,
     elements: &mut Vec<Element>,
     diagnostics: &mut Vec<Diagnostic>,
-) {
+) -> Vec<crate::layout::Circuit> {
     if levels.is_empty() {
-        return;
+        return Vec::new();
     }
-    let model = Model::new(elements, units);
+    let mut model = Model::new(elements, units);
+    model.height = height;
     let instances = instances(levels, &model);
     let mut issues = Issues::default();
     let mut placed = place(&model, &instances, elements, &mut issues);
-    super::connect::run(&model, &instances, &mut placed, elements, &mut issues);
+    let circuits = super::connect::run(&model, &instances, &mut placed, elements, &mut issues);
     for (k, p) in placed.into_iter().enumerate() {
         elements.push(part_element(k, p, &instances, units));
     }
     issues.into_diagnostics(diagnostics);
+    circuits
 }
 
 /// Problems, merged across the rooms they happen in.
@@ -292,7 +306,7 @@ impl Model {
             room.fixtures = fixtures_of(&room, elements, &spaces, tol);
             rooms.push(room);
         }
-        Model { units, rooms, spaces, walls }
+        Model { units, rooms, spaces, walls, height: 2400.0 / units.to_mm() }
     }
 }
 
@@ -607,8 +621,13 @@ fn place(model: &Model, instances: &[Instance], elements: &[Element], issues: &m
             Placement::On { fixtures, .. } => {
                 for &r in &rooms {
                     for fi in 0..model.rooms[r].fixtures.len() {
-                        if fixture_selected(&elements[model.rooms[r].fixtures[fi].element], fixtures) {
+                        let fe = model.rooms[r].fixtures[fi].element;
+                        if fixture_selected(&elements[fe], fixtures) {
+                            let from = ctx.out.len();
                             on_fixture(&mut ctx, &job, r, fi);
+                            for p in &mut ctx.out[from..] {
+                                p.fixture = Some(fe);
+                            }
                         }
                     }
                 }
@@ -731,6 +750,10 @@ impl Ctx<'_> {
             group: None,
             network: None,
             scope: job.inst.prefix.clone(),
+            fixture: None,
+            fed_by: None,
+            load: job.part.load,
+            label: job.label(),
         });
         true
     }
@@ -760,6 +783,10 @@ impl Ctx<'_> {
             group: None,
             network: None,
             scope: job.inst.prefix.clone(),
+            fixture: None,
+            fed_by: None,
+            load: job.part.load,
+            label: job.label(),
         });
     }
 }
@@ -1277,6 +1304,8 @@ fn part_element(k: usize, p: Placed, instances: &[Instance], units: Units) -> El
         placed: p.how,
         group: p.group,
         network: p.network,
+        fed_by: p.fed_by,
+        load: p.load,
         at: p.at,
     });
     e

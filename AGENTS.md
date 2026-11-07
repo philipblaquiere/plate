@@ -123,12 +123,17 @@ The wasm build takes about 2 minutes from cold; give it a long timeout. The dev 
 - **Services never move a wall.** A service's `place`, `connect`, `parts` and `params` are
   `skip_serializing` (out of the fingerprint) and go into `view_key`; only `scope` and `claims`
   change a solve. `Service::full()` serialises everything when you need it all. A new field that
-  only affects where parts go belongs in the first group.
+  only affects where parts go belongs in the first group. The same goes for `media`, `feeds`, a
+  space's `load` (it's in `view_key` instead), an assembly's `cross` and the plate's `height`.
+- **Both drawings of a network.** `connect.rs` emits every network routed and as arcs; `alt`
+  marks the one `draw` didn't ask for, and exports skip it (`Element::exported`). Tests that
+  count runs should filter by `draw`. Circuit numbers run across a scope's networks.
 - **Claims and pointers.** Rules and spaces a service claims are merged into plans in
   `solve/context.rs`; their pointers are absolute (`@/services/power/claims/rules/0`) and must
   stay so through `under()`. Strip the `@` with `resolved()` before anything leaves the solver.
 - **Library files are told by shape.** No `start` and no plan fields: a file with any of
-  `parts`/`place`/`connect`/`claims`/`params` is a service; a record whose every entry has
+  `parts`/`place`/`connect`/`claims`/`params`/`media`/`feeds` is a service (a cable library is
+  `{ media = … }`); a record whose every entry has
   `thickness` or `layers` is a set of assemblies (`FileKind::of`, and `by_shape` in the schema
   prelude for the contract). A service file can't be a Nickel function (it couldn't be exported
   to JSON): parameterise with `params` and merge (`(import "power.ncl") & (import "codes/nec.ncl")`).

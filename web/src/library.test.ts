@@ -73,7 +73,7 @@ describe("library card", () => {
       { params: { wall_spacing: "3.6 m", per_circuit: 12 } },
       { ...opts, usedBy: [] },
     );
-    expect(html).toContain("Numbers for a service");
+    expect(html).toContain("Numbers or cable for a service");
     expect(html).toContain("<h3>Numbers</h3>");
     expect(html).toContain("<code>wall_spacing</code> 3.6 m");
     expect(html).toContain("<code>per_circuit</code> 12");

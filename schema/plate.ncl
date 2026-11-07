@@ -88,6 +88,10 @@ in
     | doc "A service places one part in each of these spaces, in the best place on its walls. `plate.one \"panel\" \"#utility\" & { near = 'entrance }`; `plate.one \"thermostat\" \"#room\" & { near = 'door, apart = ['window, 'facade] }`; on a wall that can take it: `& { wall.cavity = \"140 mm\" }`"
     = fun p s => { place = 'one, part = p, spaces = s },
 
+  feed
+    | doc "A service serves some terminals a particular way: their own circuit, a breaker, a cable. Parts by name, or the fixtures they're on: `plate.feed \"fridge\" & { rating = \"20 A\" }`, `plate.feed \"#cooking\" & { dedicated = true, medium = \"6/3\" }`; on one network only: `& { network = \"Counter\" }`"
+    = fun s => { feed = s },
+
   prefer
     | doc "Make rules preferences rather than requirements. `plate.prefer (plate.touches \"bath\" \"bedroom\")`; weigh it: `plate.prefer_by 3 (...)`"
     = fun r => if std.is_array r then std.array.map (fun x => x & { weight = 1 }) r else r & { weight = 1 },

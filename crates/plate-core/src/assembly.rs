@@ -46,6 +46,10 @@ pub struct Assembly {
     /// CAD layer on export. Only how it's drawn.
     #[serde(default, skip_serializing)]
     pub layer: Option<String>,
+    /// Whether services' runs may pass through it. Defaults to `firestop` for a fire-rated wall,
+    /// else `yes`. Only where runs go: out of the fingerprint.
+    #[serde(default, skip_serializing)]
+    pub cross: Option<Cross>,
     /// Where it's written in the configuration (an absolute JSON pointer), set by the host.
     #[serde(skip)]
     pub source: Option<String>,
@@ -59,6 +63,28 @@ pub struct Layer {
     /// Open space a service can run in.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub cavity: bool,
+}
+
+/// Whether runs may pass through a wall.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Cross {
+    /// Freely: drilled studs and plates.
+    Yes,
+    /// Through a sealed penetration, marked on the drawing (a fire separation).
+    Firestop,
+    /// Never: nothing runs in it or through it.
+    No,
+}
+
+impl Cross {
+    pub fn name(self) -> &'static str {
+        match self {
+            Cross::Yes => "yes",
+            Cross::Firestop => "firestop",
+            Cross::No => "no",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
@@ -118,8 +144,16 @@ impl Assembly {
             if let Some(l) = &self.layer {
                 m.insert("layer".into(), l.clone().into());
             }
+            if let Some(c) = self.cross {
+                m.insert("cross".into(), c.name().into());
+            }
         }
         v
+    }
+
+    /// Whether runs may pass through it: as given, else a fire-rated wall needs a firestop.
+    pub fn crossing(&self) -> Cross {
+        self.cross.unwrap_or(if self.fire.is_some_and(|f| f > 0.0) { Cross::Firestop } else { Cross::Yes })
     }
 
     /// Is it for an edge with one of these roles?

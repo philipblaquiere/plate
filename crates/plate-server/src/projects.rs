@@ -71,12 +71,13 @@ pub const EXAMPLES: &[Example] = &[
     Example {
         name: "duplex",
         title: "Duplex",
-        blurb: "Built for real: wall assemblies, power, heat, plumbing, in feet and inches",
+        blurb: "Built for real: wall assemblies, sized circuits, heat, plumbing, in feet and inches",
         main: "duplex.ncl",
         files: example_files!("duplex":
             "duplex.ncl", "one-bedroom.ncl", "plans/flat.ncl",
             "build/assemblies/basic.ncl", "build/assemblies/wood-frame.ncl",
             "build/codes/cec.ncl", "build/codes/nec.ncl",
+            "build/media/nm-b.ncl", "build/media/nmd90.ncl",
             "build/services/heat.ncl", "build/services/lighting.ncl", "build/services/plumbing.ncl",
             "build/services/power.ncl",
         ),

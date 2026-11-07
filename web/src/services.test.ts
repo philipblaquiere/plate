@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { nextView, serviceOf, summarize } from "./services";
-import type { Diagnostic, Element, Layout } from "./types";
+import { loadText, nextView, schedule, serviceOf, summarize } from "./services";
+import type { Circuit, Diagnostic, Element, Layout } from "./types";
 
 const part = (service: string, name: string, room: string): Element => ({
   id: `part:${service}.${name}:${room}#0`,
@@ -69,5 +69,40 @@ describe("services", () => {
     expect(nextView("b", ["a", "b"])).toBeNull();
     expect(nextView("gone", ["a"])).toBeNull();
     expect(nextView(null, [])).toBeNull();
+  });
+});
+
+describe("panel schedule", () => {
+  const circuit = (scope: string, group: string, extra: Partial<Circuit> = {}): Circuit => ({
+    service: "power",
+    network: "General",
+    scope,
+    group,
+    devices: [["receptacle", 6]],
+    load: 0,
+    length: 10,
+    ...extra,
+  });
+
+  it("lists one scope's circuits in number order, two-pole for 240 V", () => {
+    const s = schedule(
+      [
+        circuit("flat_1", "10", { rating: 30, voltage: 240, medium: "10/3", load: 30 }),
+        circuit("flat_1", "2", { rating: 15, medium: "14/2" }),
+        circuit("flat_2", "1", { rating: 15, medium: "14/2" }),
+        circuit("", "1", { service: "plumbing" }),
+      ],
+      "power",
+    );
+    expect(s.scopes).toEqual(["flat_1", "flat_2"]);
+    expect(s.rows.map((r) => r.circuit)).toEqual(["2", "10"]);
+    expect(s.rows[1]).toMatchObject({ breaker: "30 A 2P", medium: "10/3", load: "30 A" });
+    expect(s.rows[0].devices).toBe("receptacle ×6");
+    expect(schedule([circuit("flat_2", "1")], "power", "flat_2").scope).toBe("flat_2");
+  });
+
+  it("says a load in words", () => {
+    expect(loadText({ current: 30, voltage: 240 })).toBe("30 A at 240 V");
+    expect(loadText({ watts: 60 })).toBe("60 W at 120 V");
   });
 });

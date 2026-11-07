@@ -22,6 +22,8 @@ const roles = (v: unknown) =>
     .map((r) => `'${r}`)
     .join(", ");
 const sel = (v: unknown) => list(v).join(", ");
+/** A current as written: `"30 A"`, or a plain number of amps. */
+const amps = (v: unknown) => (typeof v === "number" ? `${v} A` : String(v ?? ""));
 
 export interface CardOptions {
   /** Plates that import the file. */
@@ -30,9 +32,13 @@ export interface CardOptions {
   thumbnail: (symbol: string) => string | null;
 }
 
-/** A service file that is only numbers (a code's): merged into a service, not used on its own. */
+/** A service file that is only numbers or cable (a code's, a cable library): merged into a
+ * service, not used on its own. */
 export function onlyParams(value: Value): boolean {
-  return Object.keys(value).length > 0 && Object.keys(value).every((k) => k === "params" || k === "label");
+  return (
+    Object.keys(value).length > 0 &&
+    Object.keys(value).every((k) => k === "params" || k === "label" || k === "media")
+  );
 }
 
 export function libraryCard(
@@ -48,7 +54,7 @@ export function libraryCard(
     kind === "assemblies"
       ? "Wall types, for a plate's <code>assemblies</code>. Each wall is built as the thinnest one that meets what its roles and rules ask."
       : numbers
-        ? 'Numbers for a service written in terms of them. Merge it into one: <code>(import "…") &amp; (import "this file")</code>.'
+        ? 'Numbers or cable for a service written in terms of them. Merge it into one: <code>(import "…") &amp; (import "this file")</code>.'
         : "A service, for a plate's <code>services</code>. It places its parts on the solved plan and connects them; its claims shape the plan.";
   const used = opts.usedBy.length
     ? `<p class="lib-used">Used by ${opts.usedBy.map((p) => `<code>${esc(p)}</code>`).join(", ")}</p>`
@@ -187,13 +193,40 @@ function service(value: Value, opts: CardOptions): string {
     const rows = connect.map((n) => {
       const via = (n.via ?? {}) as Value;
       const bits = [`from ${esc(sel(n.from))} to ${esc(sel(n.to))}`];
+      if (n.role === "control")
+        bits[0] = `${esc(sel(n.from))} to the ${esc(sel(n.to))} they control, room by room`;
+      if (n.rating !== undefined) bits.push(`on ${esc(amps(n.rating))} breakers`);
+      if (n.dedicated) bits.push("one each");
+      if (n.medium !== undefined) bits.push(`in ${esc(String(n.medium))}`);
       if (n.max !== undefined) bits.push(`at most ${esc(String(n.max))} a group`);
       if (via.cavity !== undefined) bits.push(`in walls with a ${esc(len(via.cavity))} cavity`);
       if (via.ceilings !== undefined) bits.push(`across the ceilings of ${esc(sel(via.ceilings))}`);
       if (n.limit !== undefined) bits.push(`no run over ${esc(len(n.limit))}`);
-      return `<li><b>${esc(String(n.label ?? "Network"))}</b>: ${bits.join(", ")}${n.draw === "routed" ? ", routed" : ""}</li>`;
+      return `<li><b>${esc(String(n.label ?? "Network"))}</b>: ${bits.join(", ")}${n.draw === "arcs" ? ", exported as the schematic" : ""}</li>`;
     });
     out.push(`<h3>Networks</h3><ul class="lib-plain">${rows.join("")}</ul>`);
+  }
+  const feeds = Array.isArray(value.feeds) ? (value.feeds as Value[]) : [];
+  if (feeds.length) {
+    const rows = feeds.map((f) => {
+      const bits: string[] = [];
+      if (f.dedicated) bits.push("its own circuit");
+      if (f.rating !== undefined) bits.push(`a ${esc(amps(f.rating))} breaker`);
+      if (f.medium !== undefined) bits.push(`${esc(String(f.medium))} cable`);
+      const on = f.network !== undefined ? ` on ${esc(String(f.network))}` : "";
+      return `<li>${esc(sel(f.feed))}${on}: ${bits.join(", ") || "as the network says"}</li>`;
+    });
+    out.push(`<h3>Feeds</h3><ul class="lib-plain">${rows.join("")}</ul>`);
+  }
+  if (value.media && typeof value.media === "object") {
+    const rows = Object.entries(value.media as Record<string, Value>).map(([k, m]) => {
+      const bits = [`up to ${esc(amps(m.rating))}`, `${esc(String(m.conductors ?? 2))} conductors`];
+      if (m.colour !== undefined) bits.push(`${esc(String(m.colour))} jacket`);
+      return `<li><code>${esc(k)}</code> ${m.label !== undefined ? `${esc(String(m.label))}: ` : ""}${bits.join(", ")}</li>`;
+    });
+    out.push(
+      `<h3>Media</h3><p class="lib-facts">Each circuit gets the thinnest that meets its breaker and conductors.</p><ul class="lib-plain">${rows.join("")}</ul>`,
+    );
   }
   if (value.params && typeof value.params === "object") {
     const rows = Object.entries(value.params as Value).map(

@@ -29,6 +29,7 @@ let stud = fun depth => { material = "stud", thickness = depth, cavity = true } 
     layer = "A-WALL-FIRE", # the CAD layer it's exported to
     fire = 1,
     acoustic = 55,
+    cross = 'firestop, # cables may pass, through a sealed hole (the default for a fire-rated wall)
     layers = [type_x, stud "89 mm", { material = "air", thickness = "25 mm" }, stud "89 mm", type_x],
     pattern = 'cross,
   },
