@@ -332,6 +332,13 @@ export class Viewer {
     this.request();
   }
 
+  /** Draw now rather than on the next animation frame (tests, screenshots). */
+  renderNow(): void {
+    if (this.frame) cancelAnimationFrame(this.frame);
+    this.frame = 0;
+    this.render();
+  }
+
   /** Clear the sheet and frame an empty area around the origin, ready to draw. */
   clear(): void {
     this.layout = null;

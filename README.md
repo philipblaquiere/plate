@@ -79,6 +79,7 @@ SERVER                    validate (serde) ──► Solver ──► Layout ─
 | `web/`                | Editor: Vite, TypeScript, Monaco, SVG viewer                       |
 | `schema/`             | `plate.schema.json`, `plate.ncl` helpers, `symbols.json` catalog   |
 | `examples/`           | Three example projects, offered in the project switcher            |
+| `fixtures/`           | Pinned test plates (nothing for the engine to move)                |
 | `docs/`               | User guide, architecture, reference guides shown in the editor     |
 
 ## Commands
@@ -87,10 +88,12 @@ SERVER                    validate (serde) ──► Solver ──► Layout ─
 npm run dev          # everything, with live reload
 npm start            # one optimised binary serving the app on :7878
 npm test             # cargo test + wasm build + tsc + vitest
+npm run test:unit    # the fast tier; AGENTS.md lists which test to run for which change
+npm run shot -- examples/duplex/duplex.ncl   # screenshots of the app, one per view, in shots/
 npm run build:wasm   # rebuild the browser engine after changing plate-config or the schema
 npm run format       # prettier + rustfmt
 
-cargo run -p plate-server --bin plate -- check examples/commercial/hotel.ncl -v   # solve from the CLI
+cargo run -p plate-server --bin plate -- check examples/commercial/hotel.ncl -v   # solve from the CLI (--json, --seeds 1..10)
 cargo run -p plate-server --bin plate -- export examples/home/studio.ncl dxf -o studio.dxf
 ```
 

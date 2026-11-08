@@ -1,0 +1,3 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 2
+space bed fixture 3.28 [0.00, 1.10 → 2.05, 2.70]
+space wardrobe fixture 1.44 [2.90, 0.70 → 3.50, 3.10]

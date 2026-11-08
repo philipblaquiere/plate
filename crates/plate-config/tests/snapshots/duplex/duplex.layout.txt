@@ -1,0 +1,57 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 30
+space flat_1 room 1017.15 [0.39, 0.60 → 29.61, 35.40]
+space flat_1.bath room 61.89 [23.14, 25.84 → 29.61, 35.40]
+space flat_1.bath.basin fixture 3.00 [28.11, 25.99 → 29.61, 27.99]
+space flat_1.bath.shower fixture 9.00 [23.14, 32.25 → 26.14, 35.25]
+space flat_1.bath.toilet fixture 3.11 [23.14, 29.62 → 25.47, 30.96]
+space flat_1.bedroom_1 room 130.57 [0.39, 0.60 → 12.94, 11.00]
+space flat_1.bedroom_2 room 131.71 [17.81, 0.60 → 29.61, 11.76]
+space flat_1.kitchen room 113.46 [14.15, 21.97 → 22.60, 35.40]
+space flat_1.kitchen.counter fixture 17.46 [20.43, 24.66 → 22.60, 32.71]
+space flat_1.kitchen.fridge fixture 5.83 [20.26, 22.06 → 22.60, 24.56]
+space flat_1.kitchen.range fixture 5.42 [20.43, 32.81 → 22.60, 35.31]
+space flat_1.living room 317.49 [0.39, 11.38 → 13.60, 35.40]
+space flat_1.utility room 32.95 [23.81, 12.14 → 29.61, 17.81]
+space flat_1.utility.dryer fixture 5.25 [26.61, 15.48 → 28.86, 17.81]
+space flat_1.hall circulation 180.56 [13.31, 0.60 → 29.61, 25.29]
+space flat_2 room 1017.15 [30.39, 0.60 → 59.61, 35.40]
+space flat_2.bath room 61.89 [30.39, 25.84 → 36.86, 35.40]
+space flat_2.bath.basin fixture 3.00 [30.39, 25.99 → 31.89, 27.99]
+space flat_2.bath.shower fixture 9.00 [33.86, 32.25 → 36.86, 35.25]
+space flat_2.bath.toilet fixture 3.11 [34.53, 29.62 → 36.86, 30.96]
+space flat_2.bedroom_1 room 130.57 [47.06, 0.60 → 59.61, 11.00]
+space flat_2.bedroom_2 room 131.71 [30.39, 0.60 → 42.19, 11.76]
+space flat_2.kitchen room 113.46 [37.40, 21.97 → 45.85, 35.40]
+space flat_2.kitchen.counter fixture 17.46 [37.40, 24.66 → 39.57, 32.71]
+space flat_2.kitchen.fridge fixture 5.83 [37.40, 22.06 → 39.74, 24.56]
+space flat_2.kitchen.range fixture 5.42 [37.40, 32.81 → 39.57, 35.31]
+space flat_2.living room 317.49 [46.40, 11.38 → 59.61, 35.40]
+space flat_2.utility room 32.95 [30.39, 12.14 → 36.19, 17.81]
+space flat_2.utility.dryer fixture 5.25 [31.14, 15.48 → 33.39, 17.81]
+space flat_2.hall circulation 180.56 [30.39, 0.60 → 46.69, 25.29]
+Door door:flat_1|'facade
+Door door:flat_2|'facade
+Door flat_1.door:bath|hall
+Door flat_1.door:bedroom_1|hall
+Door flat_1.door:bedroom_2|hall
+Door flat_1.door:living|hall
+Door flat_1.door:utility|hall
+Door flat_1.door:kitchen|living
+Window flat_1.window:bedroom_1|'facade
+Window flat_1.window:bedroom_2|'facade
+Window flat_1.window:living|'facade
+Window flat_1.window:kitchen|'facade
+Door flat_2.door:bath|hall
+Door flat_2.door:bedroom_1|hall
+Door flat_2.door:bedroom_2|hall
+Door flat_2.door:living|hall
+Door flat_2.door:utility|hall
+Door flat_2.door:kitchen|living
+Window flat_2.window:bedroom_1|'facade
+Window flat_2.window:bedroom_2|'facade
+Window flat_2.window:living|'facade
+Window flat_2.window:kitchen|'facade
+walls exterior × 4
+walls partition × 22
+walls party × 3
+walls wet × 6

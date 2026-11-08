@@ -1,0 +1,8 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 3
+space bath room 6.00 [6.00, 3.00 → 8.00, 6.00]
+space entry circulation 6.00 [6.00, 0.00 → 8.00, 3.00]
+space living room 36.00 [0.00, 0.00 → 6.00, 6.00]
+Door door:entry|'facade
+Door door:bath|entry
+Door door:living|entry
+Window window:living|'facade

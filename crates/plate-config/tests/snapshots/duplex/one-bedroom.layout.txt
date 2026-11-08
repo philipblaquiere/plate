@@ -1,0 +1,13 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 4
+space bath room 4.93 [5.55, 0.25 → 8.45, 1.95]
+space bedroom room 12.39 [5.55, 3.80 → 9.75, 6.75]
+space living room 33.80 [0.25, 0.25 → 5.45, 6.75]
+space hall circulation 9.09 [5.55, 0.25 → 9.75, 3.70]
+Door door:hall|'facade
+Door door:bath|hall
+Door door:bedroom|hall
+Door door:living|hall
+Window window:bedroom|'facade
+Window window:living|'facade
+walls exterior × 8
+walls partition × 6

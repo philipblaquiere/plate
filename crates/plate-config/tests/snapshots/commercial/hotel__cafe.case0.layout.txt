@@ -1,0 +1,12 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 11
+space counter fixture 4.90 [0.00, 1.60 → 0.70, 8.60]
+space table_1 fixture 1.68 [2.10, 3.90 → 3.50, 5.10]
+space table_2 fixture 1.68 [3.80, 5.60 → 5.20, 6.80]
+space table_3 fixture 1.68 [4.70, 3.50 → 6.10, 4.70]
+space table_4 fixture 1.68 [4.70, 0.80 → 6.10, 2.00]
+space table_5 fixture 1.68 [5.10, 10.30 → 6.50, 11.50]
+space table_6 fixture 1.68 [5.40, 7.50 → 6.80, 8.70]
+space table_7 fixture 1.68 [6.90, 3.40 → 8.30, 4.60]
+space table_8 fixture 1.68 [7.10, 9.70 → 8.30, 11.10]
+space table_9 fixture 1.68 [7.30, 6.40 → 8.50, 7.80]
+space table_10 fixture 1.68 [7.60, 1.10 → 9.00, 2.30]

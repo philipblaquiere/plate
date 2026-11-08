@@ -1,0 +1,170 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 121
+space corridor circulation 48.00 [0.00, -1.00 → 24.00, 1.00]
+space room_1 room 30.00 [0.00, 1.00 → 4.00, 8.50]
+space room_1.bath room 4.50 [2.00, 1.00 → 4.00, 3.25]
+space room_1.bath.basin fixture 0.27 [2.90, 2.80 → 3.50, 3.25]
+space room_1.bath.shower fixture 0.81 [3.00, 1.00 → 3.90, 1.90]
+space room_1.bath.toilet fixture 0.28 [2.00, 2.22 → 2.70, 2.62]
+space room_1.entry circulation 4.50 [0.00, 1.00 → 2.00, 3.25]
+space room_1.sleep room 21.00 [0.00, 3.25 → 4.00, 8.50]
+space room_1.sleep.armchair fixture 0.72 [1.43, 4.54 → 2.27, 5.39]
+space room_1.sleep.bed fixture 3.92 [1.44, 6.47 → 3.37, 8.50]
+space room_1.sleep.desk fixture 0.84 [0.00, 5.37 → 0.60, 6.77]
+space room_2 room 30.00 [0.00, -8.50 → 4.00, -1.00]
+space room_2.bath room 4.50 [2.00, -3.25 → 4.00, -1.00]
+space room_2.bath.basin fixture 0.27 [2.90, -3.25 → 3.50, -2.80]
+space room_2.bath.shower fixture 0.81 [3.00, -1.90 → 3.90, -1.00]
+space room_2.bath.toilet fixture 0.28 [2.00, -2.62 → 2.70, -2.22]
+space room_2.entry circulation 4.50 [0.00, -3.25 → 2.00, -1.00]
+space room_2.sleep room 21.00 [0.00, -8.50 → 4.00, -3.25]
+space room_2.sleep.armchair fixture 0.72 [1.43, -5.39 → 2.27, -4.54]
+space room_2.sleep.bed fixture 3.92 [1.44, -8.50 → 3.37, -6.47]
+space room_2.sleep.desk fixture 0.84 [0.00, -6.77 → 0.60, -5.37]
+space room_3 room 30.00 [4.00, 1.00 → 8.00, 8.50]
+space room_3.bath room 4.50 [4.00, 1.00 → 6.00, 3.25]
+space room_3.bath.basin fixture 0.27 [4.50, 2.80 → 5.10, 3.25]
+space room_3.bath.shower fixture 0.81 [4.10, 1.00 → 5.00, 1.90]
+space room_3.bath.toilet fixture 0.28 [5.30, 2.22 → 6.00, 2.62]
+space room_3.entry circulation 4.50 [6.00, 1.00 → 8.00, 3.25]
+space room_3.sleep room 21.00 [4.00, 3.25 → 8.00, 8.50]
+space room_3.sleep.armchair fixture 0.72 [5.83, 3.35 → 6.67, 4.20]
+space room_3.sleep.bed fixture 3.92 [4.00, 5.75 → 6.03, 7.68]
+space room_3.sleep.desk fixture 0.84 [4.00, 3.25 → 5.40, 3.85]
+space room_4 room 30.00 [4.00, -8.50 → 8.00, -1.00]
+space room_4.bath room 4.50 [4.00, -3.25 → 6.00, -1.00]
+space room_4.bath.basin fixture 0.27 [4.50, -3.25 → 5.10, -2.80]
+space room_4.bath.shower fixture 0.81 [4.10, -1.90 → 5.00, -1.00]
+space room_4.bath.toilet fixture 0.28 [5.30, -2.62 → 6.00, -2.22]
+space room_4.entry circulation 4.50 [6.00, -3.25 → 8.00, -1.00]
+space room_4.sleep room 21.00 [4.00, -8.50 → 8.00, -3.25]
+space room_4.sleep.armchair fixture 0.72 [5.83, -4.20 → 6.67, -3.35]
+space room_4.sleep.bed fixture 3.92 [4.00, -7.68 → 6.03, -5.75]
+space room_4.sleep.desk fixture 0.84 [4.00, -3.85 → 5.40, -3.25]
+space room_5 room 30.00 [8.00, 1.00 → 12.00, 8.50]
+space room_5.bath room 4.50 [10.00, 1.00 → 12.00, 3.25]
+space room_5.bath.basin fixture 0.27 [10.90, 2.80 → 11.50, 3.25]
+space room_5.bath.shower fixture 0.81 [11.00, 1.00 → 11.90, 1.90]
+space room_5.bath.toilet fixture 0.28 [10.00, 2.22 → 10.70, 2.62]
+space room_5.entry circulation 4.50 [8.00, 1.00 → 10.00, 3.25]
+space room_5.sleep room 21.00 [8.00, 3.25 → 12.00, 8.50]
+space room_5.sleep.armchair fixture 0.72 [9.32, 3.35 → 10.18, 4.20]
+space room_5.sleep.bed fixture 3.92 [9.97, 5.75 → 12.00, 7.68]
+space room_5.sleep.desk fixture 0.84 [10.60, 3.25 → 12.00, 3.85]
+space room_6 room 30.00 [8.00, -8.50 → 12.00, -1.00]
+space room_6.bath room 4.50 [10.00, -3.25 → 12.00, -1.00]
+space room_6.bath.basin fixture 0.27 [10.90, -3.25 → 11.50, -2.80]
+space room_6.bath.shower fixture 0.81 [11.00, -1.90 → 11.90, -1.00]
+space room_6.bath.toilet fixture 0.28 [10.00, -2.62 → 10.70, -2.22]
+space room_6.entry circulation 4.50 [8.00, -3.25 → 10.00, -1.00]
+space room_6.sleep room 21.00 [8.00, -8.50 → 12.00, -3.25]
+space room_6.sleep.armchair fixture 0.72 [9.32, -4.20 → 10.18, -3.35]
+space room_6.sleep.bed fixture 3.92 [9.97, -7.68 → 12.00, -5.75]
+space room_6.sleep.desk fixture 0.84 [10.60, -3.85 → 12.00, -3.25]
+space room_7 room 30.00 [12.00, 1.00 → 16.00, 8.50]
+space room_7.bath room 4.50 [12.00, 1.00 → 14.00, 3.25]
+space room_7.bath.basin fixture 0.27 [12.50, 2.80 → 13.10, 3.25]
+space room_7.bath.shower fixture 0.81 [12.10, 1.00 → 13.00, 1.90]
+space room_7.bath.toilet fixture 0.28 [13.30, 2.22 → 14.00, 2.62]
+space room_7.entry circulation 4.50 [14.00, 1.00 → 16.00, 3.25]
+space room_7.sleep room 21.00 [12.00, 3.25 → 16.00, 8.50]
+space room_7.sleep.armchair fixture 0.72 [13.82, 3.35 → 14.68, 4.20]
+space room_7.sleep.bed fixture 3.92 [12.00, 5.75 → 14.03, 7.68]
+space room_7.sleep.desk fixture 0.84 [12.00, 3.25 → 13.40, 3.85]
+space room_8 room 30.00 [12.00, -8.50 → 16.00, -1.00]
+space room_8.bath room 4.50 [12.00, -3.25 → 14.00, -1.00]
+space room_8.bath.basin fixture 0.27 [12.50, -3.25 → 13.10, -2.80]
+space room_8.bath.shower fixture 0.81 [12.10, -1.90 → 13.00, -1.00]
+space room_8.bath.toilet fixture 0.28 [13.30, -2.62 → 14.00, -2.22]
+space room_8.entry circulation 4.50 [14.00, -3.25 → 16.00, -1.00]
+space room_8.sleep room 21.00 [12.00, -8.50 → 16.00, -3.25]
+space room_8.sleep.armchair fixture 0.72 [13.82, -4.20 → 14.68, -3.35]
+space room_8.sleep.bed fixture 3.92 [12.00, -7.68 → 14.03, -5.75]
+space room_8.sleep.desk fixture 0.84 [12.00, -3.85 → 13.40, -3.25]
+space room_9 room 30.00 [16.00, 1.00 → 20.00, 8.50]
+space room_9.bath room 4.50 [18.00, 1.00 → 20.00, 3.25]
+space room_9.bath.basin fixture 0.27 [18.90, 2.80 → 19.50, 3.25]
+space room_9.bath.shower fixture 0.81 [19.00, 1.00 → 19.90, 1.90]
+space room_9.bath.toilet fixture 0.28 [18.00, 2.22 → 18.70, 2.62]
+space room_9.entry circulation 4.50 [16.00, 1.00 → 18.00, 3.25]
+space room_9.sleep room 21.00 [16.00, 3.25 → 20.00, 8.50]
+space room_9.sleep.armchair fixture 0.72 [17.32, 3.35 → 18.18, 4.20]
+space room_9.sleep.bed fixture 3.92 [17.97, 5.75 → 20.00, 7.68]
+space room_9.sleep.desk fixture 0.84 [18.60, 3.25 → 20.00, 3.85]
+space room_10 room 30.00 [16.00, -8.50 → 20.00, -1.00]
+space room_10.bath room 4.50 [18.00, -3.25 → 20.00, -1.00]
+space room_10.bath.basin fixture 0.27 [18.90, -3.25 → 19.50, -2.80]
+space room_10.bath.shower fixture 0.81 [19.00, -1.90 → 19.90, -1.00]
+space room_10.bath.toilet fixture 0.28 [18.00, -2.62 → 18.70, -2.22]
+space room_10.entry circulation 4.50 [16.00, -3.25 → 18.00, -1.00]
+space room_10.sleep room 21.00 [16.00, -8.50 → 20.00, -3.25]
+space room_10.sleep.armchair fixture 0.72 [17.32, -4.20 → 18.18, -3.35]
+space room_10.sleep.bed fixture 3.92 [17.97, -7.68 → 20.00, -5.75]
+space room_10.sleep.desk fixture 0.84 [18.60, -3.85 → 20.00, -3.25]
+space room_11 room 30.00 [20.00, 1.00 → 24.00, 8.50]
+space room_11.bath room 4.50 [20.00, 1.00 → 22.00, 3.25]
+space room_11.bath.basin fixture 0.27 [20.50, 2.80 → 21.10, 3.25]
+space room_11.bath.shower fixture 0.81 [20.10, 1.00 → 21.00, 1.90]
+space room_11.bath.toilet fixture 0.28 [21.30, 2.22 → 22.00, 2.62]
+space room_11.entry circulation 4.50 [22.00, 1.00 → 24.00, 3.25]
+space room_11.sleep room 21.00 [20.00, 3.25 → 24.00, 8.50]
+space room_11.sleep.armchair fixture 0.72 [21.73, 4.54 → 22.57, 5.39]
+space room_11.sleep.bed fixture 3.92 [20.63, 6.47 → 22.56, 8.50]
+space room_11.sleep.desk fixture 0.84 [23.40, 5.37 → 24.00, 6.77]
+space room_12 room 30.00 [20.00, -8.50 → 24.00, -1.00]
+space room_12.bath room 4.50 [20.00, -3.25 → 22.00, -1.00]
+space room_12.bath.basin fixture 0.27 [20.50, -3.25 → 21.10, -2.80]
+space room_12.bath.shower fixture 0.81 [20.10, -1.90 → 21.00, -1.00]
+space room_12.bath.toilet fixture 0.28 [21.30, -2.62 → 22.00, -2.22]
+space room_12.entry circulation 4.50 [22.00, -3.25 → 24.00, -1.00]
+space room_12.sleep room 21.00 [20.00, -8.50 → 24.00, -3.25]
+space room_12.sleep.armchair fixture 0.72 [21.73, -5.39 → 22.57, -4.54]
+space room_12.sleep.bed fixture 3.92 [20.63, -8.50 → 22.56, -6.47]
+space room_12.sleep.desk fixture 0.84 [23.40, -6.77 → 24.00, -5.37]
+Door room_1.door:entry|'entrance
+Door room_1.door:bath|entry
+Door room_1.door:sleep|entry
+Window room_1.window:sleep|'facade
+Door room_2.door:entry|'entrance
+Door room_2.door:bath|entry
+Door room_2.door:sleep|entry
+Window room_2.window:sleep|'facade
+Door room_3.door:entry|'entrance
+Door room_3.door:bath|entry
+Door room_3.door:sleep|entry
+Window room_3.window:sleep|'facade
+Door room_4.door:entry|'entrance
+Door room_4.door:bath|entry
+Door room_4.door:sleep|entry
+Window room_4.window:sleep|'facade
+Door room_5.door:entry|'entrance
+Door room_5.door:bath|entry
+Door room_5.door:sleep|entry
+Window room_5.window:sleep|'facade
+Door room_6.door:entry|'entrance
+Door room_6.door:bath|entry
+Door room_6.door:sleep|entry
+Window room_6.window:sleep|'facade
+Door room_7.door:entry|'entrance
+Door room_7.door:bath|entry
+Door room_7.door:sleep|entry
+Window room_7.window:sleep|'facade
+Door room_8.door:entry|'entrance
+Door room_8.door:bath|entry
+Door room_8.door:sleep|entry
+Window room_8.window:sleep|'facade
+Door room_9.door:entry|'entrance
+Door room_9.door:bath|entry
+Door room_9.door:sleep|entry
+Window room_9.window:sleep|'facade
+Door room_10.door:entry|'entrance
+Door room_10.door:bath|entry
+Door room_10.door:sleep|entry
+Window room_10.window:sleep|'facade
+Door room_11.door:entry|'entrance
+Door room_11.door:bath|entry
+Door room_11.door:sleep|entry
+Window room_11.window:sleep|'facade
+Door room_12.door:entry|'entrance
+Door room_12.door:bath|entry
+Door room_12.door:sleep|entry
+Window room_12.window:sleep|'facade

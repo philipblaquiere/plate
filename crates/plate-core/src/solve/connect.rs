@@ -953,3 +953,65 @@ fn arc(a: Point, b: Point) -> Vec<Point> {
         })
         .collect()
 }
+
+/// Networks on a pinned flat (`testkit::pinned_flat`): 6 outlets in the living room, 4 in the
+/// bedroom, one panel in the hall.
+#[cfg(test)]
+mod tests {
+    use std::collections::BTreeMap;
+
+    use serde_json::json;
+
+    use crate::solve::testkit::*;
+
+    #[test]
+    fn groups_hold_at_most_max_and_every_terminal_is_on_one() {
+        let s = run(pinned_flat_with(json!({ "power": power() })));
+        assert_met(&s);
+        let mut groups: BTreeMap<String, usize> = BTreeMap::new();
+        for o in parts(&s, "outlet") {
+            let g =
+                o.part.as_ref().unwrap().group.clone().unwrap_or_else(|| panic!("{} is on no circuit", o.id));
+            *groups.entry(g).or_default() += 1;
+        }
+        // Ten outlets, at most six a circuit, rooms kept together.
+        assert_eq!(groups.values().copied().collect::<Vec<_>>(), [6, 4], "{groups:?}");
+        let circuits: Vec<_> = s.layout.circuits.iter().filter(|c| c.service == "power").collect();
+        assert_eq!(circuits.len(), 2);
+        assert_eq!(circuits.iter().map(|c| c.devices.iter().map(|d| d.1).sum::<u32>()).sum::<u32>(), 10);
+    }
+
+    #[test]
+    fn each_circuit_has_one_home_run_in_each_drawing() {
+        let s = run(pinned_flat_with(json!({ "power": power() })));
+        for draw in ["routed", "arcs"] {
+            let mut homes: BTreeMap<String, usize> = BTreeMap::new();
+            for r in runs(&s, draw) {
+                let info = r.run.as_ref().unwrap();
+                if info.network == "General" && info.home {
+                    *homes.entry(info.group.clone().unwrap()).or_default() += 1;
+                }
+            }
+            assert_eq!(homes.values().copied().collect::<Vec<_>>(), [1, 1], "{draw}: {homes:?}");
+        }
+        // The drawing the network didn't ask for is marked, and exports leave it out.
+        assert!(runs(&s, "arcs").iter().all(|r| r.run.as_ref().unwrap().alt && !r.exported()));
+        assert!(runs(&s, "routed").iter().all(|r| !r.run.as_ref().unwrap().alt && r.exported()));
+    }
+
+    #[test]
+    fn a_circuits_length_is_the_sum_of_its_cables() {
+        let s = run(pinned_flat_with(json!({ "power": power() })));
+        for c in s.layout.circuits.iter().filter(|c| c.service == "power") {
+            let mut cables: BTreeMap<u32, f64> = BTreeMap::new();
+            for r in runs(&s, "routed") {
+                let info = r.run.as_ref().unwrap();
+                if info.group.as_deref() == Some(&c.group) {
+                    cables.insert(info.cable.unwrap(), info.length.unwrap());
+                }
+            }
+            let sum: f64 = cables.values().sum();
+            assert!((sum - c.length).abs() < 1e-6, "circuit {}: {sum} vs {}", c.group, c.length);
+        }
+    }
+}

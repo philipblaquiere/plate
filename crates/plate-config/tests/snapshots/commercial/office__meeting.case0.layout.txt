@@ -1,0 +1,2 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 1
+space table fixture 6.08 [1.10, 1.10 → 2.70, 4.90]

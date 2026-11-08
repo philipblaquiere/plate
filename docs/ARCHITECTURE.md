@@ -116,6 +116,9 @@ absolute import paths, and on `wasm32-unknown-unknown` no path is absolute. The 
 module a stub WASI with no files (`web/src/engine/wasi.ts`).
 
 The CLI (`plate check hotel.ncl`) evaluates a file with the other `.ncl` files of its folder.
+`--json` prints the report, counts and diagnostics as data; `--seeds 1..10` sweeps seeds; a plan
+file can be solved in the slot a plate gives one of its spaces (`--in plate.ncl:space`, or a slot
+saved with `plate slot`), which is `View::Slot` as the editor uses it.
 
 ## Why Nickel
 

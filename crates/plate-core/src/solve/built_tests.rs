@@ -2,34 +2,9 @@
 
 use serde_json::{json, Value};
 
+use super::testkit::{element, in_space, messages, of_kind, parts, run, spaces_of, walls_between};
 use super::*;
 use crate::geometry::Bounds;
-
-fn run(v: Value) -> Solution {
-    solve(&Config::from_value(v).unwrap())
-}
-
-fn messages(s: &Solution) -> Vec<(Option<String>, String)> {
-    s.diagnostics.iter().map(|d| (d.pointer.clone(), d.message.clone())).collect()
-}
-
-fn of_kind(s: &Solution, kind: ElementKind) -> Vec<&Element> {
-    s.layout.elements.iter().filter(|e| e.kind == kind).collect()
-}
-
-fn element<'a>(s: &'a Solution, id: &str) -> &'a Element {
-    s.layout.elements.iter().find(|e| e.id == id).unwrap_or_else(|| panic!("no {id}"))
-}
-
-fn walls_between<'a>(s: &'a Solution, a: &str, b: &str) -> Vec<&'a Element> {
-    of_kind(s, ElementKind::Wall)
-        .into_iter()
-        .filter(|e| {
-            let w = e.wall.as_ref().unwrap();
-            w.between.iter().any(|n| n == a) && w.between.iter().any(|n| n == b)
-        })
-        .collect()
-}
 
 /// A 12 × 8 flat between neighbours: a living room, a bedroom, a bath, a hall that takes the rest.
 fn flat(extra: Value) -> Value {
@@ -368,22 +343,10 @@ fn a_claim_that_cant_be_met_points_at_the_claim() {
 
 // Services: where their parts go, and how they're connected.
 
-fn parts<'a>(s: &'a Solution, part: &str) -> Vec<&'a Element> {
-    of_kind(s, ElementKind::Part).into_iter().filter(|e| e.part.as_ref().unwrap().part == part).collect()
-}
-
-fn in_space<'a>(of: &[&'a Element], space: &str) -> Vec<&'a Element> {
-    of.iter().copied().filter(|e| e.part.as_ref().unwrap().space == space).collect()
-}
-
 fn with_service(name: &str, service: Value) -> Value {
     let mut v = flat(json!({}));
     v["services"] = json!({ name: service });
     v
-}
-
-fn spaces_of(s: &Solution) -> Vec<(String, Vec<Point>)> {
-    of_kind(s, ElementKind::Space).iter().map(|e| (e.id.clone(), e.points.clone())).collect()
 }
 
 #[test]
