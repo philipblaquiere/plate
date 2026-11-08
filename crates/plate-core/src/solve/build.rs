@@ -13,7 +13,7 @@ use crate::geometry::Point;
 use crate::plan::{LengthSer, Plan, Rule, Selector};
 use crate::solve::frame::{Rect, Transform};
 use crate::solve::grid::point_in_polygon;
-use crate::solve::ports::{collinear_overlap, DOOR, OPEN, WINDOW};
+use crate::solve::ports::{collinear_overlap, is_gap, OPEN};
 use crate::solve::{num, Issue, LevelResult, Slot};
 use crate::units::Units;
 
@@ -129,7 +129,7 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
                     }
                 }
                 None if root && slot.boundary.is_some() => {
-                    let opening = port.roles.iter().all(|r| r == DOOR || r == WINDOW);
+                    let opening = is_gap(&port.roles);
                     if !opening {
                         edges.push(Edge { owner: i, other: None, a, b, roles: port.roles.clone() });
                     }

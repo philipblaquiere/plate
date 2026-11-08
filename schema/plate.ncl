@@ -21,6 +21,14 @@ in
     | doc "Each `a` gets a door to a `b`, or to a port of the parent space such as 'entrance. `plate.door \"bedroom\" \"hall\"`"
     = fun x y => { rule = 'door, a = x } & side "b" y,
 
+  opening
+    | doc "Each `a` gets an opening to a `b`: a gap in the wall with no door, 1.2 m (4 ft) wide unless `width` says. `plate.opening \"dining\" \"hall\" & { width = 1.8 }`; as wide as the wall allows, with wall left at each end: `plate.opening \"nook\" \"living\" & { width = { min = 1.5 }, margin = 0.6 }`"
+    = fun x y => { rule = 'door, a = x, leaf = 'none } & side "b" y,
+
+  open
+    | doc "Each `a` shares an edge with a `b` (1.2 m of it at least) and no wall is built there: the floor runs on. `plate.open \"dining\" \"living\"`; a longer edge: `& { length = 3 }`"
+    = fun x y => { rule = 'door, a = x, leaf = 'none, width = 'full } & side "b" y,
+
   window
     | doc "Each `a` gets a window on the facade. `plate.window \"bedroom\"`; for another port: `plate.window \"lounge\" & { port = 'outdoor }`"
     = fun x => { rule = 'window, a = x },

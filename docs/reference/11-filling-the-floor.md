@@ -30,7 +30,7 @@ When the spaces can't take the floor the fill shouldn't, the solver says how muc
 
 A zone is part of a floor with no walls of its own: the desks of an open-plan office, the dining end of a living room, the lounge and kitchen of a studio. Write `kind = 'zone`.
 
-- Where a zone meets the fill or another zone, the edge is `'open`: no wall is drawn, and fixtures can't stand with their back to it.
+- Where a zone meets another zone, circulation or the fill, the edge is `'open`: no wall is drawn, and fixtures can't stand with their back to it. See _Open plans_ for openings, `plate.open` and walls between zones.
 - Fixtures' clear floor may run across zones (a walkway is shared).
 - A door from a zone (or from circulation) into a room gives the room an `'entrance`; a door from a room into another room gives it a `'link`.
 

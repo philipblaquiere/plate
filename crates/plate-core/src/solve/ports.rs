@@ -122,6 +122,14 @@ pub const DOOR: &str = "door";
 /// The role of a port where a window is: the window itself, not the whole wall.
 pub const WINDOW: &str = "window";
 
+/// The role of a port where an opening (a gap with no door) is: the gap itself.
+pub const OPENING: &str = "opening";
+
+/// Is this a port of a gap in a wall (a door, a window, an opening) rather than of the wall?
+pub fn is_gap(roles: &[String]) -> bool {
+    roles.iter().all(|r| r == DOOR || r == WINDOW || r == OPENING)
+}
+
 /// `door` ports: the part of each door (a segment in the level's frame) that lies on one of
 /// `walls`. Fixtures inside keep the door's swing clear.
 pub fn door_ports(walls: &[(Point, Point)], doors: &[(Point, Point)], tol: f64) -> Vec<PortSeg> {
@@ -132,6 +140,11 @@ pub fn door_ports(walls: &[(Point, Point)], doors: &[(Point, Point)], tol: f64) 
 /// things away from it (`plate.apart "bed" 'window`).
 pub fn window_ports(walls: &[(Point, Point)], windows: &[(Point, Point)], tol: f64) -> Vec<PortSeg> {
     opening_ports(walls, windows, WINDOW, tol)
+}
+
+/// `opening` ports: the part of each opening (a gap with no door) that lies on one of `walls`.
+pub fn gap_ports(walls: &[(Point, Point)], gaps: &[(Point, Point)], tol: f64) -> Vec<PortSeg> {
+    opening_ports(walls, gaps, OPENING, tol)
 }
 
 fn opening_ports(

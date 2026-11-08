@@ -2792,6 +2792,14 @@ button {
   stroke-linecap: butt;
 }
 
+/* An opening: no leaf, the header above it dashed across the gap (the CAD convention). */
+.opening-head {
+  fill: none;
+  stroke: var(--ink-soft);
+  stroke-width: 0.7;
+  stroke-dasharray: 4 3;
+}
+
 .door-leaf {
   fill: var(--sheet-raised);
   stroke: var(--ink);

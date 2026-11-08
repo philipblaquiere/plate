@@ -216,6 +216,8 @@ export interface Helper {
 const PARAMS: Record<string, string[]> = {
   touches: ['"a"', '"b"'],
   door: ['"a"', '"b"'],
+  opening: ['"a"', '"b"'],
+  open: ['"a"', '"b"'],
   window: ['"a"'],
   apart: ['"a"', '"b"'],
   near: ['"a"', '"b"', "distance"],

@@ -1,0 +1,16 @@
+part lighting.light in bath × 1
+part lighting.light in bedroom × 1
+part lighting.light in closet × 1
+part lighting.light in dining × 1
+part lighting.light in entry × 1
+part lighting.light in kitchen × 1
+part lighting.light in living × 2
+part lighting.light in nook × 1
+part lighting.switch in bath × 1
+part lighting.switch in bedroom × 1
+part lighting.switch in closet × 1
+part lighting.switch in dining × 1
+part lighting.switch in entry × 1
+part lighting.switch in kitchen × 1
+part lighting.switch in living × 1
+part lighting.switch in nook × 1

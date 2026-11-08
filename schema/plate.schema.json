@@ -1129,7 +1129,7 @@
       }
     },
     "RuleDoor": {
-      "description": "Each `a` has a door to a `b` (or to a port of the parent space, such as `'entrance`).",
+      "description": "Each `a` has a door to a `b` (or to a port of the parent space, such as `'entrance`). With `leaf = 'none` it's an opening: a gap in the wall with no door (`plate.opening`), or with `width = 'full` no wall at all (`plate.open`).",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -1158,8 +1158,48 @@
           "type": "boolean",
           "default": false
         },
+        "leaf": {
+          "description": "What closes it. `'none` makes it an opening: a cased opening or an archway, or with `width = 'full` no wall at all. `plate.opening` and `plate.open` write it.",
+          "enum": [
+            "swing",
+            "none"
+          ],
+          "default": "swing",
+          "x-enumDescriptions": {
+            "swing": "A door that swings.",
+            "none": "Nothing: an opening in the wall, or (with `width = 'full`) no wall."
+          }
+        },
         "width": {
-          "description": "Door width. Defaults to 0.9 m (3 ft).",
+          "description": "How wide: a length (a door defaults to 0.9 m, 3 ft; an opening to 1.2 m, 4 ft), a range `{ min, max }` (an opening as wide as the wall allows within it, leaving `margin` at each end), or `'full` (no wall at all along the shared edge, at least `length` of it).",
+          "anyOf": [
+            {
+              "const": "full"
+            },
+            {
+              "$ref": "#/$defs/Length"
+            },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "min": {
+                  "$ref": "#/$defs/Length"
+                },
+                "max": {
+                  "$ref": "#/$defs/Length"
+                }
+              }
+            }
+          ],
+          "errorMessage": "expected a length, { min, max } with lengths, or 'full"
+        },
+        "margin": {
+          "description": "Wall kept at each end of an opening: short wall sections either side of it. Defaults to none for an opening, 0.1 m beside a door.",
+          "$ref": "#/$defs/Length"
+        },
+        "length": {
+          "description": "With `width = 'full`: the shortest shared edge that counts as a way through. Defaults to 1.2 m (4 ft).",
           "$ref": "#/$defs/Length"
         },
         "weight": {
@@ -1167,7 +1207,13 @@
           "type": "number",
           "minimum": 0
         }
-      }
+      },
+      "x-docs": "open-plans",
+      "x-examples": [
+        "plate.door \"bedroom\" \"hall\",",
+        "plate.opening \"nook\" \"living\" & { width = { min = 1.5 }, margin = 0.6 },",
+        "plate.open \"dining\" \"living\","
+      ]
     },
     "RuleWindow": {
       "description": "Each `a` has a window on a port of the parent space, `'facade` unless given.",

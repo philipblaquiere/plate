@@ -134,7 +134,7 @@ program sized to what you drew, so there is something to change straight away.
   `room_3`; `count.min = 1` lets the solver place as many as fit. Instances are numbered by
   position (left to right, or along the spine), so names stay put as the layout changes.
 - **Rules** are written with the `plate` helpers, which every file can use: `touches`, `door`,
-  `window`, `apart`, `between`, `through`, `reach`, `near`, `along`, `unique`, `instance`,
+  `opening`, `open`, `window`, `apart`, `between`, `through`, `reach`, `near`, `along`, `unique`, `instance`,
   `prefer`. Names can be a space (`"kitchen"`), a type (`"bedroom"` is every bedroom), a pattern
   (`"bed*"`), or a list. A rule is required unless wrapped in `plate.prefer`. Type `plate.` in the
   editor for the list, with docs.
@@ -155,7 +155,10 @@ hall = { kind = 'circulation, fill = true, area = { min = 8, max = 20 }, side.mi
 ```
 
 - `kind = 'zone` is floor without walls (the desks of an open office, the kitchen end of a
-  living room): where zones meet, the edge is open.
+  living room): where a zone meets another zone, circulation or the fill, the edge is open.
+  `plate.open "a" "b"` takes the wall away between any two spaces; `plate.opening "a" "b"` cuts
+  a gap with no door in it (`& { width = { min = 1.5 }, margin = 0.6 }`: as wide as the wall
+  allows, with wall left at each end). See the reference guide _Open plans_.
 - `walls = 'wet` (or `'outdoor`, `'facade`…) says what a space's walls are to its neighbours.
 - `at = [x, y]` fixes a space where it stands (a core, a wing), with an exact width and depth.
 - `row = true` places fixtures side by side as one run (desks, lifts, cars).
@@ -183,6 +186,7 @@ own copy to change. Between them they use every field, rule and kind of space (a
 |              | `annex.ncl`       | Grown from a `spine` instead of an outline, reusing the hotel's guest room      |
 |              | `office.ncl`      | A tower floor round a pinned core: voids, rows of lifts, team zones             |
 | `duplex`     | `one-bedroom.ncl` | Walls with thickness: two assemblies, rooms drawn to their faces, lighting      |
+|              | `open-plan.ncl`   | An open plan: zones, `plate.open`, an opening with wall either side             |
 |              | `duplex.ncl`      | Wood-frame assemblies, power, heat and plumbing, in feet and inches             |
 
 In `duplex`, `build/` has what plates are built with: wall types in `build/assemblies/`

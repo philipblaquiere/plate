@@ -13,20 +13,19 @@
 //! back, and its exact size is drawn inside its cells, back against the cells' back edge.
 
 use super::build::Foresight;
-use super::common::{names_instances, num, select, Named, Rng, SpaceType};
+use super::common::{names_instances, num, select, Edge, Gap, Named, Rng, SpaceType};
 use super::frame::{Rect, Transform};
 use super::outline;
-use super::ports::{door_ports, ports_along, window_ports, PortSeg, Source, DOOR, OPEN, WINDOW};
+use super::ports::{
+    door_ports, gap_ports, is_gap, ports_along, window_ports, PortSeg, Source, DOOR, OPEN, OPENING,
+};
 use super::{Ctx, FixtureOut, Issue, Level, LevelResult, Opening, Placed, Slot};
 use crate::geometry::Point;
 use crate::layout::ElementKind;
-use crate::plan::{Bounds1, Plan, Rule, SpaceKind, ANY_WALL};
+use crate::plan::{Bounds1, Leaf, Plan, Rule, Selector, SpaceKind, ANY_WALL};
 
 /// Weight of a hard violation, relative to goals.
 const HARD: f64 = 20.0;
-/// Clearance either side of a door.
-const DOOR_CLEAR_MM: f64 = 100.0;
-const DOOR_MM: f64 = 900.0;
 const WINDOW_MM: f64 = 1200.0;
 const TOUCH_MM: f64 = 1000.0;
 const FIXTURE_TOUCH_MM: f64 = 300.0;
@@ -488,7 +487,7 @@ enum C {
         a: Vec<usize>,
         b: Target,
         need: f64,
-        door: Option<f64>,
+        door: Option<Gap>,
         w: f64,
         ptr: String,
         verb: &'static str,
@@ -538,7 +537,7 @@ enum C {
     FillTouch {
         b: Target,
         need: f64,
-        door: Option<f64>,
+        door: Option<Gap>,
         w: f64,
         ptr: String,
         verb: &'static str,
@@ -672,6 +671,8 @@ struct Problem<'a> {
     /// Instances whose plan's clear needs depend on the walls around them.
     needy: Vec<usize>,
     walls: Foreseen,
+    /// Pairs a `wall` rule builds a wall between, open floor or not.
+    walled: Vec<(Selector, Selector)>,
 }
 
 /// How far the walls around each needy instance will take floor from it (see [`Foresight`]).
@@ -908,6 +909,7 @@ fn setup<'a>(
         compactness: plan.goals.compactness,
         needy: Vec::new(),
         walls: Foreseen::default(),
+        walled: Vec::new(),
     };
     problem.ordered = problem.types.iter().map(|_| false).collect();
     problem.rules = problem.compile(plan, issues);
@@ -976,6 +978,14 @@ fn overlap(a0: f64, a1: f64, b0: f64, b1: f64) -> f64 {
 impl Problem<'_> {
     fn compile(&mut self, plan: &Plan, issues: &mut Vec<Issue>) -> Vec<C> {
         let mm = self.ctx.units.to_mm();
+        self.walled = plan
+            .rules()
+            .into_iter()
+            .filter_map(|(_, r)| match r {
+                Rule::Wall { a, b: Some(b), .. } => Some((a.clone(), b.clone())),
+                _ => None,
+            })
+            .collect();
         let pick = |s: &crate::plan::Selector| select(s, &self.inst, &self.types);
         let fill_key = self.fill.as_ref().map(|f| (f.name.clone(), self.types[f.type_index].key.clone()));
         let hits_fill = |s: &crate::plan::Selector| fill_key.as_ref().is_some_and(|(n, k)| s.matches(n, k));
@@ -992,11 +1002,23 @@ impl Problem<'_> {
             }
             match rule {
                 Rule::Touch { a, b, port, length, each, .. }
-                | Rule::Door { a, b, port, width: length, each, .. } => {
-                    let door = matches!(rule, Rule::Door { .. });
-                    let (need, door, verb) = if door {
-                        let width = length.map_or(DOOR_MM / mm, |l| l.0.to(self.ctx.units));
-                        (width + 2.0 * DOOR_CLEAR_MM / mm, Some(width), "have a door to")
+                | Rule::Door { a, b, port, length, each, .. } => {
+                    let gap = match rule {
+                        Rule::Door { leaf, width, margin, length, .. } => {
+                            Some(Gap::of(*leaf, *width, *margin, *length, self.ctx.units))
+                        }
+                        _ => None,
+                    };
+                    if let (Some(gap), Some(b)) = (gap, b) {
+                        self.check_edge(a, b, gap, &ptr, issues);
+                    }
+                    let (need, door, verb) = if let Some(gap) = gap {
+                        let verb = match (gap.leaf, gap.full) {
+                            (Leaf::Swing, _) => "have a door to",
+                            (_, false) => "have an opening to",
+                            (_, true) => "open onto",
+                        };
+                        (gap.need(), Some(gap), verb)
                     } else {
                         // Fixtures are small: touching means sharing a bit of their side.
                         let fixtures = pick(a).iter().any(|&i| self.fix[self.inst[i].type_index].is_some());
@@ -1111,6 +1133,60 @@ impl Problem<'_> {
         }
         self.ordered = ordered;
         out
+    }
+
+    /// Does a `wall` rule build a wall between these two (name, type key)?
+    fn is_walled(&self, x: (&str, &str), y: (&str, &str)) -> bool {
+        self.walled.iter().any(|(a, b)| {
+            (a.matches(x.0, x.1) && b.matches(y.0, y.1)) || (a.matches(y.0, y.1) && b.matches(x.0, x.1))
+        })
+    }
+
+    /// A door rule between `a` and `b` that can't be built as written: a door in an edge with no
+    /// wall, or an open edge where a `wall` rule builds one.
+    fn check_edge(&self, a: &Selector, b: &Selector, gap: Gap, ptr: &str, issues: &mut Vec<Issue>) {
+        // Every instance (and the fill), by (name, type key, type, is it the fill).
+        let mut all: Vec<(&str, &SpaceType, bool)> =
+            self.inst.iter().map(|i| (i.name.as_str(), &self.types[i.type_index], false)).collect();
+        if let Some(f) = &self.fill {
+            all.push((f.name.as_str(), &self.types[f.type_index], true));
+        }
+        let of = |s: &Selector| -> Vec<(&str, &SpaceType, bool)> {
+            all.iter().filter(|(n, t, _)| s.matches(n, &t.key)).copied().collect()
+        };
+        let (aa, bb) = (of(a), of(b));
+        for &(na, ta, fa) in &aa {
+            for &(nb, tb, fb) in &bb {
+                if na == nb || ta.space.is_fixture() || tb.space.is_fixture() {
+                    continue;
+                }
+                let walled = self.is_walled((na, &ta.key), (nb, &tb.key));
+                if gap.leaf == Leaf::Swing && !walled && ta.open_to(fa, tb, fb) {
+                    issues.push(
+                        Issue::new(ptr, format!("{na} and {nb} have no wall between them for a door"))
+                            .with_hint(format!(
+                                "Use plate.opening for a gap with no door, or build a wall: plate.wall \"{}\" \"{}\".",
+                                ta.key, tb.key
+                            )),
+                    );
+                    return;
+                }
+                if gap.full && walled {
+                    issues.push(
+                        Issue::new(
+                            ptr,
+                            format!(
+                                "{na} and {nb} are open to each other, and a wall rule builds a wall there"
+                            ),
+                        )
+                        .with_hint(
+                            "Remove one of the two rules, or use plate.opening for a gap in the wall.",
+                        ),
+                    );
+                    return;
+                }
+            }
+        }
     }
 
     /// Put pinned instances where `at` says, at their exact size, in cells.
@@ -2639,14 +2715,17 @@ impl Problem<'_> {
         let name_of = |i: usize| if i == n { fill_name.clone() } else { self.inst[i].name.clone() };
         let len = |s: &(Point, Point)| s.0.distance(s.1);
         let mut openings = Vec::new();
-        // (i, j) pairs with a door between them; `n` stands for the fill space.
+        // (i, j) pairs with a door or an opening between them; `n` stands for the fill space.
         let mut doors: Vec<(usize, usize)> = Vec::new();
+        // Those with no wall at all (`width = 'full`).
+        let mut opens: Vec<(usize, usize)> = Vec::new();
         let has_door = |doors: &Vec<(usize, usize)>, a: usize, b: usize| {
             doors.contains(&(a, b)) || doors.contains(&(b, a))
         };
         for rule in &self.rules {
             match rule {
-                C::Touch { a, b, door: Some(width), .. } => {
+                C::Touch { a, b, door: Some(gap), .. } => {
+                    let width = &gap.min;
                     for &ai in a {
                         let ra = &rects[ai];
                         match b {
@@ -2677,15 +2756,23 @@ impl Problem<'_> {
                                         t.and_then(|t| t.space.plan.as_ref())
                                             .is_some_and(|p| p.spaces.values().any(|s| !s.is_fixture()))
                                     };
-                                    let at = if planned(ai) && planned(bi) {
-                                        centred(seg, *width, DOOR_CLEAR_MM / mm)
+                                    let at = if gap.full {
+                                        None
+                                    } else if gap.leaf == Leaf::NoLeaf {
+                                        centred(seg, gap.width_on(len(&seg)), gap.margin)
+                                    } else if planned(ai) && planned(bi) {
+                                        centred(seg, *width, gap.margin)
                                     } else {
-                                        by_corner(seg, *width, DOOR_CLEAR_MM / mm, &corners)
+                                        by_corner(seg, *width, gap.margin, &corners)
                                     };
-                                    if let Some((p, q)) = at {
+                                    if gap.full {
+                                        doors.push((ai, bi));
+                                        opens.push((ai, bi));
+                                    } else if let Some((p, q)) = at {
                                         doors.push((ai, bi));
                                         openings.push(Opening {
                                             kind: ElementKind::Door,
+                                            leaf: gap.leaf,
                                             a: p,
                                             b: q,
                                             between: vec![self.inst[ai].name.clone(), name_of(bi)],
@@ -2693,11 +2780,13 @@ impl Problem<'_> {
                                     }
                                 }
                             }
+                            Target::Port(_) if gap.full => {}
                             Target::Port(role) => {
                                 if let (_, Some(seg)) = self.on_port(ra, role) {
-                                    if let Some((p, q)) = centred(seg, *width, DOOR_CLEAR_MM / mm) {
+                                    if let Some((p, q)) = centred(seg, gap.width_on(len(&seg)), gap.margin) {
                                         openings.push(Opening {
                                             kind: ElementKind::Door,
+                                            leaf: gap.leaf,
                                             a: p,
                                             b: q,
                                             between: vec![
@@ -2711,12 +2800,14 @@ impl Problem<'_> {
                         }
                     }
                 }
-                C::FillTouch { b, door: Some(width), .. } if fill_on => match b {
+                C::FillTouch { b, door: Some(gap), .. } if fill_on => match b {
+                    Target::Port(_) if gap.full => {}
                     Target::Port(role) => {
                         if let (_, Some(seg)) = self.port_run(role, &in_fill) {
-                            if let Some((p, q)) = centred(seg, *width, DOOR_CLEAR_MM / mm) {
+                            if let Some((p, q)) = centred(seg, gap.width_on(len(&seg)), gap.margin) {
                                 openings.push(Opening {
                                     kind: ElementKind::Door,
+                                    leaf: gap.leaf,
                                     a: p,
                                     b: q,
                                     between: vec![fill_name.clone(), format!("'{}", shown(role))],
@@ -2731,10 +2822,14 @@ impl Problem<'_> {
                             .filter_map(|&bi| self.free_run(&rects[bi], &in_fill).1.map(|s| (bi, s)))
                             .max_by(|x, y| len(&x.1).total_cmp(&len(&y.1)));
                         if let Some((bi, seg)) = best {
-                            if let Some((p, q)) = centred(seg, *width, DOOR_CLEAR_MM / mm) {
+                            if gap.full {
+                                doors.push((n, bi));
+                                opens.push((n, bi));
+                            } else if let Some((p, q)) = centred(seg, gap.width_on(len(&seg)), gap.margin) {
                                 doors.push((n, bi));
                                 openings.push(Opening {
                                     kind: ElementKind::Door,
+                                    leaf: gap.leaf,
                                     a: p,
                                     b: q,
                                     between: vec![fill_name.clone(), self.inst[bi].name.clone()],
@@ -2749,6 +2844,7 @@ impl Problem<'_> {
                             if let Some((p, q)) = centred(seg, *width, 300.0 / mm) {
                                 openings.push(Opening {
                                     kind: ElementKind::Window,
+                                    leaf: Leaf::Swing,
                                     a: p,
                                     b: q,
                                     between: vec![self.inst[ai].name.clone(), format!("'{role}")],
@@ -2762,6 +2858,7 @@ impl Problem<'_> {
                         if let Some((p, q)) = centred(seg, *width, 300.0 / mm) {
                             openings.push(Opening {
                                 kind: ElementKind::Window,
+                                leaf: Leaf::Swing,
                                 a: p,
                                 b: q,
                                 between: vec![fill_name.clone(), format!("'{role}")],
@@ -2791,20 +2888,42 @@ impl Problem<'_> {
         let tol = 1e-6 * (g.gx + g.gy);
         let walls: Vec<Vec<(Point, Point)>> = rects.iter().map(|r| g.rect(r).edges().to_vec()).collect();
         let fixed: Vec<bool> = (0..n).map(|i| self.fixture(i).is_some()).collect();
-        let door_segs: Vec<(Point, Point)> =
-            openings.iter().filter(|o| o.kind == ElementKind::Door).map(|o| (o.a, o.b)).collect();
+        let door_segs: Vec<(Point, Point)> = openings
+            .iter()
+            .filter(|o| o.kind == ElementKind::Door && o.leaf == Leaf::Swing)
+            .map(|o| (o.a, o.b))
+            .collect();
+        let gap_segs: Vec<(Point, Point)> = openings
+            .iter()
+            .filter(|o| o.kind == ElementKind::Door && o.leaf == Leaf::NoLeaf)
+            .map(|o| (o.a, o.b))
+            .collect();
         let window_segs: Vec<(Point, Point)> =
             openings.iter().filter(|o| o.kind == ElementKind::Window).map(|o| (o.a, o.b)).collect();
         let slot_segments: Vec<(Point, Point)> = slot.ports.iter().map(|p| (p.a, p.b)).collect();
-        // What a neighbour's walls say about it.
-        let roles_from = |i: usize, j: usize, t: &SpaceType| {
-            let tj = if j == n {
+        // What's built between two neighbours, and what that says about the other.
+        let type_of = |i: usize| {
+            if i == n {
                 &self.types[self.fill.as_ref().unwrap().type_index]
             } else {
-                &self.types[self.inst[j].type_index]
-            };
-            t.roles_from(tj, j == n, has_door(&doors, i, j))
+                &self.types[self.inst[i].type_index]
+            }
         };
+        let edge = |i: usize, j: usize| -> Edge {
+            if opens.contains(&(i, j)) || opens.contains(&(j, i)) {
+                Edge::Open
+            } else if has_door(&doors, i, j) {
+                Edge::Door
+            } else if self.is_walled((&name_of(i), &type_of(i).key), (&name_of(j), &type_of(j).key)) {
+                Edge::Wall
+            } else if type_of(i).open_to(i == n, type_of(j), j == n) {
+                Edge::Open
+            } else {
+                Edge::Wall
+            }
+        };
+        let roles_from = |i: usize, j: usize, t: &SpaceType| t.roles_from(type_of(j), edge(i, j));
+        let mut issues = issues;
         let mut placed = Vec::new();
         for (i, r) in rects.iter().enumerate() {
             let t = &self.types[self.inst[i].type_index];
@@ -2845,7 +2964,20 @@ impl Problem<'_> {
             }
             let mut ports = ports_along(&walls[i], &sources, None, tol);
             ports.extend(door_ports(&walls[i], &door_segs, tol));
+            ports.extend(gap_ports(&walls[i], &gap_segs, tol));
             ports.extend(window_ports(&walls[i], &window_segs, tol));
+            // A zone walled all round is a room: say so.
+            if t.space.kind == SpaceKind::Zone && !ports.iter().any(|p| p.has(OPEN) || p.has(OPENING)) {
+                issues.push(
+                    Issue::preferred(
+                        format!("/spaces/{}", t.key),
+                        format!("{} is a zone with no open edge", self.inst[i].name),
+                    )
+                    .with_hint(
+                        "Zones have no walls of their own only where they meet open floor: let it touch another zone, circulation or the fill (plate.open), or make it a room.",
+                    ),
+                );
+            }
             let to_level = Transform::translate(rect.x0, rect.y0);
             let back = to_level.inverse();
             placed.push(Placed {
@@ -2884,6 +3016,7 @@ impl Problem<'_> {
             }
             let mut ports = ports_along(&fill_walls, &sources, None, tol);
             ports.extend(door_ports(&fill_walls, &door_segs, tol));
+            ports.extend(gap_ports(&fill_walls, &gap_segs, tol));
             ports.extend(window_ports(&fill_walls, &window_segs, tol));
             placed.push(Placed {
                 name: fill.name.clone(),
@@ -3001,19 +3134,24 @@ impl Problem<'_> {
             return;
         }
         let foresight = Foresight::new(plan, self.ctx.units);
-        let door_between = |k: usize, j: usize| {
-            self.rules.iter().any(|rule| match rule {
-                C::Touch { a, b: Target::Spaces(b) | Target::Fill(b), door: Some(_), .. }
+        // The door rule between `k` and `j`, if there is one: is it open floor?
+        let gap_between = |k: usize, j: usize| {
+            self.rules.iter().find_map(|rule| match rule {
+                C::Touch { a, b: Target::Spaces(b) | Target::Fill(b), door: Some(g), .. }
                     if j < n
                         && ((a.contains(&k) && b.contains(&j)) || (a.contains(&j) && b.contains(&k))) =>
                 {
-                    true
+                    Some(g.full)
                 }
-                C::Touch { a, b: Target::Fill(_), door: Some(_), .. } if j == n => a.contains(&k),
-                C::FillTouch { b: Target::Spaces(b) | Target::Fill(b), door: Some(_), .. } if j == n => {
-                    b.contains(&k)
+                C::Touch { a, b: Target::Fill(_), door: Some(g), .. } if j == n && a.contains(&k) => {
+                    Some(g.full)
                 }
-                _ => false,
+                C::FillTouch { b: Target::Spaces(b) | Target::Fill(b), door: Some(g), .. }
+                    if j == n && b.contains(&k) =>
+                {
+                    Some(g.full)
+                }
+                _ => None,
             })
         };
         let fill_type = self.fill.as_ref().map(|f| f.type_index);
@@ -3030,9 +3168,15 @@ impl Problem<'_> {
                 if j == k || tj.space.is_fixture() {
                     continue;
                 }
-                let door = door_between(k, j);
-                let mut roles = tk.roles_from(tj, j == n, door);
-                for r in tj.roles_from(tk, false, door) {
+                let edge = match gap_between(k, j) {
+                    Some(true) => Edge::Open,
+                    Some(false) => Edge::Door,
+                    None if self.is_walled((name, &tk.key), (other, &tj.key)) => Edge::Wall,
+                    None if tk.open_to(false, tj, j == n) => Edge::Open,
+                    None => Edge::Wall,
+                };
+                let mut roles = tk.roles_from(tj, edge);
+                for r in tj.roles_from(tk, edge) {
                     if !roles.contains(&r) {
                         roles.push(r);
                     }
@@ -3043,7 +3187,7 @@ impl Problem<'_> {
             if self.ctx.root && slot.boundary.is_some() {
                 for (p, line) in self.ports.iter().enumerate() {
                     let roles = &line.seg.roles;
-                    if roles.iter().all(|r| r == DOOR || r == WINDOW) {
+                    if is_gap(roles) {
                         continue;
                     }
                     let depth = foresight.intrusion(roles, (name, &tk.key), None);

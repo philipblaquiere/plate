@@ -1,7 +1,7 @@
 import type { Element, Layout, Point, System, Units } from "../types";
 import { degrees, Lengths } from "./format";
 import { loadText } from "../services";
-import { doorSymbol } from "./door";
+import { doorSymbol, openingSymbol } from "./door";
 import { clearOf, type Box } from "./labels";
 import {
   edgeNormal,
@@ -1605,7 +1605,8 @@ export class Viewer {
     }
   }
 
-  /** Doors as a gap with jambs, an open leaf and its swing; windows as a thin double line in the wall. */
+  /** Doors as a gap with jambs, an open leaf and its swing; openings as a gap with jambs and a dashed
+   * header; windows as a thin double line in the wall. */
   private renderOpenings(parent: SVGElement): void {
     const byId = new Map(this.layout!.elements.map((e) => [e.id, e]));
     const g = el("g", { class: "openings" }, parent);
@@ -1637,6 +1638,17 @@ export class Viewer {
           },
           g,
         );
+        continue;
+      }
+      if (o.opening?.leaf === "none") {
+        // An opening: jambs, and the header above it dashed across the gap.
+        const d = openingSymbol(a, b, depth ? depth - 1 : 0);
+        if (!d) continue;
+        const line = (segs: [Point, Point][]) =>
+          segs.map(([p, q]) => `M${p.x},${p.y}L${q.x},${q.y}`).join("");
+        const opening = el("g", { class: "opening" }, g);
+        el("path", { d: line(d.jambs), class: "door-jamb" }, opening);
+        el("path", { d: line(d.head), class: "opening-head" }, opening);
         continue;
       }
       // The leaf opens into the first space it connects.

@@ -256,7 +256,8 @@ The file stays the single source of truth: the drawing never holds state the tex
     descriptions are interchangeable, so they're solved once: a typical. Solutions are cached
     per solve, and across solves (so editing one level doesn't re-solve the others).
   - `needs` accept or reject a slot; `unique` / `instance` rules take instances out of
-    typicals; `reach` rules are checked on the door graph.
+    typicals; `reach` rules are checked on the door graph (doors, openings, and open edges at
+    least a door's width long).
   - Warnings carry a JSON pointer (`/spaces/room/plan/rules/3`); the editor maps it to text
     with the source map, and repeats across typicals are merged ("room_3 and 23 more like it").
   - Retries: a level whose layout (or a level inside it) breaks a requirement, or cuts floor off
@@ -278,6 +279,14 @@ The file stays the single source of truth: the drawing never holds state the tex
   spaces on both sides a `door` port of exactly its width, so fixtures inside keep its swing
   clear, and each window gives its space a `window` port the same way, so rules inside can keep
   things off it (`apart` with a `port`, optionally the whole `wall` it's on).
+- **Edges** (`common.rs`: `Edge`, `Gap`, `SpaceType::open_to`): what's built between two
+  neighbours. A door rule decides it (a door, an opening with `leaf = 'none`, or no wall with
+  `width = 'full`); else a `wall` rule builds a wall; else a zone next to a zone, circulation or
+  the fill is open (`'open`, no wall); else a wall. `grid.rs` works it out per pair when it
+  writes ports (`result`) and when it foresees walls; `check_edge` reports a door where nothing
+  builds a wall, and an open edge a wall rule builds. An opening is a `Door` element with
+  `OpeningInfo.leaf = none` (layer `PLATE-OPENING`): it cuts walls and breaks routing like a door,
+  and gives both sides an `opening` port (no swing to keep clear).
 - **Fixtures** (`kind = 'fixture`) are the last level: no plan. In `grid` they carry a facing
   (which side of the rectangle is the front), a per-side clearance that other spaces can't stand
   in (unary and pair cost terms, so the incremental scoring still holds) and an `against`

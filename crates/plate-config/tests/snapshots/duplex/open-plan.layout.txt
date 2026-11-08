@@ -1,0 +1,22 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 10
+space bath room 4.59 [8.05, 0.25 → 10.75, 1.95]
+space bedroom room 11.84 [0.25, 4.05 → 3.45, 7.75]
+space closet room 1.08 [2.30, 0.25 → 3.20, 1.45]
+space dining zone 11.06 [7.00, 2.05 → 10.75, 5.00]
+space entry zone 4.25 [3.30, 0.25 → 5.00, 2.75]
+space kitchen zone 10.31 [7.00, 5.00 → 10.75, 7.75]
+space kitchen.counter fixture 1.86 [7.89, 7.10 → 10.75, 7.75]
+space kitchen.fridge fixture 0.52 [7.12, 7.05 → 7.87, 7.75]
+space nook room 5.61 [3.55, 4.80 → 5.45, 7.75]
+space living zone 27.91 [0.25, 0.25 → 7.95, 7.75]
+Door door:entry|'facade
+Door door:closet|entry
+Door opening:nook|living
+Door door:bath|living
+Door door:bedroom|living
+Window window:living|'facade
+Window window:bedroom|'facade
+Window window:dining|'facade
+Window window:nook|'facade
+walls exterior × 14
+walls partition × 10

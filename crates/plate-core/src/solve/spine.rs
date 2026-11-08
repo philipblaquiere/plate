@@ -486,8 +486,15 @@ pub fn solve(plan: &Plan, slot: &Slot, ctx: &Ctx) -> LevelResult {
     let all_named: Vec<Named> = named.clone();
     for (ptr, rule) in &rules {
         match rule {
-            Rule::Door { a, b, port, width, .. } => {
-                let width = width.map_or(900.0 / mm, |l| l.0.to(units));
+            Rule::Door { a, b, port, leaf, width, margin, length, .. } => {
+                let gap = super::common::Gap::of(*leaf, *width, *margin, *length, units);
+                if gap.full {
+                    issues.push(
+                        Issue::new(ptr.clone(), "the spine_stack engine builds a wall between every bay")
+                            .with_hint("Use plate.opening for a gap in the wall, or put the spaces in a plan of their own."),
+                    );
+                    continue;
+                }
                 for i in select(a, &all_named, &types).into_iter().filter(|&i| keep[i]) {
                     let seg = match (b, port) {
                         (Some(b), _) => {
@@ -517,9 +524,13 @@ pub fn solve(plan: &Plan, slot: &Slot, ctx: &Ctx) -> LevelResult {
                         }
                         _ => None,
                     };
-                    match seg.and_then(|(s, other)| centred(s, width, 100.0 / mm).map(|s| (s, other))) {
+                    let placed = seg.and_then(|(s, other)| {
+                        centred(s, gap.width_on(s.0.distance(s.1)), gap.margin).map(|s| (s, other))
+                    });
+                    match placed {
                         Some(((p, q), other)) => openings.push(Opening {
                             kind: ElementKind::Door,
+                            leaf: gap.leaf,
                             a: p,
                             b: q,
                             between: vec![named[i].name.clone(), other],
@@ -539,6 +550,7 @@ pub fn solve(plan: &Plan, slot: &Slot, ctx: &Ctx) -> LevelResult {
                     match longest_port(&level_ports[i], &role).and_then(|s| centred(s, width, 300.0 / mm)) {
                         Some((p, q)) => openings.push(Opening {
                             kind: ElementKind::Window,
+                            leaf: crate::plan::Leaf::Swing,
                             a: p,
                             b: q,
                             between: vec![named[i].name.clone(), format!("'{role}")],

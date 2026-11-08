@@ -351,6 +351,9 @@ pub struct OpeningInfo {
     /// The thickness of the wall it's in, if walls are built.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub depth: Option<f64>,
+    /// Doors: `none` for an opening (a gap with no door).
+    #[serde(skip_serializing_if = "crate::plan::Leaf::is_swing")]
+    pub leaf: crate::plan::Leaf,
 }
 
 /// A piece of geometry. Points keep the order they have in the configuration, so the editor can
@@ -445,6 +448,9 @@ impl Element {
 
     pub fn opening(id: impl Into<String>, kind: ElementKind, a: Point, b: Point, info: OpeningInfo) -> Self {
         let mut e = Element::new(id, kind, vec![a, b], false);
+        if kind == ElementKind::Door && info.leaf == crate::plan::Leaf::NoLeaf {
+            e.layer = "PLATE-OPENING";
+        }
         e.opening = Some(info);
         e
     }
