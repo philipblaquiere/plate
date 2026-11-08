@@ -83,3 +83,31 @@ function contains(poly: Pt[], p: Pt): boolean {
   }
   return inside;
 }
+
+/** An opening (a gap in a wall with no door) drawn in plan: a jamb at each end, and the wall's two
+ * faces dashed across the gap for the header above it. All in screen coordinates. */
+export interface OpeningSymbol {
+  jambs: [Pt, Pt][];
+  /** The header: one dashed line along each face of the wall (one line with no wall). */
+  head: [Pt, Pt][];
+}
+
+export function openingSymbol(a: Pt, b: Pt, depth: number): OpeningSymbol | null {
+  const len = Math.hypot(b.x - a.x, b.y - a.y);
+  if (len < 1e-9) return null;
+  const n = { x: -(b.y - a.y) / len, y: (b.x - a.x) / len };
+  const half = Math.max(depth / 2, 3);
+  const at = (p: Pt, s: number): Pt => ({ x: p.x + n.x * s, y: p.y + n.y * s });
+  const jambs: [Pt, Pt][] = [
+    [at(a, -half), at(a, half)],
+    [at(b, -half), at(b, half)],
+  ];
+  const head: [Pt, Pt][] =
+    depth > 0
+      ? [
+          [at(a, -depth / 2), at(b, -depth / 2)],
+          [at(a, depth / 2), at(b, depth / 2)],
+        ]
+      : [[a, b]];
+  return { jambs, head };
+}

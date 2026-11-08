@@ -247,7 +247,7 @@ mod tests {
     use serde_json::json;
 
     fn opening(kind: ElementKind, a: Point, b: Point, depth: Option<f64>) -> Element {
-        let info = OpeningInfo { between: Vec::new(), width: a.distance(b), depth };
+        let info = OpeningInfo { between: Vec::new(), width: a.distance(b), depth, leaf: Default::default() };
         Element::opening("o".to_owned(), kind, a, b, info)
     }
 

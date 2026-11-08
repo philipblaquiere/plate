@@ -21,10 +21,12 @@
   },
   place = [
     # One per 16 m² of floor, at most 4: a bedroom gets one, a living room two or three.
-    plate.over "light" "#room" & { per = 16, count.max = 4 },
+    plate.over "light" ["#room", "#zone"] & { per = 16, count.max = 4 },
     # Downlights no more than 2.4 m apart, in a line down each leg of the hall.
     plate.over "downlight" "#circulation" & { spacing = "2.4 m", layout = 'line, margin = "600 mm" },
     plate.beside "switch" 'door & { spaces = "#room" },
+    # A zone has few walls of its own: one switch, on the wall nearest a door.
+    plate.one "switch" "#zone" & { near = 'door },
     plate.one "switch" "#circulation" & { near = 'door },
   ],
   connect = [
@@ -33,7 +35,7 @@
       role = 'control,
       from = "switch",
       to = ["light", "downlight"],
-      via.ceilings = ["#room", "#circulation"],
+      via.ceilings = ["#room", "#zone", "#circulation"],
     },
   ],
 }

@@ -209,11 +209,20 @@ pub fn to_svg(layout: &Layout) -> String {
                         num(a.y - ny)
                     );
                 }
+                // An opening has no door: its header, dashed across the gap.
+                let opening =
+                    element.opening.as_ref().is_some_and(|o| o.leaf == plate_core::plan::Leaf::NoLeaf);
+                let (colour, width, dash) = if opening {
+                    let dash = format!(r#" stroke-dasharray="{} {}""#, num(stroke * 4.0), num(stroke * 3.0));
+                    ("#6b6f76", stroke, dash)
+                } else {
+                    (colour, stroke * 3.0, String::new())
+                };
                 writeln!(
                     svg,
-                    r#"    <polyline id="{id}" data-layer="{layer}" points="{}" stroke="{colour}" stroke-width="{}" />"#,
+                    r#"    <polyline id="{id}" data-layer="{layer}" points="{}" stroke="{colour}" stroke-width="{}"{dash} />"#,
                     points.join(" "),
-                    num(stroke * 3.0)
+                    num(width)
                 )
             }
             ElementKind::Symbol => {

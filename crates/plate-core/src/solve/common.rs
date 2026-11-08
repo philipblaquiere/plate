@@ -1,8 +1,76 @@
 //! What every engine needs: space types resolved to numbers, instance names, rule targets and a
 //! deterministic random number generator.
 
-use crate::plan::{area_bounds, bounds, Bounds1, Plan, Selector, Space};
+use crate::plan::{area_bounds, bounds, Bounds1, Leaf, LengthSer, OpeningWidth, Plan, Selector, Space};
 use crate::units::Units;
+
+/// What's built between two neighbours.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Edge {
+    /// A wall.
+    Wall,
+    /// A wall with a door or an opening in it.
+    Door,
+    /// Nothing: the floor runs on.
+    Open,
+}
+
+/// What a door rule asks for, in plan units.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Gap {
+    pub min: f64,
+    pub max: f64,
+    /// Wall kept at each end.
+    pub margin: f64,
+    pub leaf: Leaf,
+    /// No wall at all along the shared edge, at least `min` of it.
+    pub full: bool,
+}
+
+/// Default door width, beside-door wall, opening width and shortest open edge.
+pub const DOOR_MM: f64 = 900.0;
+pub const DOOR_CLEAR_MM: f64 = 100.0;
+pub const OPENING_MM: f64 = 1200.0;
+pub const OPEN_MM: f64 = 1200.0;
+
+impl Gap {
+    pub fn of(
+        leaf: Leaf,
+        width: Option<OpeningWidth>,
+        margin: Option<LengthSer>,
+        length: Option<LengthSer>,
+        units: Units,
+    ) -> Gap {
+        let mm = units.to_mm();
+        let len = |l: LengthSer| l.0.to(units);
+        let door = leaf == Leaf::Swing;
+        let default = if door { DOOR_MM } else { OPENING_MM } / mm;
+        let margin = margin.map_or(if door { DOOR_CLEAR_MM / mm } else { 0.0 }, len);
+        let (min, max, full) = match width {
+            None => (default, default, false),
+            Some(OpeningWidth::Exactly(w)) => (len(w), len(w), false),
+            Some(OpeningWidth::Range { min, max }) => {
+                let lo = min.map_or(default, len);
+                (lo, max.map_or(f64::INFINITY, len).max(lo), false)
+            }
+            Some(OpeningWidth::Full(_)) => {
+                let l = length.map_or(OPEN_MM / mm, len);
+                (l, l, true)
+            }
+        };
+        Gap { min, max, margin: if full { 0.0 } else { margin }, leaf, full }
+    }
+
+    /// The shared edge it needs.
+    pub fn need(&self) -> f64 {
+        self.min + 2.0 * self.margin
+    }
+
+    /// The widest it can be on an edge `len` long (at least `min` if the rule is to hold).
+    pub fn width_on(&self, len: f64) -> f64 {
+        self.max.min(len - 2.0 * self.margin).max(self.min)
+    }
+}
 
 /// xorshift64*: small, fast and deterministic everywhere.
 #[derive(Debug, Clone)]
@@ -203,16 +271,25 @@ impl SpaceType {
         }
     }
 
-    /// What a neighbour says about the wall to it, seen from this space: a door to circulation
-    /// is an entrance; a zone facing open floor (the fill or another zone) has no wall there; a
-    /// neighbour can say what its walls are (`walls = 'wet`).
-    pub fn roles_from(&self, other: &SpaceType, other_is_fill: bool, door: bool) -> Vec<String> {
+    /// Is the edge to `other` open floor when no rule says otherwise? A zone is open to other
+    /// zones, to circulation and to the fill, whichever side it's on.
+    pub fn open_to(&self, self_fill: bool, other: &SpaceType, other_fill: bool) -> bool {
+        use crate::plan::SpaceKind::{Circulation, Zone};
+        let open_ground = |t: &SpaceType, fill: bool| fill || matches!(t.space.kind, Zone | Circulation);
+        (self.space.kind == Zone && open_ground(other, other_fill))
+            || (other.space.kind == Zone && open_ground(self, self_fill))
+    }
+
+    /// What a neighbour says about the edge to it, seen from this space: open floor has no wall
+    /// (`'open`); a door from circulation or open floor is an entrance; a neighbour can say what
+    /// its walls are (`walls = 'wet`).
+    pub fn roles_from(&self, other: &SpaceType, edge: Edge) -> Vec<String> {
         use crate::plan::SpaceKind;
-        if self.space.kind == SpaceKind::Zone && (other_is_fill || other.space.kind == SpaceKind::Zone) {
+        if edge == Edge::Open {
             return vec![super::ports::OPEN.to_owned()];
         }
         let mut roles = Vec::new();
-        if door {
+        if edge == Edge::Door {
             // A door from circulation or open ground is a way in; from another room, a link.
             let way_in = matches!(other.space.kind, SpaceKind::Circulation | SpaceKind::Zone);
             roles.push(if way_in { "entrance" } else { "link" }.to_owned());

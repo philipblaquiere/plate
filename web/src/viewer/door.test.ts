@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { doorSymbol, type Pt } from "./door";
+import { doorSymbol, openingSymbol, type Pt } from "./door";
 
 /** Centre of the circle through the arc's end points, on the side the sweep flag picks. */
 function arcCentre(start: Pt, path: string): Pt {
@@ -56,5 +56,28 @@ describe("doorSymbol", () => {
     expect(d.hinge).toEqual({ x: 10, y: 3 });
     expect(d.jambs[0][0].y).toBeCloseTo(-3);
     expect(d.jambs[0][1].y).toBeCloseTo(3);
+  });
+});
+
+describe("openingSymbol", () => {
+  it("draws jambs across the wall and the header along both faces", () => {
+    const d = openingSymbol({ x: 0, y: 0 }, { x: 20, y: 0 }, 6)!;
+    expect(d.jambs).toHaveLength(2);
+    for (const [p, q] of d.jambs) expect(Math.abs(p.y - q.y)).toBeCloseTo(6);
+    expect(d.head.map(([p, q]) => [p.y, q.y])).toEqual([
+      [-3, -3],
+      [3, 3],
+    ]);
+  });
+
+  it("draws one header line in a wall with no thickness", () => {
+    const d = openingSymbol({ x: 0, y: 0 }, { x: 0, y: 10 }, 0)!;
+    expect(d.head).toEqual([
+      [
+        { x: 0, y: 0 },
+        { x: 0, y: 10 },
+      ],
+    ]);
+    expect(openingSymbol({ x: 1, y: 1 }, { x: 1, y: 1 }, 4)).toBeNull();
   });
 });

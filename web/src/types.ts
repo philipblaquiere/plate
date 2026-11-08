@@ -206,6 +206,8 @@ export interface OpeningInfo {
   width: number;
   /** The thickness of the wall it's in, if walls are built. */
   depth?: number;
+  /** Doors: "none" for an opening (a gap with no door). */
+  leaf?: "swing" | "none";
 }
 
 export interface Element {

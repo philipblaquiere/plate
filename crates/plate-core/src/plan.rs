@@ -460,6 +460,46 @@ pub fn bounds(range: Option<LengthRange>, units: Units) -> Bounds1 {
     range.map_or(Bounds1::ANY, |r| r.to(units))
 }
 
+/// What closes a door rule's gap.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Leaf {
+    /// A door that swings.
+    #[default]
+    Swing,
+    /// Nothing: an opening (a cased opening, an archway, or no wall at all with `width = 'full`).
+    #[serde(rename = "none")]
+    NoLeaf,
+}
+
+impl Leaf {
+    pub fn is_swing(&self) -> bool {
+        *self == Leaf::Swing
+    }
+}
+
+/// `width = 'full` on a door rule.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Full {
+    Full,
+}
+
+/// A door rule's `width`: exact, a range (as wide as the wall allows, within it), or the whole
+/// shared edge with no wall.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum OpeningWidth {
+    Full(Full),
+    Exactly(LengthSer),
+    Range {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        min: Option<LengthSer>,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        max: Option<LengthSer>,
+    },
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
 #[serde(untagged)]
 pub enum AreaRange {
@@ -636,8 +676,17 @@ pub enum Rule {
         /// With `port`: every separate stretch of it, not just one.
         #[serde(default, skip_serializing_if = "is_false")]
         each: bool,
+        /// What closes it: a door that swings, or nothing (an opening).
+        #[serde(default, skip_serializing_if = "Leaf::is_swing")]
+        leaf: Leaf,
         #[serde(default, skip_serializing_if = "Option::is_none")]
-        width: Option<LengthSer>,
+        width: Option<OpeningWidth>,
+        /// Wall kept at each end of an opening.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        margin: Option<LengthSer>,
+        /// With `width = 'full`: the shortest shared edge that counts.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        length: Option<LengthSer>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         weight: Option<f64>,
     },

@@ -24,6 +24,8 @@ pub mod context;
 pub mod fit;
 pub mod frame;
 mod grid;
+#[cfg(test)]
+mod open_tests;
 pub mod outline;
 pub mod ports;
 pub mod route;
@@ -125,6 +127,8 @@ pub struct FixtureOut {
 #[derive(Debug, Clone)]
 pub struct Opening {
     pub kind: ElementKind,
+    /// Doors: what closes it (nothing for an opening).
+    pub leaf: crate::plan::Leaf,
     pub a: Point,
     pub b: Point,
     pub between: Vec<String>,
@@ -243,6 +247,7 @@ struct SubSpace {
 struct SubOpening {
     path: String,
     kind: ElementKind,
+    leaf: crate::plan::Leaf,
     a: Point,
     b: Point,
     between: Vec<String>,
@@ -876,7 +881,7 @@ impl Host {
                 o.kind,
                 a,
                 b,
-                OpeningInfo { between: o.between, width: o.width, depth },
+                OpeningInfo { between: o.between, width: o.width, depth, leaf: o.leaf },
             ));
         }
         let mut leftover = 0.0;
@@ -1015,17 +1020,22 @@ impl Host {
 
         for o in &level.openings {
             let width = o.a.distance(o.b);
-            let tag = if o.kind == ElementKind::Door { "door" } else { "window" };
+            let tag = match (o.kind, o.leaf) {
+                (ElementKind::Door, crate::plan::Leaf::NoLeaf) => "opening",
+                (ElementKind::Door, _) => "door",
+                _ => "window",
+            };
             sub.openings.push(SubOpening {
                 path: format!("{tag}:{}", o.between.join("|")),
                 kind: o.kind,
+                leaf: o.leaf,
                 a: o.a,
                 b: o.b,
                 between: o.between.clone(),
                 width,
             });
         }
-        reach_issues(plan, &level, &mut sub);
+        reach_issues(plan, &level, &mut sub, common::DOOR_MM / self.units.to_mm());
         let own_openings = sub.openings.len();
 
         for (k, w) in built.walls.iter().enumerate() {
@@ -2031,17 +2041,32 @@ fn join_and(items: &[String]) -> String {
     }
 }
 
-/// `reach` rules: going from `a` to `b` through doors must pass through `via`.
-fn reach_issues(plan: &Plan, level: &LevelResult, sub: &mut Sub) {
+/// `reach` rules: going from `a` to `b` through doors, openings and open floor must pass
+/// through `via`. Open floor counts where two spaces share at least `passage` of open edge.
+fn reach_issues(plan: &Plan, level: &LevelResult, sub: &mut Sub, passage: f64) {
     let names: Vec<(String, String)> =
         level.placed.iter().map(|p| (p.name.clone(), p.type_key.clone())).collect();
     let index = |n: &str| names.iter().position(|(name, _)| name == n);
-    let doors: Vec<(usize, usize)> = level
+    let mut doors: Vec<(usize, usize)> = level
         .openings
         .iter()
         .filter(|o| o.kind == ElementKind::Door && o.between.len() == 2)
         .filter_map(|o| Some((index(&o.between[0])?, index(&o.between[1])?)))
         .collect();
+    let mut open: BTreeMap<(usize, usize), f64> = BTreeMap::new();
+    for (i, p) in level.placed.iter().enumerate() {
+        for port in p.ports.iter().filter(|s| s.has(ports::OPEN)) {
+            if let Some(j) = port.other.as_deref().and_then(index) {
+                *open.entry((i, j)).or_default() += port.len();
+            }
+        }
+    }
+    // Each side sees its own stretch of the edge: the longer will do.
+    doors.extend(
+        open.iter()
+            .filter(|&(k, &len)| len.max(open.get(&(k.1, k.0)).copied().unwrap_or(0.0)) >= passage - 1e-9)
+            .map(|(k, _)| *k),
+    );
     for (ptr, rule) in plan.rules() {
         let Rule::Reach { a, b, via, weight } = rule else { continue };
         if weight.is_some() {
