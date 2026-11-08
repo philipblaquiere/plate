@@ -89,6 +89,10 @@ The wasm build takes about 2 minutes from cold; give it a long timeout. The dev 
   if you change a wrapper, the offsets and the position tests must still agree.
 - **Prettier rewrites what you just wrote.** After formatting, re-read a file before doing exact
   string replacements on it.
+- **The source map may be older than the text.** A drag writes the file before its evaluation
+  comes back. Read spans through `GeometryEdits`' `sources` getter (shifted through the edits since,
+  `editor/shift.ts`), never from a stored copy of an evaluation, or a quick second drag writes at
+  stale columns (`[603438]`).
 - **Text splitting for rules.** Rules written with helpers (`plate.door "a" "b"`) have no span of
   their own; `arrayItems` in `geometryEdits.ts` splits the array literal by text. Keep it aware
   of strings and comments.

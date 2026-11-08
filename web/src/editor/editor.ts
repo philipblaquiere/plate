@@ -6,6 +6,7 @@ import * as api from "../api";
 import type { Diagnostic, Span } from "../types";
 import { registerNickel } from "./nickel";
 import { registerSchema } from "./schema";
+import type { TextChange } from "./shift";
 
 self.MonacoEnvironment = { getWorker: () => new EditorWorker() };
 
@@ -127,6 +128,9 @@ export type ViewState = monaco.editor.ICodeEditorViewState | null;
  * One file's text, independent of any editor showing it: a Monaco model plus the operations
  * the app needs (precise edits from the drawing, highlights, diagnostics).
  */
+/** Edits kept per document: enough to cover the time between two evaluations. */
+const LOG_LIMIT = 2000;
+
 export class TextDoc {
   readonly model: monaco.editor.ITextModel;
 
@@ -137,10 +141,50 @@ export class TextDoc {
   ) {
     const address = [project, ...path.split("/")].filter(Boolean).map(encodeURIComponent).join("/");
     this.model = monaco.editor.createModel(text, "nickel", monaco.Uri.parse(`file:///workspace/${address}`));
+    this.logged = this.model.getVersionId();
+    this.model.onDidChangeContent((e) => {
+      this.log.push({
+        from: this.logged,
+        changes: e.isFlush
+          ? null
+          : e.changes.map((c) => ({
+              start: c.rangeOffset,
+              end: c.rangeOffset + c.rangeLength,
+              text: c.text,
+            })),
+      });
+      this.logged = e.versionId;
+      if (this.log.length > LOG_LIMIT) this.log.splice(0, this.log.length - LOG_LIMIT);
+    });
   }
 
   get value(): string {
     return this.model.getValue();
+  }
+
+  /** Changes with every edit (undo included). */
+  get version(): number {
+    return this.model.getVersionId();
+  }
+
+  /** Recent edits, each with the version it was made on; `null` changes: the text was replaced. */
+  private log: { from: number; changes: TextChange[] | null }[] = [];
+  private logged: number;
+
+  /**
+   * The edits made since `version`, in order, in offsets of the text before each: what turns the
+   * text at `version` into the text now. `null` when that's no longer known.
+   */
+  changesSince(version: number): TextChange[] | null {
+    if (version === this.version) return [];
+    const first = this.log.findIndex((entry) => entry.from === version);
+    if (first < 0) return null;
+    const out: TextChange[] = [];
+    for (const entry of this.log.slice(first)) {
+      if (!entry.changes) return null;
+      out.push(...entry.changes);
+    }
+    return out;
   }
 
   /** Replace the whole text (keeps undo history). */

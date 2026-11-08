@@ -88,6 +88,11 @@ function editable(e: Element): boolean {
   return e.source === "/start/points" || (e.kind === "slot" && !!e.source);
 }
 
+/** Points that drags and drawing snap to: the starting geometry and preview slots. */
+function snapTarget(e: Element): boolean {
+  return editable(e) || e.kind === "slot";
+}
+
 /** What the drawing is framed by: the starting geometry, or a plan's preview slot. */
 function framing(e: Element): boolean {
   return editable(e) || e.kind === "slot";
@@ -526,7 +531,11 @@ export class Viewer {
 
   // ------------------------------------------------------------ snapping
 
-  /** Where a point placed at screen (x, y) lands: other points, then angle, then grid. */
+  /**
+   * Where a point placed at screen (x, y) lands: other points, then angle, then grid. Only points
+   * written in the file count (the starting geometry, a preview slot): what the solver placed
+   * (rooms at wall faces, parts, runs) moves with every solve and is rarely on the grid.
+   */
   private snapWorld(
     x: number,
     y: number,
@@ -536,6 +545,7 @@ export class Viewer {
     // Existing points (and the first drawn point, to close a boundary).
     const candidates: Point[] = [];
     for (const e of this.layout?.elements ?? []) {
+      if (!snapTarget(e)) continue;
       e.points.forEach((p, i) => {
         if (!(avoid && avoid.element.id === e.id && avoid.index === i)) candidates.push(p);
       });
@@ -994,13 +1004,16 @@ export class Viewer {
     d.move = offsetEdge(pts, d.element.closed, d.index, offset);
   }
 
-  /** An existing point near screen (x, y) to snap the dragged edge to (not its own ends). */
+  /**
+   * A point of the starting geometry or a slot near screen (x, y) to snap the dragged edge to (not
+   * its own ends). Not the solver's output, for the reason given at `snapWorld`.
+   */
   private nearPoint(x: number, y: number, d: EdgeDrag): Point | null {
     const j = (d.index + 1) % d.original.length;
     let best: Point | null = null;
     let bestD = SNAP;
     for (const e of this.layout?.elements ?? []) {
-      if (e.kind !== "boundary" && e.kind !== "spine" && e.kind !== "space" && e.kind !== "slot") continue;
+      if (!snapTarget(e)) continue;
       e.points.forEach((p, i) => {
         if (e.id === d.element.id && (i === d.index || i === j)) return;
         const s = this.toScreen(p);
