@@ -324,7 +324,12 @@ Three more passes, around the solve above. Types are in `assembly.rs` and `servi
   them there through `Plan.origins`, with absolute pointers written `@/services/…` (`under`
   leaves them alone, `resolved` strips the `@`). The prepared plan is what's fingerprinted, so
   a claim changes the solve; a slot carries its `context` so a plan file opened in that slot is
-  prepared the same way and gets the same solution.
+  prepared the same way and gets the same solution. Two more things keep it the same: a scoped
+  service that a plan inherits in scope (`scope = "#dwelling"` and the plan is a dwelling's) is
+  one instance for the whole level (`fit::instances`), and `slot_walls` draws the walls the
+  plate built round the slot (from the assembly names on its ports, cut at its doors), so faces
+  on the slot's edges have a wall behind them for outlets, baseboards and runs. Runs can still
+  take a slightly different way: the plate's walls carry on past the slot.
 - **Build** (`build.rs`), after a level is solved and before its children are: each shared edge
   becomes a `BuiltWall` with the roles both sides see (plus the assembly names already built
   around it, so a child's port can be `'wet` because its wall is). Each wall gets the thinnest

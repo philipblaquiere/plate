@@ -571,6 +571,13 @@ fn solve_preview(config: &Config, view: &View) -> Solution {
         elements.push(e);
     }
 
+    // The walls round the slot, as the plate built them, so faces on the slot's edges have a
+    // wall behind them here as they do in the plate (outlets, baseboards and cables need one).
+    if let View::Slot(s) = view {
+        let name = s.context.as_ref().and_then(|c| c["within"]["name"].as_str()).unwrap_or("slot");
+        elements.extend(slot_walls(&plan, &setup.sides, setup.w, setup.h, units, name));
+    }
+
     let mut host = Host::new(units, setup.system, setup.seed);
     let child = host.solve_child(
         &plan,
@@ -1371,6 +1378,97 @@ fn snap_port(p: &PortSeg, loops: &[Vec<Point>]) -> PortSeg {
         best.1
     };
     PortSeg { roles: p.roles.clone(), a: snap(p.a), b: snap(p.b), other: p.other.clone() }
+}
+
+/// The walls just outside a slot of `w` × `h`: one per side whose roles name an assembly, cut
+/// where a door, window or opening of the parent is on it. `name` is the space the slot is
+/// (`flat_2`): the walls are between it and what's outside, as in the plate.
+fn slot_walls(plan: &Plan, sides: &[PortSeg], w: f64, h: f64, units: Units, name: &str) -> Vec<Element> {
+    let tol = 1e-6 * w.max(h).max(1.0);
+    let centre = Point::new(w / 2.0, h / 2.0);
+    let gaps: Vec<&PortSeg> = sides.iter().filter(|p| ports::is_gap(&p.roles)).collect();
+    let thickness =
+        |p: &PortSeg| p.roles.iter().find_map(|r| plan.assemblies.get(r)).map_or(0.0, |a| a.thickness(units));
+    // At a corner of the slot, the wall of the side that meets it there: a wall reaches half its
+    // thickness past the corner, so the centrelines meet (and runs can turn the corner).
+    let past = |i: usize, corner: Point| {
+        sides
+            .iter()
+            .enumerate()
+            .filter(|(j, p)| *j != i && !ports::is_gap(&p.roles))
+            .find(|(_, p)| p.a.distance(corner) < tol || p.b.distance(corner) < tol)
+            .map_or(0.0, |(_, p)| thickness(p) / 2.0)
+    };
+    let mut out = Vec::new();
+    for (i, side) in sides.iter().enumerate() {
+        if ports::is_gap(&side.roles) {
+            continue;
+        }
+        let Some((assembly_name, assembly)) =
+            side.roles.iter().find_map(|r| plan.assemblies.get_key_value(r))
+        else {
+            continue;
+        };
+        let outside = side.roles.first().map_or_else(String::new, |r| format!("'{r}"));
+        let (a, b) = (side.a, side.b);
+        let len = a.distance(b);
+        if len <= tol {
+            continue;
+        }
+        let t = assembly.thickness(units);
+        // Outward: away from the middle of the slot.
+        let mut n = Point::new((b.y - a.y) / len, -(b.x - a.x) / len);
+        let mid = Point::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0);
+        if (mid.x - centre.x) * n.x + (mid.y - centre.y) * n.y < 0.0 {
+            n = Point::new(-n.x, -n.y);
+        }
+        // The stretches of the side with no gap in them.
+        let mut cuts: Vec<(f64, f64)> =
+            gaps.iter().filter_map(|g| ports::collinear_overlap(a, b, g.a, g.b, tol)).collect();
+        cuts.sort_by(|x, y| x.0.total_cmp(&y.0));
+        let mut pieces = Vec::new();
+        let mut from = 0.0;
+        for (c0, c1) in cuts {
+            if c0 > from {
+                pieces.push((from, c0));
+            }
+            from = from.max(c1);
+        }
+        if from < 1.0 {
+            pieces.push((from, 1.0));
+        }
+        let at = |f: f64, off: f64| {
+            Point::new(a.x + (b.x - a.x) * f + n.x * off, a.y + (b.y - a.y) * f + n.y * off)
+        };
+        for (k, (f0, f1)) in pieces.into_iter().enumerate() {
+            if (f1 - f0) * len <= tol {
+                continue;
+            }
+            // Grown inward from its outer face, like a wall on a plate's boundary, so it ends
+            // exactly at the slot's edge.
+            let u = Point::new((b.x - a.x) / len, (b.y - a.y) / len);
+            let e0 = if f0 <= 1e-9 { past(i, a) } else { 0.0 };
+            let e1 = if f1 >= 1.0 - 1e-9 { past(i, b) } else { 0.0 };
+            let (p0, p1) = (at(f0, t), at(f1, t));
+            let wall = build::BuiltWall {
+                owner: 0,
+                other: None,
+                a: Point::new(p0.x - u.x * e0, p0.y - u.y * e0),
+                b: Point::new(p1.x + u.x * e1, p1.y + u.y * e1),
+                roles: side.roles.clone(),
+                name: assembly_name.clone(),
+                assembly: assembly.clone(),
+                thickness: t,
+                inward: Some(Point::new(-n.x, -n.y)),
+                extend: [0.0; 2],
+                because: "Built by the plate around this space.".into(),
+            };
+            let mut e = Element::new(format!("wall:slot:{i}:{k}"), ElementKind::Wall, wall.polygon(), true);
+            e.wall = Some(wall_info(&wall, vec![name.to_owned(), outside.clone()], units));
+            out.push(e);
+        }
+    }
+    out
 }
 
 /// What a wall is, for the drawing and the inspector.
