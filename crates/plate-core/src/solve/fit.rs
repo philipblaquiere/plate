@@ -483,7 +483,11 @@ fn instances(levels: &[ServiceLevel], model: &Model) -> Vec<Instance> {
                 except: except.clone(),
             };
             match &def.scope {
+                // Not scoped, or inherited by a plan that is itself in scope (a flat's plan
+                // under `scope = "#dwelling"`, or that plan opened on its own in the flat's
+                // slot): the whole level is one instance.
                 None => out.push(base),
+                Some(_) if def.in_scope => out.push(base),
                 Some(scope) => {
                     for (_, path, n, key, kind, tags) in &model.spaces {
                         if base.covers(path) && scope.matches_tagged(n, key, tags, *kind) {
@@ -985,6 +989,8 @@ fn beside(ctx: &mut Ctx, job: &Job, r: usize, kind: OpeningKind, side: Option<Si
                 let (first, second) = if after { (s_after, s_before) } else { (s_before, s_after) };
                 ctx.on_wall(job, &how, r, o.face, first, None)
                     || ctx.on_wall(job, &how, r, o.face, second, None)
+                    || round_the_corner(ctx, job, r, o.face, after, offset, w)
+                    || round_the_corner(ctx, job, r, o.face, !after, offset, w)
             }
         };
         if !placed {
@@ -996,6 +1002,21 @@ fn beside(ctx: &mut Ctx, job: &Job, r: usize, kind: OpeningKind, side: Option<Si
             );
         }
     }
+}
+
+/// A part beside a door with no room on its own wall (a closet's door fills its wall): on the
+/// wall round the corner, next to the corner. `after` picks the corner at the face's end.
+fn round_the_corner(ctx: &mut Ctx, job: &Job, r: usize, f: usize, after: bool, offset: f64, w: f64) -> bool {
+    let room = &ctx.model.rooms[r];
+    let face = &room.faces[f];
+    let tol = ctx.units.tolerance() * 100.0;
+    let corner = if after { face.b } else { face.a };
+    let next = room.faces.iter().enumerate().find(|(g, n)| {
+        *g != f && n.at.0 == face.at.0 && (if after { n.a } else { n.b }).distance(corner) < tol
+    });
+    let Some((g, n)) = next else { return false };
+    let s = if after { offset + w / 2.0 } else { n.len() - offset - w / 2.0 };
+    ctx.on_wall(job, "beside a door, round the corner", r, g, s, None)
 }
 
 /// Spread a part over a room's floor or ceiling, or over one of its fixtures (`fixture`).
@@ -1381,6 +1402,19 @@ mod tests {
             assert!(on_outline(p.at, &b), "{} at {:?} is off {}'s walls", o.id, p.at, p.space);
             assert_eq!(p.above, Some(0.3));
         }
+    }
+
+    #[test]
+    fn a_switch_goes_round_the_corner_when_the_door_fills_its_wall() {
+        // A closet whose door takes its whole front wall: the switch goes on the wall beside.
+        let mut v = pinned_flat_with(json!({ "lighting": lighting() }));
+        v["spaces"]["closet"] = json!({ "at": [5, 6.9], "width": 1.1, "depth": 1.1, "tags": ["wet"] });
+        let s = run(v);
+        assert_met(&s);
+        let here = in_space(&parts(&s, "switch"), "closet");
+        assert_eq!(here.len(), 1);
+        let p = here[0].part.as_ref().unwrap();
+        assert!(p.placed.contains("round the corner"), "{}", p.placed);
     }
 
     #[test]

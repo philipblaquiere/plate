@@ -303,6 +303,60 @@ fn a_plan_opened_in_its_slot_gets_what_the_plate_gave_it() {
 }
 
 #[test]
+fn a_plan_in_its_slot_places_what_scoped_services_place_in_the_plate() {
+    // Two flats; power is scoped to dwellings. Opened on its own in flat_1's slot, the flat's
+    // plan must get the same parts: the service is in scope there too, and the walls round the
+    // slot (built by the plate) carry outlets.
+    let flat_plan = json!({
+        "spaces": {
+            "living": { "fill": true, "area": { "min": 20 }, "side": { "min": 3.5 } },
+            "bedroom": { "area": { "min": 10, "max": 14 }, "side": { "min": 3 } },
+        },
+        "rules": [{ "rule": "door", "a": "bedroom", "b": "living" }, { "rule": "window", "a": ["living", "bedroom"] }]
+    });
+    let v = json!({
+        "seed": 1,
+        "start": { "mode": "boundary", "points": [[0, 0], [16, 0], [16, 8], [0, 8]] },
+        "assemblies": {
+            "exterior": { "on": "facade", "thickness": 0.3, "cavity": 0.14 },
+            "party": { "on": "party", "thickness": 0.25, "cavity": 0.09 },
+            "partition": { "on": ["partition", "link"], "thickness": 0.1, "cavity": 0.09 },
+        },
+        "services": {
+            "power": {
+                "scope": "#dwelling",
+                "parts": {
+                    "panel": { "width": 0.4, "above": 1.5 },
+                    "outlet": { "above": 0.3 },
+                    "baseboard": { "depth": 0.08 },
+                },
+                "place": [
+                    { "place": "one", "part": "panel", "spaces": "living", "near": "door" },
+                    { "place": "every", "part": "outlet", "spaces": "#room", "spacing": 3.6 },
+                    { "place": "beside", "part": "baseboard", "opening": "window", "spaces": "#room", "side": "under" },
+                ],
+                "connect": [{ "from": "panel", "to": "outlet", "max": 12, "via": { "cavity": 0.09 } }],
+            }
+        },
+        "spaces": { "flat": { "count": 2, "width": 8, "depth": 8, "plan": flat_plan, "tags": ["dwelling"] } },
+        "rules": [{ "rule": "window", "a": "flat" }, { "rule": "door", "a": "flat", "port": "facade" }],
+    });
+    let plate = run(v);
+    assert_eq!(plate.report.unmet, 0, "{:?}", messages(&plate));
+    let slot = element(&plate, "flat_1").space.as_ref().unwrap().slot.clone().unwrap();
+    let alone = solve_view(&Config::from_value(flat_plan).unwrap(), &View::Slot(slot));
+    assert_eq!(alone.report.unmet, 0, "{:?}", messages(&alone));
+    let count = |s: &Solution, part: &str, prefix: &str| {
+        parts(s, part).iter().filter(|e| e.part.as_ref().unwrap().space.starts_with(prefix)).count()
+    };
+    for part in ["panel", "outlet", "baseboard"] {
+        let (there, here) = (count(&plate, part, "flat_1."), count(&alone, part, ""));
+        assert!(there > 0, "the plate places {part}s in flat_1");
+        assert_eq!(here, there, "{part}s: {here} alone in the slot, {there} in the plate");
+    }
+}
+
+#[test]
 fn claims_add_rules_and_spaces_in_scope() {
     let mut v = flat(json!({}));
     v["spaces"]["bath"]["plan"] = json!({ "spaces": { "toilet": { "kind": "fixture", "width": 0.4, "depth": 0.7, "against": "wall", "tags": ["water"] } } });
