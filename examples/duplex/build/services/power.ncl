@@ -15,7 +15,7 @@
 # its circuit's breaker: 14/2 on 15 A, 12/2 on 20 A, and what a range or a dryer asks for
 # (`load` on the fixture, in the plan). Press A in the Power view for the schematic.
 
-let walls_and_ceilings = { cavity = "89 mm", ceilings = ["#room", "#circulation"] } in
+let walls_and_ceilings = { cavity = "89 mm", ceilings = ["#room", "#zone", "#circulation"] } in
 {
   label = "Power",
   scope = "#dwelling",
@@ -36,7 +36,7 @@ let walls_and_ceilings = { cavity = "89 mm", ceilings = ["#room", "#circulation"
     plate.on "dedicated" "#appliance",
     plate.on "outlet_240" ["#cooking", "#laundry"],
     plate.every "counter" "#counter" params.counter_spacing,
-    plate.every "outlet" ["#room", "#circulation"] params.wall_spacing & { min_run = params.usable_wall },
+    plate.every "outlet" ["#room", "#zone", "#circulation"] params.wall_spacing & { min_run = params.usable_wall },
   ],
   # Appliances get 20 A, whatever circuit they're on.
   feeds = [plate.feed "#appliance" & { rating = "20 A" }],

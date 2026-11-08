@@ -114,6 +114,15 @@ pub fn to_svg(layout: &Layout) -> String {
                     )
                 }
             }
+            // The outline of spaces with no wall between them: faint, round the open floor.
+            ElementKind::Region => writeln!(
+                svg,
+                r##"    <path id="{id}" data-layer="{layer}" d="{}" fill="none" fill-rule="evenodd" stroke="#8a8f98" stroke-dasharray="{} {}" stroke-width="{}" />"##,
+                path_d(&element.points, &element.holes),
+                num(stroke * 6.0),
+                num(stroke * 3.0),
+                num(stroke * 0.8)
+            ),
             ElementKind::Leftover => writeln!(
                 svg,
                 r##"    <path id="{id}" data-layer="{layer}" d="{}" fill="url(#plate-leftover)" fill-rule="evenodd" stroke="#c8442c" stroke-dasharray="{} {}" stroke-width="{}" />"##,

@@ -70,6 +70,7 @@ type Hover =
   | { type: "wall"; element: Element }
   | { type: "part"; element: Element }
   | { type: "run"; element: Element }
+  | { type: "shared"; element: Element }
   | null;
 
 /** What a right-click landed on. */
@@ -78,7 +79,9 @@ export type ContextTarget =
   | { type: "edge"; element: Element; index: number }
   | { type: "wall"; element: Element }
   | { type: "part"; element: Element }
-  | { type: "run"; element: Element };
+  | { type: "run"; element: Element }
+  /** Where two spaces meet (an `edge` element): open, an opening, a door or a wall. */
+  | { type: "shared"; element: Element };
 
 /**
  * The starting geometry, which the user edits by dragging; everything else is solved. A plan's
@@ -755,7 +758,11 @@ export class Viewer {
         this.undoDrawPoint();
       } else if (
         this.tool === "select" &&
-        (h?.type === "space" || h?.type === "wall" || h?.type === "part" || h?.type === "run")
+        (h?.type === "space" ||
+          h?.type === "wall" ||
+          h?.type === "part" ||
+          h?.type === "run" ||
+          h?.type === "shared")
       ) {
         this.tooltip.hidden = true;
         this.onContextMenu({ type: h.type, element: h.element }, e.clientX, e.clientY);
@@ -1120,6 +1127,19 @@ export class Viewer {
       }
       if (run) return { type: "run", element: run };
     }
+    // Where two spaces meet with no wall there (open floor, an opening): within a few pixels.
+    let shared: Element | null = null;
+    let nearShared = 5;
+    for (const e of this.layout.elements) {
+      const t = e.edge?.treatment;
+      if (t !== "open" && t !== "opening") continue;
+      const d = segmentDistance({ x, y }, this.toScreen(e.points[0]), this.toScreen(e.points[1]));
+      if (d < nearShared) {
+        nearShared = d;
+        shared = e;
+      }
+    }
+    if (shared) return { type: "shared", element: shared };
     // Walls take floor between the spaces' clear outlines.
     for (const e of this.layout.elements) {
       if (e.kind === "wall" && pointInPolygon(w, e.points)) return { type: "wall", element: e };
@@ -1305,6 +1325,7 @@ export class Viewer {
       }
     }
     if (!clearances) this.renderClearances(g);
+    this.renderRegions(g);
     this.renderWalls(g);
     this.renderLeftover(g);
 
@@ -1524,6 +1545,22 @@ export class Viewer {
         ),
       )
       .join("");
+  }
+
+  /** Regions (spaces with no wall between them): a faint outline round each, under the walls. */
+  private renderRegions(parent: SVGElement): void {
+    for (const e of this.layout!.elements) {
+      if (e.kind === "region")
+        el("path", { d: this.shapePath(e), class: "region", "fill-rule": "evenodd" }, parent);
+    }
+  }
+
+  /** The edge element where these two spaces meet, if there's one (the first piece). */
+  edgeBetween(between: string[]): Element | undefined {
+    const [a, b] = between;
+    return this.layout?.elements.find(
+      (e) => e.edge && e.edge.between.includes(a) && e.edge.between.includes(b),
+    );
   }
 
   /** Floor no space covers, hatched, with its area: what keeps a solution from being perfect. */
@@ -1875,6 +1912,12 @@ export class Viewer {
       }
       return;
     }
+    if (h.type === "shared") {
+      const [a, b] = h.element.points.map((p) => this.toScreen(p));
+      el("path", { d: `M${a.x},${a.y}L${b.x},${b.y}`, class: "hover-edge" }, g);
+      this.drawDimension(g, h.element.points[0], h.element.points[1], true, false, 14);
+      return;
+    }
     if (h.type === "wall" || h.type === "part") {
       const d = pathOf(
         h.type === "part" ? this.partShape(h.element) : h.element.points.map((p) => this.toScreen(p)),
@@ -1905,6 +1948,11 @@ export class Viewer {
           }
         }
       }
+      // Its region, if it's in one: the spaces it has no wall between.
+      const region = info.region
+        ? this.layout!.elements.find((e) => e.id === `region:${info.region}`)
+        : undefined;
+      if (region) el("path", { d: this.shapePath(region), class: "hover-region", "fill-rule": "evenodd" }, g);
       const d = pathOf(
         h.element.points.map((p) => this.toScreen(p)),
         true,
@@ -2288,19 +2336,34 @@ export class Viewer {
         rows.push(["Build-up", w.layers.map((l) => `${thin(l.thickness)} ${l.material}`).join(" · ")]);
       rows.push(["Between", w.between.join(" and ")]);
       rows.push(["Length", len(Math.hypot(w.line[1].x - w.line[0].x, w.line[1].y - w.line[0].y))]);
+      const edge = this.edgeBetween(w.between)?.edge;
+      if (edge) rows.push(["A wall here", edge.why]);
       rows.push([
-        "Because",
+        "Built as",
         w.because ? `${w.roles.map((r) => `'${r}`).join(", ")}: ${w.because}` : "asked for",
       ]);
       html = card(
         `${w.label} (${w.assembly})`,
         `${thin(w.thickness)} thick`,
         rows,
-        "Right-click: show its assembly",
+        edge
+          ? "Right-click: show its assembly, or change what's built here"
+          : "Right-click: show its assembly",
+      );
+    } else if (h?.type === "shared") {
+      const e = h.element.edge!;
+      const [a, b] = h.element.points;
+      const what = { open: "Open", opening: "An opening", door: "A door", wall: "A wall" }[e.treatment];
+      html = card(
+        `${what}: ${e.between.join(" and ")}`,
+        len(Math.hypot(b.x - a.x, b.y - a.y)),
+        [["Because", e.why]],
+        "Right-click to change what's built here",
       );
     } else if (h?.type === "part") {
       const p = h.element.part!;
       const rows: [string, string][] = [["In", p.space]];
+      if (p.serves?.length) rows.push(["For", p.serves.join(", ")]);
       if (p.mount === "wall" && p.above !== undefined)
         rows.push(["Height", `${L.thickness(p.above)} above the floor`]);
       else rows.push(["On", p.mount === "cavity" ? "in the wall" : `the ${p.mount}`]);
@@ -2366,6 +2429,11 @@ export class Viewer {
         rows.push(["In", `${parentId}${tag}`]);
       }
       if (info.kind !== "room") rows.push(["Kind", info.kind]);
+      const region = info.region
+        ? this.layout!.elements.find((e) => e.id === `region:${info.region}`)
+        : undefined;
+      if (region?.region)
+        rows.push(["Region", `${region.region.label}, ${L.area(region.region.area)} with no wall between`]);
       if (info.symbol) rows.push(["Symbol", `'${info.symbol}`]);
       if (info.typical) {
         const n = this.layout!.elements.filter(

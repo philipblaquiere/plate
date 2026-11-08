@@ -1,6 +1,7 @@
 # Lighting: ceiling lights in every room and zone (more in a big one), a line of them down the
 # hall, a switch beside each door of a room, on the side the door opens from (round the corner
-# when the door fills its wall), and one in the hall and in each zone by a door.
+# when the door fills its wall), one in the hall by a door, and for zones with no wall between
+# them one box by a door with a switch for each.
 #
 # Use it with `services.lighting = import "build/services/lighting.ncl"`. A service never moves a
 # wall: it places its parts on what the solver laid out.
@@ -25,8 +26,9 @@
     # Downlights no more than 2.4 m apart, in a line down each leg of the hall.
     plate.over "downlight" "#circulation" & { spacing = "2.4 m", layout = 'line, margin = "600 mm" },
     plate.beside "switch" 'door & { spaces = "#room" },
-    # A hall or a zone (open floor) gets one switch, on the wall nearest a door.
-    plate.one "switch" ["#circulation", "#zone"] & { near = 'door },
+    # A hall gets one switch by a door. Zones with no wall between them (a region) share one
+    # box by a door, with a switch for each zone's lights.
+    plate.one "switch" ["#circulation", "#zone"] & { per = 'region, each = true, near = 'door },
   ],
   connect = [
     {

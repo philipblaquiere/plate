@@ -1,0 +1,2247 @@
+{
+  "name": "Pinned open flat",
+  "system": "metric",
+  "units": "m",
+  "elements": [
+    {
+      "id": "boundary",
+      "kind": "boundary",
+      "layer": "PLATE-BOUNDARY",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 8.0
+        },
+        {
+          "x": 0.0,
+          "y": 8.0
+        }
+      ],
+      "closed": true,
+      "area": 96.0,
+      "length": 40.0,
+      "source": "/start/points"
+    },
+    {
+      "id": "bath",
+      "kind": "space",
+      "layer": "PLATE-SPACE-ROOM",
+      "points": [
+        {
+          "x": 0.3000000000000007,
+          "y": 6.05
+        },
+        {
+          "x": 3.4499999999999993,
+          "y": 6.05
+        },
+        {
+          "x": 3.4499999999999993,
+          "y": 7.7
+        },
+        {
+          "x": 0.3000000000000007,
+          "y": 7.7
+        }
+      ],
+      "closed": true,
+      "area": 5.197499999999998,
+      "length": 9.599999999999998,
+      "source": "/spaces/bath",
+      "space": {
+        "name": "bath",
+        "type": "bath",
+        "label": "bath",
+        "kind": "room",
+        "depth": 0,
+        "plan": "",
+        "unique": false,
+        "hasPlan": false,
+        "ok": true,
+        "front": [
+          {
+            "x": 0.0,
+            "y": 6.0
+          },
+          {
+            "x": 3.5,
+            "y": 6.0
+          }
+        ],
+        "gross": 7.0
+      }
+    },
+    {
+      "id": "dining",
+      "kind": "space",
+      "layer": "PLATE-SPACE-ZONE",
+      "points": [
+        {
+          "x": 6.0,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 8.95,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 8.95,
+          "y": 4.5
+        },
+        {
+          "x": 6.0,
+          "y": 4.5
+        }
+      ],
+      "closed": true,
+      "area": 12.39,
+      "length": 14.299999999999997,
+      "source": "/spaces/dining",
+      "space": {
+        "name": "dining",
+        "type": "dining",
+        "label": "dining",
+        "kind": "zone",
+        "depth": 0,
+        "plan": "",
+        "unique": false,
+        "hasPlan": false,
+        "ok": true,
+        "gross": 13.5,
+        "region": "living+dining"
+      }
+    },
+    {
+      "id": "living",
+      "kind": "space",
+      "layer": "PLATE-SPACE-ZONE",
+      "points": [
+        {
+          "x": 0.3000000000000007,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 6.0,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 6.0,
+          "y": 4.5
+        },
+        {
+          "x": 0.3000000000000007,
+          "y": 4.5
+        }
+      ],
+      "closed": true,
+      "area": 23.939999999999998,
+      "length": 19.799999999999997,
+      "source": "/spaces/living",
+      "space": {
+        "name": "living",
+        "type": "living",
+        "label": "living",
+        "kind": "zone",
+        "depth": 0,
+        "plan": "",
+        "unique": false,
+        "hasPlan": false,
+        "ok": true,
+        "gross": 27.0,
+        "region": "living+dining"
+      }
+    },
+    {
+      "id": "nook",
+      "kind": "space",
+      "layer": "PLATE-SPACE-ROOM",
+      "points": [
+        {
+          "x": 9.05,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 11.7,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 11.7,
+          "y": 3.45
+        },
+        {
+          "x": 9.05,
+          "y": 3.45
+        }
+      ],
+      "closed": true,
+      "area": 8.347499999999998,
+      "length": 11.599999999999998,
+      "source": "/spaces/nook",
+      "space": {
+        "name": "nook",
+        "type": "nook",
+        "label": "nook",
+        "kind": "room",
+        "depth": 0,
+        "plan": "",
+        "unique": false,
+        "hasPlan": false,
+        "ok": true,
+        "front": [
+          {
+            "x": 9.0,
+            "y": 3.5
+          },
+          {
+            "x": 9.0,
+            "y": 0.0
+          }
+        ],
+        "gross": 10.5
+      }
+    },
+    {
+      "id": "hall",
+      "kind": "space",
+      "layer": "PLATE-SPACE-CIRCULATION",
+      "points": [
+        {
+          "x": 0.3000000000000007,
+          "y": 4.5
+        },
+        {
+          "x": 9.0,
+          "y": 4.5
+        },
+        {
+          "x": 9.0,
+          "y": 3.55
+        },
+        {
+          "x": 11.7,
+          "y": 3.55
+        },
+        {
+          "x": 11.7,
+          "y": 7.7
+        },
+        {
+          "x": 3.5500000000000007,
+          "y": 7.7
+        },
+        {
+          "x": 3.5500000000000007,
+          "y": 5.95
+        },
+        {
+          "x": 0.3000000000000007,
+          "y": 5.95
+        }
+      ],
+      "closed": true,
+      "area": 33.3575,
+      "length": 31.099999999999998,
+      "source": "/spaces/hall",
+      "space": {
+        "name": "hall",
+        "type": "hall",
+        "label": "hall",
+        "kind": "circulation",
+        "depth": 0,
+        "plan": "",
+        "unique": false,
+        "hasPlan": false,
+        "ok": true,
+        "fill": true,
+        "gross": 38.0
+      },
+      "labelAt": {
+        "x": 9.740625,
+        "y": 5.94921875
+      }
+    },
+    {
+      "id": "edge:bath|hall#0",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 6.0
+        },
+        {
+          "x": 3.5,
+          "y": 6.0
+        }
+      ],
+      "closed": false,
+      "length": 3.5,
+      "edge": {
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "treatment": "door",
+        "rule": "/rules/0",
+        "why": "a rule: plate.door",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "bath",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:bath|hall#1",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 3.5,
+          "y": 6.0
+        },
+        {
+          "x": 3.5,
+          "y": 8.0
+        }
+      ],
+      "closed": false,
+      "length": 2.0,
+      "edge": {
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "treatment": "door",
+        "rule": "/rules/0",
+        "why": "a rule: plate.door",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "bath",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:dining|nook#1",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 9.0,
+          "y": 0.0
+        },
+        {
+          "x": 9.0,
+          "y": 3.5
+        }
+      ],
+      "closed": false,
+      "length": 3.5,
+      "edge": {
+        "between": [
+          "dining",
+          "nook"
+        ],
+        "treatment": "opening",
+        "rule": "/rules/1",
+        "why": "a rule: plate.opening",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "dining",
+          "nook"
+        ]
+      }
+    },
+    {
+      "id": "edge:dining|hall#2",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 9.0,
+          "y": 3.5
+        },
+        {
+          "x": 9.0,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 1.0,
+      "edge": {
+        "between": [
+          "dining",
+          "hall"
+        ],
+        "treatment": "open",
+        "why": "dining is a zone and hall is circulation: open floor",
+        "default": "open",
+        "plan": "",
+        "names": [
+          "dining",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:dining|hall#3",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 9.0,
+          "y": 4.5
+        },
+        {
+          "x": 6.0,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 3.0,
+      "edge": {
+        "between": [
+          "dining",
+          "hall"
+        ],
+        "treatment": "open",
+        "why": "dining is a zone and hall is circulation: open floor",
+        "default": "open",
+        "plan": "",
+        "names": [
+          "dining",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:dining|living#4",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 6.0,
+          "y": 4.5
+        },
+        {
+          "x": 6.0,
+          "y": 0.0
+        }
+      ],
+      "closed": false,
+      "length": 4.5,
+      "edge": {
+        "between": [
+          "dining",
+          "living"
+        ],
+        "treatment": "open",
+        "why": "dining is a zone and living is a zone: open floor",
+        "default": "open",
+        "plan": "",
+        "names": [
+          "dining",
+          "living"
+        ]
+      }
+    },
+    {
+      "id": "edge:living|hall#2",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 6.0,
+          "y": 4.5
+        },
+        {
+          "x": 0.0,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 6.0,
+      "edge": {
+        "between": [
+          "living",
+          "hall"
+        ],
+        "treatment": "open",
+        "why": "living is a zone and hall is circulation: open floor",
+        "default": "open",
+        "plan": "",
+        "names": [
+          "living",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:nook|hall#2",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 3.5
+        },
+        {
+          "x": 9.0,
+          "y": 3.5
+        }
+      ],
+      "closed": false,
+      "length": 3.0,
+      "edge": {
+        "between": [
+          "nook",
+          "hall"
+        ],
+        "treatment": "wall",
+        "why": "nook is a room: walled",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "nook",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "region:living+dining",
+      "kind": "region",
+      "layer": "PLATE-REGION",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 9.0,
+          "y": 0.0
+        },
+        {
+          "x": 9.0,
+          "y": 4.5
+        },
+        {
+          "x": 0.0,
+          "y": 4.5
+        }
+      ],
+      "closed": true,
+      "area": 40.5,
+      "length": 27.0,
+      "region": {
+        "label": "living / dining",
+        "spaces": [
+          "living",
+          "dining"
+        ],
+        "area": 36.330000000000005
+      }
+    },
+    {
+      "id": "wall:bath|hall#0",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 5.95
+        },
+        {
+          "x": 3.5500000000000007,
+          "y": 5.95
+        },
+        {
+          "x": 3.5500000000000007,
+          "y": 6.05
+        },
+        {
+          "x": 0.0,
+          "y": 6.05
+        }
+      ],
+      "closed": true,
+      "area": 0.3549999999999969,
+      "length": 7.300000000000001,
+      "source": "/assemblies/partition",
+      "wall": {
+        "assembly": "partition",
+        "label": "partition",
+        "thickness": 0.1,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "entrance",
+          "partition",
+          "link"
+        ],
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "because": "partition",
+        "line": [
+          {
+            "x": 0.0,
+            "y": 6.0
+          },
+          {
+            "x": 3.5,
+            "y": 6.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bath|hall#1",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 3.5500000000000007,
+          "y": 5.95
+        },
+        {
+          "x": 3.5500000000000007,
+          "y": 8.0
+        },
+        {
+          "x": 3.4499999999999993,
+          "y": 8.0
+        },
+        {
+          "x": 3.4499999999999993,
+          "y": 5.95
+        }
+      ],
+      "closed": true,
+      "area": 0.20500000000000185,
+      "length": 4.3000000000000025,
+      "source": "/assemblies/partition",
+      "wall": {
+        "assembly": "partition",
+        "label": "partition",
+        "thickness": 0.1,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "entrance",
+          "partition",
+          "link"
+        ],
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "because": "partition",
+        "line": [
+          {
+            "x": 3.5,
+            "y": 6.0
+          },
+          {
+            "x": 3.5,
+            "y": 8.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bath|'facade#2",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 3.5,
+          "y": 8.0
+        },
+        {
+          "x": 0.0,
+          "y": 8.0
+        },
+        {
+          "x": 0.0,
+          "y": 7.7
+        },
+        {
+          "x": 3.5,
+          "y": 7.7
+        }
+      ],
+      "closed": true,
+      "area": 1.0500000000000007,
+      "length": 7.6,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "bath",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 3.5,
+            "y": 7.85
+          },
+          {
+            "x": 0.0,
+            "y": 7.85
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bath|'blank#3",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 8.0
+        },
+        {
+          "x": 0.0,
+          "y": 6.0
+        },
+        {
+          "x": 0.3000000000000007,
+          "y": 6.0
+        },
+        {
+          "x": 0.3000000000000007,
+          "y": 8.0
+        }
+      ],
+      "closed": true,
+      "area": 0.6000000000000014,
+      "length": 4.600000000000001,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "bath",
+          "'blank"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 0.15000000000000036,
+            "y": 8.0
+          },
+          {
+            "x": 0.15000000000000036,
+            "y": 6.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:dining|'facade#4",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 6.0,
+          "y": 0.0
+        },
+        {
+          "x": 9.0,
+          "y": 0.0
+        },
+        {
+          "x": 9.0,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 6.0,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": true,
+      "area": 0.8999999999999995,
+      "length": 6.6,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "dining",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 6.0,
+            "y": 0.15000000000000036
+          },
+          {
+            "x": 9.0,
+            "y": 0.15000000000000036
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:dining|nook#5",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 9.05,
+          "y": 0.0
+        },
+        {
+          "x": 9.05,
+          "y": 3.55
+        },
+        {
+          "x": 8.95,
+          "y": 3.55
+        },
+        {
+          "x": 8.95,
+          "y": 0.0
+        }
+      ],
+      "closed": true,
+      "area": 0.3550000000000022,
+      "length": 7.3000000000000025,
+      "source": "/assemblies/partition",
+      "wall": {
+        "assembly": "partition",
+        "label": "partition",
+        "thickness": 0.1,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "link",
+          "partition",
+          "entrance"
+        ],
+        "between": [
+          "dining",
+          "nook"
+        ],
+        "because": "partition",
+        "line": [
+          {
+            "x": 9.0,
+            "y": 0.0
+          },
+          {
+            "x": 9.0,
+            "y": 3.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:living|'facade#6",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 6.0,
+          "y": 0.0
+        },
+        {
+          "x": 6.0,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 0.0,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": true,
+      "area": 1.799999999999999,
+      "length": 12.600000000000001,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "living",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 0.0,
+            "y": 0.15000000000000036
+          },
+          {
+            "x": 6.0,
+            "y": 0.15000000000000036
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:living|'blank#7",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 4.5
+        },
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 0.3000000000000007,
+          "y": 0.0
+        },
+        {
+          "x": 0.3000000000000007,
+          "y": 4.5
+        }
+      ],
+      "closed": true,
+      "area": 1.3500000000000032,
+      "length": 9.600000000000001,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "living",
+          "'blank"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 0.15000000000000036,
+            "y": 4.5
+          },
+          {
+            "x": 0.15000000000000036,
+            "y": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:nook|'facade#8",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 9.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 9.0,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": true,
+      "area": 0.8999999999999995,
+      "length": 6.6,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "nook",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 9.0,
+            "y": 0.15000000000000036
+          },
+          {
+            "x": 12.0,
+            "y": 0.15000000000000036
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:nook|'blank#9",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 3.5
+        },
+        {
+          "x": 11.7,
+          "y": 3.5
+        },
+        {
+          "x": 11.7,
+          "y": 0.0
+        }
+      ],
+      "closed": true,
+      "area": 1.0500000000000043,
+      "length": 7.600000000000001,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "nook",
+          "'blank"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 11.85,
+            "y": 0.0
+          },
+          {
+            "x": 11.85,
+            "y": 3.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:nook|hall#10",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 3.55
+        },
+        {
+          "x": 8.95,
+          "y": 3.55
+        },
+        {
+          "x": 8.95,
+          "y": 3.45
+        },
+        {
+          "x": 12.0,
+          "y": 3.45
+        }
+      ],
+      "closed": true,
+      "area": 0.30499999999998906,
+      "length": 6.300000000000001,
+      "source": "/assemblies/partition",
+      "wall": {
+        "assembly": "partition",
+        "label": "partition",
+        "thickness": 0.1,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "partition"
+        ],
+        "between": [
+          "nook",
+          "hall"
+        ],
+        "because": "partition",
+        "line": [
+          {
+            "x": 12.0,
+            "y": 3.5
+          },
+          {
+            "x": 9.0,
+            "y": 3.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:hall|'blank#11",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 3.5
+        },
+        {
+          "x": 12.0,
+          "y": 8.0
+        },
+        {
+          "x": 11.7,
+          "y": 8.0
+        },
+        {
+          "x": 11.7,
+          "y": 3.5
+        }
+      ],
+      "closed": true,
+      "area": 1.3500000000000014,
+      "length": 9.600000000000001,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "hall",
+          "'blank"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 11.85,
+            "y": 3.5
+          },
+          {
+            "x": 11.85,
+            "y": 8.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:hall|'facade#12",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 8.0
+        },
+        {
+          "x": 3.5,
+          "y": 8.0
+        },
+        {
+          "x": 3.5,
+          "y": 7.7
+        },
+        {
+          "x": 12.0,
+          "y": 7.7
+        }
+      ],
+      "closed": true,
+      "area": 2.549999999999997,
+      "length": 17.6,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "hall",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 12.0,
+            "y": 7.85
+          },
+          {
+            "x": 3.5,
+            "y": 7.85
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:hall|'blank#13",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 6.0
+        },
+        {
+          "x": 0.0,
+          "y": 4.5
+        },
+        {
+          "x": 0.3000000000000007,
+          "y": 4.5
+        },
+        {
+          "x": 0.3000000000000007,
+          "y": 6.0
+        }
+      ],
+      "closed": true,
+      "area": 0.45000000000000107,
+      "length": 3.6000000000000014,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": -0.0,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "hall",
+          "'blank"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 0.15000000000000036,
+            "y": 6.0
+          },
+          {
+            "x": 0.15000000000000036,
+            "y": 4.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "door:bath|hall",
+      "kind": "door",
+      "layer": "PLATE-DOOR",
+      "points": [
+        {
+          "x": 0.09999999999999964,
+          "y": 6.0
+        },
+        {
+          "x": 1.0,
+          "y": 6.0
+        }
+      ],
+      "closed": false,
+      "length": 0.9000000000000004,
+      "opening": {
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "width": 0.9000000000000004,
+        "depth": 0.1
+      }
+    },
+    {
+      "id": "opening:nook|dining",
+      "kind": "door",
+      "layer": "PLATE-OPENING",
+      "points": [
+        {
+          "x": 9.0,
+          "y": 0.5999999999999996
+        },
+        {
+          "x": 9.0,
+          "y": 2.9000000000000004
+        }
+      ],
+      "closed": false,
+      "length": 2.3000000000000007,
+      "opening": {
+        "between": [
+          "nook",
+          "dining"
+        ],
+        "width": 2.3000000000000007,
+        "depth": 0.1,
+        "leaf": "none"
+      }
+    },
+    {
+      "id": "run:lighting:0:#0",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 1.19,
+          "y": 6.05
+        },
+        {
+          "x": 1.1900000000000002,
+          "y": 6.0
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 0,
+        "length": 2.76,
+        "control": true
+      }
+    },
+    {
+      "id": "run:lighting:0:#1",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 1.1900000000000002,
+          "y": 6.0
+        },
+        {
+          "x": 1.1900000000000002,
+          "y": 6.875
+        },
+        {
+          "x": 1.875,
+          "y": 6.875
+        }
+      ],
+      "closed": false,
+      "length": 1.5599999999999998,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "routed",
+        "along": "ceiling",
+        "cable": 0,
+        "length": 2.76,
+        "control": true,
+        "marks": [
+          {
+            "at": {
+              "x": 1.1900000000000002,
+              "y": 6.0
+            },
+            "kind": "riser"
+          }
+        ]
+      }
+    },
+    {
+      "id": "run:lighting:0:#2",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 1.19,
+          "y": 6.05
+        },
+        {
+          "x": 1.2218749999999998,
+          "y": 6.139680555555555
+        },
+        {
+          "x": 1.2583333333333333,
+          "y": 6.225555555555556
+        },
+        {
+          "x": 1.299375,
+          "y": 6.307625
+        },
+        {
+          "x": 1.345,
+          "y": 6.385888888888891
+        },
+        {
+          "x": 1.3952083333333332,
+          "y": 6.460347222222222
+        },
+        {
+          "x": 1.45,
+          "y": 6.531000000000001
+        },
+        {
+          "x": 1.5093750000000001,
+          "y": 6.597847222222223
+        },
+        {
+          "x": 1.5733333333333333,
+          "y": 6.6608888888888895
+        },
+        {
+          "x": 1.641875,
+          "y": 6.720125
+        },
+        {
+          "x": 1.715,
+          "y": 6.775555555555556
+        },
+        {
+          "x": 1.7927083333333331,
+          "y": 6.827180555555556
+        },
+        {
+          "x": 1.875,
+          "y": 6.875
+        }
+      ],
+      "closed": false,
+      "length": 1.1000712527464147,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "arcs",
+        "alt": true,
+        "control": true
+      }
+    },
+    {
+      "id": "run:lighting:0:#3",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.95,
+          "y": 3.120000000000001
+        },
+        {
+          "x": 9.0,
+          "y": 3.120000000000001
+        }
+      ],
+      "closed": false,
+      "length": 0.05000000000000071,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 1,
+        "length": 3.445000000000002,
+        "control": true
+      }
+    },
+    {
+      "id": "run:lighting:0:#4",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 9.0,
+          "y": 3.120000000000001
+        },
+        {
+          "x": 7.475,
+          "y": 3.120000000000001
+        },
+        {
+          "x": 7.475,
+          "y": 2.4
+        }
+      ],
+      "closed": false,
+      "length": 2.2450000000000014,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "routed",
+        "along": "ceiling",
+        "cable": 1,
+        "length": 3.445000000000002,
+        "control": true,
+        "marks": [
+          {
+            "at": {
+              "x": 9.0,
+              "y": 3.120000000000001
+            },
+            "kind": "riser"
+          }
+        ]
+      }
+    },
+    {
+      "id": "run:lighting:0:#5",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.95,
+          "y": 3.120000000000001
+        },
+        {
+          "x": 8.849083333333331,
+          "y": 3.014930555555556
+        },
+        {
+          "x": 8.744166666666667,
+          "y": 2.9180555555555565
+        },
+        {
+          "x": 8.63525,
+          "y": 2.8293750000000006
+        },
+        {
+          "x": 8.522333333333334,
+          "y": 2.74888888888889
+        },
+        {
+          "x": 8.405416666666664,
+          "y": 2.6765972222222225
+        },
+        {
+          "x": 8.2845,
+          "y": 2.6125000000000007
+        },
+        {
+          "x": 8.159583333333332,
+          "y": 2.556597222222223
+        },
+        {
+          "x": 8.030666666666665,
+          "y": 2.5088888888888894
+        },
+        {
+          "x": 7.897749999999999,
+          "y": 2.4693750000000003
+        },
+        {
+          "x": 7.760833333333332,
+          "y": 2.4380555555555556
+        },
+        {
+          "x": 7.619916666666667,
+          "y": 2.4149305555555554
+        },
+        {
+          "x": 7.475,
+          "y": 2.4
+        }
+      ],
+      "closed": false,
+      "length": 1.6838408130782843,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "arcs",
+        "alt": true,
+        "control": true
+      }
+    },
+    {
+      "id": "run:lighting:0:#6",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.95,
+          "y": 3.040000000000001
+        },
+        {
+          "x": 9.0,
+          "y": 3.040000000000001
+        }
+      ],
+      "closed": false,
+      "length": 0.05000000000000071,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 2,
+        "length": 12.190000000000001,
+        "control": true
+      }
+    },
+    {
+      "id": "run:lighting:0:#7",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 9.0,
+          "y": 3.040000000000001
+        },
+        {
+          "x": 6.0,
+          "y": 3.040000000000001
+        },
+        {
+          "x": 6.0,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 6.0,
+          "y": 2.4
+        },
+        {
+          "x": 3.1500000000000004,
+          "y": 2.4
+        }
+      ],
+      "closed": false,
+      "length": 10.99,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "routed",
+        "along": "ceiling",
+        "cable": 2,
+        "length": 12.190000000000001,
+        "control": true,
+        "marks": [
+          {
+            "at": {
+              "x": 9.0,
+              "y": 3.040000000000001
+            },
+            "kind": "riser"
+          },
+          {
+            "at": {
+              "x": 6.0,
+              "y": 0.15000000000000036
+            },
+            "kind": "cross",
+            "along": {
+              "x": 1.0,
+              "y": 0.0
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "run:lighting:0:#8",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.95,
+          "y": 3.040000000000001
+        },
+        {
+          "x": 8.48622222222222,
+          "y": 2.809444444444445
+        },
+        {
+          "x": 8.018888888888888,
+          "y": 2.6111111111111125
+        },
+        {
+          "x": 7.548,
+          "y": 2.4450000000000007
+        },
+        {
+          "x": 7.073555555555556,
+          "y": 2.3111111111111122
+        },
+        {
+          "x": 6.5955555555555545,
+          "y": 2.2094444444444448
+        },
+        {
+          "x": 6.113999999999999,
+          "y": 2.1400000000000006
+        },
+        {
+          "x": 5.628888888888889,
+          "y": 2.1027777777777783
+        },
+        {
+          "x": 5.1402222222222225,
+          "y": 2.097777777777778
+        },
+        {
+          "x": 4.648,
+          "y": 2.125
+        },
+        {
+          "x": 4.152222222222222,
+          "y": 2.184444444444445
+        },
+        {
+          "x": 3.6528888888888895,
+          "y": 2.2761111111111108
+        },
+        {
+          "x": 3.1500000000000004,
+          "y": 2.4
+        }
+      ],
+      "closed": false,
+      "length": 5.986268995966013,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "arcs",
+        "alt": true,
+        "control": true
+      }
+    },
+    {
+      "id": "run:lighting:0:#9",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 9.05,
+          "y": 3.0900000000000003
+        },
+        {
+          "x": 9.0,
+          "y": 3.0900000000000007
+        }
+      ],
+      "closed": false,
+      "length": 0.05000000000000071,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 3,
+        "length": 3.7900000000000014,
+        "control": true
+      }
+    },
+    {
+      "id": "run:lighting:0:#10",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 9.0,
+          "y": 3.0900000000000007
+        },
+        {
+          "x": 10.375,
+          "y": 3.0900000000000007
+        },
+        {
+          "x": 10.375,
+          "y": 1.875
+        }
+      ],
+      "closed": false,
+      "length": 2.5900000000000007,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "routed",
+        "along": "ceiling",
+        "cable": 3,
+        "length": 3.7900000000000014,
+        "control": true,
+        "marks": [
+          {
+            "at": {
+              "x": 9.0,
+              "y": 3.0900000000000007
+            },
+            "kind": "riser"
+          }
+        ]
+      }
+    },
+    {
+      "id": "run:lighting:0:#11",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 9.05,
+          "y": 3.0900000000000003
+        },
+        {
+          "x": 9.197541666666666,
+          "y": 3.029236111111111
+        },
+        {
+          "x": 9.338333333333335,
+          "y": 2.9611111111111117
+        },
+        {
+          "x": 9.472375,
+          "y": 2.885625
+        },
+        {
+          "x": 9.599666666666668,
+          "y": 2.8027777777777785
+        },
+        {
+          "x": 9.720208333333332,
+          "y": 2.712569444444444
+        },
+        {
+          "x": 9.834,
+          "y": 2.6149999999999998
+        },
+        {
+          "x": 9.941041666666667,
+          "y": 2.5100694444444445
+        },
+        {
+          "x": 10.041333333333334,
+          "y": 2.397777777777778
+        },
+        {
+          "x": 10.134875000000001,
+          "y": 2.278125
+        },
+        {
+          "x": 10.221666666666668,
+          "y": 2.1511111111111108
+        },
+        {
+          "x": 10.301708333333332,
+          "y": 2.016736111111111
+        },
+        {
+          "x": 10.375,
+          "y": 1.875
+        }
+      ],
+      "closed": false,
+      "length": 1.8442755927444787,
+      "source": "/services/lighting/connect/0",
+      "run": {
+        "service": "lighting",
+        "network": "Switch legs",
+        "draw": "arcs",
+        "alt": true,
+        "control": true
+      }
+    },
+    {
+      "id": "part:lighting.switch:bath#0",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 1.15,
+          "y": 6.05
+        },
+        {
+          "x": 1.23,
+          "y": 6.05
+        },
+        {
+          "x": 1.23,
+          "y": 6.2
+        },
+        {
+          "x": 1.15,
+          "y": 6.2
+        }
+      ],
+      "closed": true,
+      "area": 0.012000000000000455,
+      "length": 0.46000000000000085,
+      "source": "/services/lighting/place/0",
+      "part": {
+        "service": "lighting",
+        "part": "switch",
+        "label": "switch",
+        "mount": "wall",
+        "above": 1.1,
+        "space": "bath",
+        "placed": "by the latch side of each door",
+        "at": {
+          "x": 1.19,
+          "y": 6.05
+        }
+      }
+    },
+    {
+      "id": "part:lighting.switch:nook#1",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 9.05,
+          "y": 3.1300000000000003
+        },
+        {
+          "x": 9.05,
+          "y": 3.0500000000000003
+        },
+        {
+          "x": 9.200000000000001,
+          "y": 3.0500000000000003
+        },
+        {
+          "x": 9.200000000000001,
+          "y": 3.1300000000000003
+        }
+      ],
+      "closed": true,
+      "area": 0.012000000000000455,
+      "length": 0.46000000000000085,
+      "source": "/services/lighting/place/0",
+      "part": {
+        "service": "lighting",
+        "part": "switch",
+        "label": "switch",
+        "mount": "wall",
+        "above": 1.1,
+        "space": "nook",
+        "placed": "by the latch side of each door",
+        "at": {
+          "x": 9.05,
+          "y": 3.0900000000000003
+        }
+      }
+    },
+    {
+      "id": "part:lighting.switch:dining#2",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 8.95,
+          "y": 3.000000000000001
+        },
+        {
+          "x": 8.95,
+          "y": 3.080000000000001
+        },
+        {
+          "x": 8.799999999999999,
+          "y": 3.080000000000001
+        },
+        {
+          "x": 8.799999999999999,
+          "y": 3.000000000000001
+        }
+      ],
+      "closed": true,
+      "area": 0.012000000000000455,
+      "length": 0.46000000000000085,
+      "source": "/services/lighting/place/1",
+      "part": {
+        "service": "lighting",
+        "part": "switch",
+        "label": "switch",
+        "mount": "wall",
+        "above": 1.1,
+        "space": "dining",
+        "serves": [
+          "living"
+        ],
+        "placed": "the best place in the region, near door",
+        "at": {
+          "x": 8.95,
+          "y": 3.040000000000001
+        }
+      }
+    },
+    {
+      "id": "part:lighting.switch:dining#3",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 8.95,
+          "y": 3.080000000000001
+        },
+        {
+          "x": 8.95,
+          "y": 3.160000000000001
+        },
+        {
+          "x": 8.799999999999999,
+          "y": 3.160000000000001
+        },
+        {
+          "x": 8.799999999999999,
+          "y": 3.080000000000001
+        }
+      ],
+      "closed": true,
+      "area": 0.012000000000000455,
+      "length": 0.46000000000000085,
+      "source": "/services/lighting/place/1",
+      "part": {
+        "service": "lighting",
+        "part": "switch",
+        "label": "switch",
+        "mount": "wall",
+        "above": 1.1,
+        "space": "dining",
+        "serves": [
+          "dining"
+        ],
+        "placed": "the best place in the region, near door",
+        "at": {
+          "x": 8.95,
+          "y": 3.120000000000001
+        }
+      }
+    },
+    {
+      "id": "part:lighting.light:bath#4",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 1.8,
+          "y": 6.8
+        },
+        {
+          "x": 1.95,
+          "y": 6.8
+        },
+        {
+          "x": 1.95,
+          "y": 6.95
+        },
+        {
+          "x": 1.8,
+          "y": 6.95
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000853,
+      "length": 0.6000000000000005,
+      "source": "/services/lighting/place/2",
+      "part": {
+        "service": "lighting",
+        "part": "light",
+        "label": "light",
+        "mount": "ceiling",
+        "space": "bath",
+        "placed": "in the middle of the room",
+        "at": {
+          "x": 1.875,
+          "y": 6.875
+        }
+      }
+    },
+    {
+      "id": "part:lighting.light:dining#5",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 7.3999999999999995,
+          "y": 2.3249999999999997
+        },
+        {
+          "x": 7.55,
+          "y": 2.3249999999999997
+        },
+        {
+          "x": 7.55,
+          "y": 2.475
+        },
+        {
+          "x": 7.3999999999999995,
+          "y": 2.475
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000004405,
+      "length": 0.6000000000000014,
+      "source": "/services/lighting/place/2",
+      "part": {
+        "service": "lighting",
+        "part": "light",
+        "label": "light",
+        "mount": "ceiling",
+        "space": "dining",
+        "placed": "in the middle of the room",
+        "at": {
+          "x": 7.475,
+          "y": 2.4
+        }
+      }
+    },
+    {
+      "id": "part:lighting.light:living#6",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 3.075,
+          "y": 2.3249999999999997
+        },
+        {
+          "x": 3.2250000000000005,
+          "y": 2.3249999999999997
+        },
+        {
+          "x": 3.2250000000000005,
+          "y": 2.475
+        },
+        {
+          "x": 3.075,
+          "y": 2.475
+        }
+      ],
+      "closed": true,
+      "area": 0.022499999999999964,
+      "length": 0.6000000000000014,
+      "source": "/services/lighting/place/2",
+      "part": {
+        "service": "lighting",
+        "part": "light",
+        "label": "light",
+        "mount": "ceiling",
+        "space": "living",
+        "placed": "in the middle of the room",
+        "at": {
+          "x": 3.1500000000000004,
+          "y": 2.4
+        }
+      }
+    },
+    {
+      "id": "part:lighting.light:nook#7",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 10.3,
+          "y": 1.8
+        },
+        {
+          "x": 10.45,
+          "y": 1.8
+        },
+        {
+          "x": 10.45,
+          "y": 1.95
+        },
+        {
+          "x": 10.3,
+          "y": 1.95
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000853,
+      "length": 0.599999999999997,
+      "source": "/services/lighting/place/2",
+      "part": {
+        "service": "lighting",
+        "part": "light",
+        "label": "light",
+        "mount": "ceiling",
+        "space": "nook",
+        "placed": "in the middle of the room",
+        "at": {
+          "x": 10.375,
+          "y": 1.875
+        }
+      }
+    }
+  ],
+  "bounds": {
+    "minX": 0.0,
+    "minY": 0.0,
+    "maxX": 12.0,
+    "maxY": 8.0
+  }
+}

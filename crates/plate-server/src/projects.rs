@@ -74,7 +74,7 @@ pub const EXAMPLES: &[Example] = &[
         blurb: "Built for real: wall assemblies, sized circuits, heat, plumbing, in feet and inches",
         main: "duplex.ncl",
         files: example_files!("duplex":
-            "duplex.ncl", "one-bedroom.ncl", "open-plan.ncl", "plans/flat.ncl",
+            "duplex.ncl", "one-bedroom.ncl", "open-plan.ncl", "plans/flat.ncl", "plans/open-flat.ncl",
             "build/assemblies/basic.ncl", "build/assemblies/wood-frame.ncl",
             "build/codes/cec.ncl", "build/codes/nec.ncl",
             "build/media/nm-b.ncl", "build/media/nmd90.ncl",

@@ -8,9 +8,10 @@
 //! home run back to the source. Each joint of the tree is one cable, made of the thinnest medium
 //! that meets its group's breaker and conductors (or the one a `feed` or the network names).
 //!
-//! A **control** network (`role = 'control`) joins, in each room, its switches to the lights
-//! they control. The lights' load goes on the circuit of the room's first switch, and they're
-//! drawn in that circuit's service view as well as their own.
+//! A **control** network (`role = 'control`) joins, in each room, the switches that serve it
+//! (`Placed::serving`: the room they're in, or the rooms a region's box serves) to its lights.
+//! The lights' load goes on the circuit of the room's first switch, and they're drawn in that
+//! circuit's service view as well as their own.
 //!
 //! Runs are laid on [`super::route`]: in the walls, up over doors, across ceilings. Every
 //! network is also drawn as the schematic (`'arcs`, the electrical convention); `draw` says which
@@ -232,8 +233,13 @@ fn controls(model: &Model, instances: &[Instance], placed: &[Placed], elements: 
                     continue;
                 }
                 seen.push(room);
-                let switches: Vec<usize> =
-                    from.iter().filter(|n| n.room == room).filter_map(|n| n.part).collect();
+                // The switches for this room, wherever they're mounted (a box by a region's
+                // way in has one for each of its rooms).
+                let switches: Vec<usize> = from
+                    .iter()
+                    .filter_map(|n| n.part)
+                    .filter(|&k| placed[k].serving().contains(&room))
+                    .collect();
                 let lights: Vec<usize> =
                     to.iter().filter(|n| n.room == room).filter_map(|n| n.part).collect();
                 if !switches.is_empty() && !lights.is_empty() {

@@ -742,6 +742,7 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
         duplex_duplex => "duplex", "duplex.ncl";
         duplex_one_bedroom => "duplex", "one-bedroom.ncl";
         duplex_open_plan => "duplex", "open-plan.ncl";
+        duplex_open_flat => "duplex", "plans/open-flat.ncl";
         duplex_plans_flat => "duplex", "plans/flat.ncl";
         home_apartment => "home", "apartment.ncl";
         home_plans_bathroom => "home", "plans/bathroom.ncl";
@@ -840,6 +841,10 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
                 }
                 ElementKind::Door | ElementKind::Window => {
                     let _ = writeln!(layout, "{:?} {}", e.kind, e.id);
+                }
+                ElementKind::Region => {
+                    let area = e.region.as_ref().map_or(0.0, |r| r.area);
+                    let _ = writeln!(layout, "{} {area:.2}", e.id);
                 }
                 ElementKind::Wall => {
                     *walls

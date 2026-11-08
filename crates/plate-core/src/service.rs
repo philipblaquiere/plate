@@ -332,7 +332,29 @@ pub enum Placement {
         /// What the wall it goes on must be.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         wall: Option<Requirement>,
+        /// What one part is for: each space, or each region.
+        #[serde(default, skip_serializing_if = "Per::is_space")]
+        per: Per,
+        /// Per region: one part for each selected space, side by side at the one place.
+        #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+        each: bool,
     },
+}
+
+/// What a `one` placement counts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Per {
+    #[default]
+    Space,
+    /// The spaces joined by open edges (no wall between them).
+    Region,
+}
+
+impl Per {
+    pub fn is_space(&self) -> bool {
+        *self == Per::Space
+    }
 }
 
 impl Placement {

@@ -54,20 +54,20 @@ part power.counter in flat_1.kitchen × 1
 part power.counter in flat_2.kitchen × 2
 part power.dedicated in flat_1.kitchen × 1
 part power.dedicated in flat_2.kitchen × 1
-part power.outlet in flat_1.bath × 3
+part power.outlet in flat_1.bath × 4
 part power.outlet in flat_1.bedroom_1 × 4
 part power.outlet in flat_1.bedroom_2 × 4
 part power.outlet in flat_1.hall × 10
 part power.outlet in flat_1.kitchen × 4
 part power.outlet in flat_1.living × 7
-part power.outlet in flat_1.utility × 2
-part power.outlet in flat_2.bath × 3
+part power.outlet in flat_1.utility × 3
+part power.outlet in flat_2.bath × 4
 part power.outlet in flat_2.bedroom_1 × 4
 part power.outlet in flat_2.bedroom_2 × 4
 part power.outlet in flat_2.hall × 10
-part power.outlet in flat_2.kitchen × 4
+part power.outlet in flat_2.kitchen × 3
 part power.outlet in flat_2.living × 7
-part power.outlet in flat_2.utility × 2
+part power.outlet in flat_2.utility × 3
 part power.outlet_240 in flat_1.kitchen × 1
 part power.outlet_240 in flat_1.utility × 1
 part power.outlet_240 in flat_2.kitchen × 1
@@ -76,22 +76,22 @@ part power.panel in flat_1.utility × 1
 part power.panel in flat_2.utility × 1
 circuit plumbing/Drains flat_1 #1 - 19.91 [basin × 1, toilet × 1, shower × 1, counter × 1]
 circuit plumbing/Drains flat_2 #1 - 19.94 [basin × 1, toilet × 1, shower × 1, counter × 1]
-circuit power/General flat_1 #1 14/2 77.73 [switch × 3, receptacle × 7]
-circuit power/General flat_1 #2 14/2 122.56 [receptacle × 10]
-circuit power/General flat_1 #3 14/2 106.74 [switch × 3, receptacle × 7]
-circuit power/General flat_1 #4 14/2 126.93 [receptacle × 8, switch × 2]
-circuit power/General flat_1 #5 14/2 46.35 [receptacle × 2]
+circuit power/General flat_1 #1 14/2 73.83 [switch × 2, receptacle × 8]
+circuit power/General flat_1 #2 14/2 123.25 [switch × 1, receptacle × 9]
+circuit power/General flat_1 #3 14/2 111.99 [receptacle × 7, switch × 3]
+circuit power/General flat_1 #4 14/2 115.08 [receptacle × 9, switch × 1]
+circuit power/General flat_1 #5 14/2 73.13 [switch × 1, receptacle × 3]
 circuit power/Counter flat_1 #6 12/2 16.31 [counter receptacle × 1]
 circuit power/Appliances flat_1 #7 10/3 9.93 [240 V receptacle × 1]
 circuit power/Appliances flat_1 #8 12/2 16.15 [dedicated receptacle × 1]
 circuit power/Appliances flat_1 #9 6/3 27.88 [240 V receptacle × 1]
 circuit power/Heat flat_1 #10 12/2 108.66 [baseboard × 3]
 circuit power/Heat flat_1 #11 12/2 34.54 [baseboard × 1]
-circuit power/General flat_2 #1 14/2 89.95 [switch × 2, receptacle × 8]
-circuit power/General flat_2 #2 14/2 117.41 [switch × 1, receptacle × 9]
-circuit power/General flat_2 #3 14/2 106.64 [switch × 3, receptacle × 7]
-circuit power/General flat_2 #4 14/2 126.48 [receptacle × 8, switch × 2]
-circuit power/General flat_2 #5 14/2 46.25 [receptacle × 2]
+circuit power/General flat_2 #1 14/2 73.93 [switch × 2, receptacle × 8]
+circuit power/General flat_2 #2 14/2 122.49 [receptacle × 9, switch × 1]
+circuit power/General flat_2 #3 14/2 111.89 [receptacle × 7, switch × 3]
+circuit power/General flat_2 #4 14/2 122.27 [receptacle × 8, switch × 2]
+circuit power/General flat_2 #5 14/2 59.51 [receptacle × 3]
 circuit power/Counter flat_2 #6 12/2 28.01 [counter receptacle × 2]
 circuit power/Appliances flat_2 #7 10/3 10.03 [240 V receptacle × 1]
 circuit power/Appliances flat_2 #8 12/2 16.25 [dedicated receptacle × 1]

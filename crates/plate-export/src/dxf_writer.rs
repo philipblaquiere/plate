@@ -89,7 +89,9 @@ pub fn to_dxf(layout: &Layout) -> Result<Vec<u8>, ExportError> {
             | ElementKind::Symbol
             | ElementKind::Wall
             | ElementKind::Part
-            | ElementKind::Run => {
+            | ElementKind::Run
+            | ElementKind::Region
+            | ElementKind::Edge => {
                 let mut poly = LwPolyline::default();
                 poly.set_is_closed(element.closed);
                 poly.vertices = element

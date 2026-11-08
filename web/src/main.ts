@@ -9,6 +9,7 @@ import { rulesOf, spanFor, valueAt } from "./editor/sources";
 import { withSystem } from "./editor/system";
 import { defaultUnits, modeOf, template, type StartMode } from "./editor/templates";
 import { ConfigEngine } from "./engine/engine";
+import { edgeActions, type RuleValue } from "./edges";
 import { download, pickFile, pickZip, takeLegacyDraft } from "./files";
 import { openMenu, type MenuItem } from "./menu";
 import { libraryCard } from "./library";
@@ -20,6 +21,7 @@ import { catalog, suggest, thumbnail } from "./symbols";
 import { caseLabel, caseLiteral, casePointer, previewCases, sidesOf } from "./preview";
 import type {
   Diagnostic,
+  EdgeInfo,
   Element,
   ExportFormat,
   Layout,
@@ -1376,6 +1378,30 @@ function reportEdit(
   else if (done) toast(done);
 }
 
+/** Menu items to change what's built where two spaces meet: rules added to, changed in or removed
+ * from the plan that placed them (see `edges.ts`). */
+function edgeItems(edge: EdgeInfo): MenuItem[] {
+  const value = edge.rule ? valueAt(lastConfig, edge.rule) : null;
+  const rule = value && typeof value === "object" ? (value as RuleValue) : null;
+  const pair = edge.between.join(" and ");
+  const items: MenuItem[] = edgeActions(edge, rule).map((a) => ({
+    label: a.label,
+    note: a.note,
+    action: () => {
+      if ("add" in a) reportEdit(geo.addRule(edge.plan, a.add.join(", ")), `${a.label}: ${pair}`);
+      else if ("replace" in a) reportEdit(geo.replaceItem(a.replace, a.text), `${a.label}: ${pair}`);
+      else reportEdit(geo.removeItem(a.remove), `Removed the rule for ${pair}`);
+    },
+  }));
+  if (edge.rule) {
+    if (!items.length)
+      items.push({ label: "A rule for more spaces decides it", disabled: true, action: () => {} });
+    const pointer = edge.rule;
+    items.push({ label: "Show the rule", action: () => showInFile(pointer) });
+  }
+  return items;
+}
+
 /** Menu items to pick the symbol a space is drawn with: likely ones by name, or the catalog. */
 function symbolItems(element: Element): MenuItem[] {
   const info = element.space!;
@@ -1421,23 +1447,26 @@ function showInFile(pointer: string): void {
 }
 
 viewer.onContextMenu = (target: ContextTarget, x: number, y: number) => {
+  if (target.type === "shared") {
+    const e = target.element.edge!;
+    openMenu(`Between ${e.between.join(" and ")}`, edgeItems(e), x, y);
+    return;
+  }
   if (target.type === "wall") {
     const w = target.element.wall!;
     const source = target.element.source;
-    openMenu(
-      `${w.label} between ${w.between.join(" and ")}`,
-      source
-        ? [
-            {
-              label: `Show ${w.assembly} in the file`,
-              note: "Its assembly",
-              action: () => showInFile(source),
-            },
-          ]
-        : [{ label: "Its assembly isn't in a file here", disabled: true, action: () => {} }],
-      x,
-      y,
-    );
+    const edge = viewer.edgeBetween(w.between)?.edge;
+    const items: MenuItem[] = source
+      ? [
+          {
+            label: `Show ${w.assembly} in the file`,
+            note: "Its assembly",
+            action: () => showInFile(source),
+          },
+        ]
+      : [{ label: "Its assembly isn't in a file here", disabled: true, action: () => {} }];
+    if (edge) items.push("-", ...edgeItems(edge));
+    openMenu(`${w.label} between ${w.between.join(" and ")}`, items, x, y);
     return;
   }
   if (target.type === "run") {

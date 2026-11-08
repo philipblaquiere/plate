@@ -80,6 +80,11 @@ pub enum ElementKind {
     Part,
     /// A run of a service's network (`run`): an open polyline.
     Run,
+    /// Spaces joined by open edges, with no wall between them (`region`): their outline.
+    Region,
+    /// What's built where two spaces meet, and why (`edge`): a segment. For inspecting the
+    /// drawing; not exported.
+    Edge,
 }
 
 impl ElementKind {
@@ -100,6 +105,8 @@ impl ElementKind {
             ElementKind::Wall => "PLATE-WALL",
             ElementKind::Part => "PLATE-PART",
             ElementKind::Run => "PLATE-RUN",
+            ElementKind::Region => "PLATE-REGION",
+            ElementKind::Edge => "PLATE-EDGE",
         }
     }
 }
@@ -113,6 +120,38 @@ fn space_layer(kind: SpaceKind) -> &'static str {
         SpaceKind::Vertical => "PLATE-SPACE-VERTICAL",
         SpaceKind::Fixture => "PLATE-FIXTURE",
     }
+}
+
+/// A region: spaces joined by open edges, with no wall between them.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct RegionInfo {
+    /// Its spaces' labels, biggest first: "living / dining / kitchen".
+    pub label: String,
+    /// Its spaces (instance paths), biggest first.
+    pub spaces: Vec<String>,
+    /// The floor of its spaces, added up (each as its own `area` says).
+    pub area: f64,
+}
+
+/// What's built where two spaces meet.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct EdgeInfo {
+    /// The two spaces (instance paths).
+    pub between: Vec<String>,
+    /// `wall`, `door`, `opening` or `open`.
+    pub treatment: String,
+    /// The rule that decided it, as a JSON pointer, if one did.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rule: Option<String>,
+    /// Why, in a few words: "two zones", "bedroom is a room", "plate.opening".
+    pub why: String,
+    /// What these two spaces get with no rule: `open` or `wall`.
+    pub default: String,
+    /// The plan that placed the two spaces (a JSON pointer, "" for the root), where a rule
+    /// changing it goes.
+    pub plan: String,
+    /// What a rule names them by: their type keys, or instance names when a type has several.
+    pub names: Vec<String>,
 }
 
 /// What a placed space is.
@@ -168,6 +207,9 @@ pub struct SpaceInfo {
     /// then the clear floor).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub gross: Option<f64>,
+    /// The region it's in, when it's joined to others by open edges (see `region` elements).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub region: Option<String>,
 }
 
 /// What a wall is built as.
@@ -224,6 +266,10 @@ pub struct PartInfo {
     pub above: Option<f64>,
     /// The space it serves.
     pub space: String,
+    /// The spaces it's for, when that isn't only the space it's in (a switch on the entry's
+    /// wall for the kitchen's lights; a thermostat for a whole region).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub serves: Vec<String>,
     /// How it got there, in words: "every 3.6 along the walls of #room".
     pub placed: String,
     /// The group of its network it's in (a circuit), once connected.
@@ -396,6 +442,10 @@ pub struct Element {
     pub part: Option<PartInfo>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub run: Option<RunInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub region: Option<RegionInfo>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub edge: Option<EdgeInfo>,
 }
 
 impl Element {
@@ -418,6 +468,8 @@ impl Element {
             wall: None,
             part: None,
             run: None,
+            region: None,
+            edge: None,
         }
     }
 
@@ -464,7 +516,7 @@ impl Element {
     /// a service's parts and runs the service's (`PLATE-POWER`, `PLATE-POWER-RUN`).
     /// Whether exports keep it: everything but the drawing of a network it didn't ask for.
     pub fn exported(&self) -> bool {
-        !self.run.as_ref().is_some_and(|r| r.alt)
+        !self.run.as_ref().is_some_and(|r| r.alt) && self.kind != ElementKind::Edge
     }
 
     pub fn cad_layer(&self) -> String {

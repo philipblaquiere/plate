@@ -30,6 +30,7 @@ space parking_2 fixture 14.30 [0.00, 0.00 → 2.60, 5.50]
 space pool fixture 48.00 [23.60, 10.80 → 27.60, 22.80]
 space terrace zone 132.00 [17.60, 0.00 → 23.60, 22.00]
 space garden zone 1058.88 [0.00, 0.00 → 34.00, 42.00]
+region:garden+terrace 1190.88
 Door door:house|garden
 Door house.door:bath_1|hall
 Door house.door:bath_2|hall

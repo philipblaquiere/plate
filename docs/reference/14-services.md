@@ -29,6 +29,19 @@ A part goes on a wall (`above` the floor), on the ceiling, on the floor, or in a
 - `plate.on part fixtures`: at the back of each.
 - `plate.one part spaces`: the best place on its walls, `near` and `apart` from port roles, `'door`, `'window`, `'entrance` or tags, on a wall that is at least `wall`.
 
+### One per region
+
+Spaces joined by open edges, with no wall between them, are a **region** (circulation never joins one). With `per = 'region`, `plate.one` places one part per region instead of one per space, on the best wall of any of its spaces; a space that isn't open to another counts on its own. With `each = true` as well, it places one part for each space of the region, side by side at that one place.
+
+```nickel
+# One thermostat per room, and one for an open living area:
+plate.one "thermostat" ["#room", "#zone"] & { per = 'region, near = 'door },
+# One switch box where you walk in, with a switch for each zone's lights:
+plate.one "switch" "#zone" & { per = 'region, each = true, near = 'door },
+```
+
+A part placed this way knows which spaces it's for (its card says so). A control network joins a switch to the lights of the space it's for, wherever it's mounted.
+
 ### Spreading parts over a room
 
 A room that isn't a rectangle is cut into rectangles first, biggest first: an L is its body and its arm, a U three pieces. Pieces narrower than 600 mm, or smaller than a tenth of the room, get nothing of their own. Then:
