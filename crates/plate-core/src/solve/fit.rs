@@ -518,10 +518,18 @@ type Span = (f64, f64, f64);
 /// Parts this far apart in height can share a stretch of wall (a switch over a baseboard).
 const BAND_MM: f64 = 300.0;
 
+/// The height of a part in the wall's cavity (a stack): it's in the way at every height.
+const IN_WALL: f64 = f64::NEG_INFINITY;
+
 impl Taken {
+    /// Is this stretch free at this height? A part in the wall (`IN_WALL`) takes the wall's
+    /// depth, so it meets every part on that stretch, at any height, and they meet it.
     fn free(&self, face: (usize, usize), s0: f64, s1: f64, above: f64, band: f64) -> bool {
         self.spans.get(&face).is_none_or(|v| {
-            v.iter().all(|&(a, b, h)| (h - above).abs() >= band || s1 <= a + 1e-9 || s0 >= b - 1e-9)
+            v.iter().all(|&(a, b, h)| {
+                let apart = h != IN_WALL && above != IN_WALL && (h - above).abs() >= band;
+                apart || s1 <= a + 1e-9 || s0 >= b - 1e-9
+            })
         })
     }
 
@@ -708,14 +716,19 @@ impl Ctx<'_> {
         let (w, d) = job.part.size(self.units);
         let w = width.unwrap_or(w);
         let inside = job.part.mount == Mount::Cavity;
-        // In the wall, a part only meets others in the wall.
-        let above = if inside { -1000.0 * self.m } else { job.part.above(self.units) };
+        // In the wall, a part takes the cavity: no box can go in front of it, on either side.
+        let above = if inside { IN_WALL } else { job.part.above(self.units) };
         let (s0, s1) = (s - w / 2.0, s + w / 2.0);
         if s0 < -1e-9 || s1 > face.len() + 1e-9 || !face.walled || (inside && face.cavity + 1e-9 < d) {
             return false;
         }
         let band = BAND_MM / self.units.to_mm();
         if !self.taken.free((r, f), s0, s1, above, band) {
+            return false;
+        }
+        // In the wall, the faces on its other side too.
+        let twins = if inside { self.twins(r, f, s0, s1) } else { Vec::new() };
+        if twins.iter().any(|&(g, a, b)| !self.taken.free(g, a, b, above, band)) {
             return false;
         }
         // Low parts can't go behind a fixture backed against the wall (but behind the one
@@ -734,6 +747,11 @@ impl Ctx<'_> {
             return false;
         }
         self.taken.take((r, f), s0, s1, above);
+        for (g, a, b) in twins {
+            self.taken.take(g, a, b, above);
+        }
+        let room = &self.model.rooms[r];
+        let face = &room.faces[f];
         let (p0, p1) = (face.point(s0), face.point(s1));
         // Out into the room from the wall's face, or into the wall.
         let n = if inside { Point::new(-face.inward.x, -face.inward.y) } else { face.inward };
@@ -760,6 +778,31 @@ impl Ctx<'_> {
             label: job.label(),
         });
         true
+    }
+
+    /// The stretch `s0..s1` of room `r`'s face `f`, seen from the other faces of the same wall
+    /// (the room on its other side): (room, face), from, to.
+    fn twins(&self, r: usize, f: usize, s0: f64, s1: f64) -> Vec<((usize, usize), f64, f64)> {
+        let face = &self.model.rooms[r].faces[f];
+        let Some(wall) = face.wall else { return Vec::new() };
+        let (p0, p1) = (face.point(s0), face.point(s1));
+        let tol = self.units.tolerance() * 100.0;
+        // Further than this from the face, it's another wall (no wall is half a metre thick).
+        let reach = 0.5 * self.m;
+        let mut out = Vec::new();
+        for (r2, room) in self.model.rooms.iter().enumerate() {
+            for (f2, g) in room.faces.iter().enumerate() {
+                if (r2, f2) == (r, f) || g.wall != Some(wall) {
+                    continue;
+                }
+                let ((a, da), (b, db)) = (g.locate(p0), g.locate(p1));
+                let (a, b) = (a.min(b).max(0.0), a.max(b).min(g.len()));
+                if da.max(db) <= reach && b - a > tol {
+                    out.push(((r2, f2), a, b));
+                }
+            }
+        }
+        out
     }
 
     /// Put a part on the floor or ceiling, centred at `c`.
@@ -1401,6 +1444,38 @@ mod tests {
             let b = Bounds { min_x: *x0, min_y: *y0, max_x: *x1, max_y: *y1 };
             assert!(on_outline(p.at, &b), "{} at {:?} is off {}'s walls", o.id, p.at, p.space);
             assert_eq!(p.above, Some(0.3));
+        }
+    }
+
+    #[test]
+    fn a_part_in_the_wall_keeps_clear_of_boxes_on_it() {
+        // The bath's switch (by its door) and the plumbing stack (in the wet wall's cavity) were
+        // put 2.5 cm apart: a box can't go where the stack takes the stud bay.
+        let s = run(pinned_flat_with(json!({ "lighting": lighting(), "plumbing": plumbing() })));
+        assert_met(&s);
+        let stack = &parts(&s, "stack")[0];
+        let (sa, sb) = (stack.points[0], stack.points[1]);
+        let len = sa.distance(sb);
+        let u = Point::new((sb.x - sa.x) / len, (sb.y - sa.y) / len);
+        let along = |p: Point| (p.x - sa.x) * u.x + (p.y - sa.y) * u.y;
+        let off = |p: Point| ((p.x - sa.x) * u.y - (p.y - sa.y) * u.x).abs();
+        for e in of_kind(&s, crate::layout::ElementKind::Part) {
+            let p = e.part.as_ref().unwrap();
+            if p.mount != "wall" {
+                continue;
+            }
+            // On the same wall (either face), and overlapping the stack along it?
+            let (a, b) = (e.points[0], e.points[1]);
+            if off(a).max(off(b)) > 0.3 {
+                continue;
+            }
+            let (lo, hi) = (along(a).min(along(b)), along(a).max(along(b)));
+            assert!(
+                hi <= 1e-6 || lo >= len - 1e-6,
+                "{} {} overlaps the stack: {lo}..{hi} vs 0..{len}",
+                p.service,
+                p.part
+            );
         }
     }
 
