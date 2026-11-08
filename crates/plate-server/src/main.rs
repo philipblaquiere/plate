@@ -5,7 +5,14 @@
 //!                                               start the API, the web app and the file browser
 //! plate check  <file.ncl> [-v] [--seed N]       solve and print diagnostics (imports resolve
 //!                                               against the file's folder); --seed tries another
-//! plate export <file.ncl> <dxf|svg|json> [-o out] [--seed N]
+//!       [--seeds 1..10]                         one line per seed (a sweep), and a tally
+//!       [--json]                                the report, counts, timings and diagnostics as JSON
+//!       [--strict]                              exit 1 unless every requirement is met
+//!       [--case N | --slot slot.json | --in plate.ncl:space]
+//!                                               a plan file: solve preview case N, or in a slot
+//!                                               (`plate slot`), or in the slot a plate gives a space
+//! plate slot   <plate.ncl> <space> [--seed N]   print the slot a plate gave a space (JSON)
+//! plate export <file.ncl> <dxf|svg|json> [-o out] [--seed N] [--case N | --slot … | --in …]
 //! plate eval   <file.ncl>                       print the checked configuration data (JSON)
 //! plate schema                                  print the Nickel contract generated from the schema
 //! ```
@@ -16,8 +23,10 @@ use plate_core::{Diagnostic, Severity};
 
 const USAGE: &str = "usage:
   plate serve [--port 7878] [--web web/dist] [--workspace workspace]
-  plate check <file.ncl> [-v] [--seed N]
-  plate export <file.ncl> <dxf|svg|json> [-o <out>] [--seed N]
+  plate check <file.ncl> [-v] [--seed N | --seeds 1..10] [--json] [--strict]
+              [--case N | --slot slot.json | --in plate.ncl:space]
+  plate slot <plate.ncl> <space> [--seed N]
+  plate export <file.ncl> <dxf|svg|json> [-o <out>] [--seed N] [--case N | --slot … | --in …]
   plate eval <file.ncl>
   plate schema";
 
@@ -26,6 +35,7 @@ fn main() -> ExitCode {
     let result = match args.first().map(String::as_str) {
         None | Some("serve") => serve(args.get(1..).unwrap_or_default()),
         Some("check") => check(&args[1..]),
+        Some("slot") => slot(&args[1..]),
         Some("export") => export(&args[1..]),
         Some("eval") => eval(&args[1..]),
         Some("schema") => plate_config::compiled_schema().map(|c| println!("{}", c.nickel)),
@@ -177,20 +187,12 @@ fn seed_flag(args: &[String]) -> Result<Option<u64>, String> {
 }
 
 fn print_diagnostics(path: &str, root: &std::path::Path, diagnostics: &[Diagnostic]) -> String {
-    let cwd = std::env::current_dir().unwrap_or_default();
     diagnostics
         .iter()
         .map(|d| {
             let at = d.span.map(|s| format!(":{}:{}", s.start_line, s.start_col)).unwrap_or_default();
             // Diagnostics name the file they're in (an import, maybe), from where we are.
-            let path = match &d.file {
-                Some(f) => {
-                    let full = root.join(f);
-                    let shown = full.strip_prefix(&cwd).unwrap_or(&full).display().to_string();
-                    shown.strip_prefix(r"\\?\").map(str::to_owned).unwrap_or(shown)
-                }
-                None => path.to_owned(),
-            };
+            let path = diagnostic_path(path, root, d);
             let severity = match d.severity {
                 Severity::Error => "error",
                 Severity::Warning => "warning",
@@ -248,9 +250,214 @@ fn check(args: &[String]) -> Result<(), String> {
         }
         _ => {}
     }
+    let json = args.iter().any(|a| a == "--json");
+    let strict = args.iter().any(|a| a == "--strict");
+    if let Some(spec) = flag(args, "--seeds") {
+        return sweep(path, args, &spec, json, strict);
+    }
     let seed = seed_flag(args)?;
-    let solved =
-        checked.solve(plate_core::View::Default, seed).map_err(|d| print_diagnostics(path, &root, &d))?;
+    let (solved, root) = solve_once(path, args, Some(checked), seed)?;
+    if json {
+        let v = report_json(path, &root, &solved, seed);
+        println!("{}", serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?);
+    } else {
+        print_report(path, &root, &solved, args.iter().any(|a| a == "-v" || a == "--verbose"));
+    }
+    if strict && !met(&solved) {
+        return Err(format!("{path}: not every requirement is met"));
+    }
+    Ok(())
+}
+
+/// Every requirement met and no floor left over.
+fn met(solved: &plate_server::engine::Solved) -> bool {
+    solved.report.unmet == 0 && solved.report.leftover < 1e-6
+}
+
+/// What a plan file is solved in: `--case N` (a preview case), `--slot slot.json` (a slot saved
+/// with `plate slot`) or `--in plate.ncl:space` (the slot that plate gives that space, solved
+/// now at `seed`). Plates ignore it.
+fn view_flag(args: &[String], seed: Option<u64>) -> Result<plate_core::View, String> {
+    use plate_core::View;
+    if let Some(n) = flag(args, "--case") {
+        return n.parse().map(View::Case).map_err(|_| format!("invalid case `{n}`"));
+    }
+    if let Some(file) = flag(args, "--slot") {
+        let text = std::fs::read_to_string(&file).map_err(|e| format!("can't read {file}: {e}"))?;
+        return serde_json::from_str(&text).map(View::Slot).map_err(|e| format!("{file}: not a slot: {e}"));
+    }
+    if let Some(spec) = flag(args, "--in") {
+        let (plate, space) =
+            spec.rsplit_once(':').ok_or_else(|| format!("`--in {spec}`: expected plate.ncl:space"))?;
+        return slot_of(plate, space, seed).map(View::Slot);
+    }
+    Ok(View::Default)
+}
+
+/// The slot a plate (solved at `seed`, or its own) gives one of its spaces.
+fn slot_of(plate: &str, space: &str, seed: Option<u64>) -> Result<plate_core::layout::SlotInfo, String> {
+    let (solved, _) =
+        run_file(plate, &seed.map(|s| vec!["--seed".to_owned(), s.to_string()]).unwrap_or_default())?;
+    let spaces: Vec<_> = solved
+        .layout
+        .elements
+        .iter()
+        .filter_map(|e| Some((e.id.as_str(), e.space.as_ref()?.slot.as_ref()?)))
+        .collect();
+    spaces.iter().find(|(id, _)| *id == space).map(|(_, slot)| (*slot).clone()).ok_or_else(|| {
+        let ids: Vec<&str> = spaces.iter().map(|(id, _)| *id).collect();
+        format!("{plate}: no space `{space}` with a plan; spaces with one: {}", ids.join(", "))
+    })
+}
+
+/// Solve `path` (already checked, or checked now) in the view the flags ask for. With `--in`,
+/// `seed` is the plate's: the plan is solved with the seed its slot carries, as in the app.
+fn solve_once(
+    path: &str,
+    args: &[String],
+    checked: Option<plate_server::engine::Checked>,
+    seed: Option<u64>,
+) -> Result<(plate_server::engine::Solved, PathBuf), String> {
+    let Files { main, files, root } = with_siblings(path)?;
+    let checked = match checked {
+        Some(c) => c,
+        None => plate_server::engine::check_files(&main, &files)
+            .map_err(|d| print_diagnostics(path, &root, &d))?,
+    };
+    let view = view_flag(args, seed)?;
+    let seed = if flag(args, "--in").is_some() { None } else { seed };
+    let solved = checked.solve(view, seed).map_err(|d| print_diagnostics(path, &root, &d))?;
+    Ok((solved, root))
+}
+
+/// `--seeds 1..10` (both ends included) or `--seeds 1,4,9`.
+fn parse_seeds(spec: &str) -> Result<Vec<u64>, String> {
+    let bad = || format!("invalid seeds `{spec}`: write 1..10 or 1,4,9");
+    if let Some((a, b)) = spec.split_once("..") {
+        let (a, b): (u64, u64) =
+            (a.parse().map_err(|_| bad())?, b.trim_start_matches('=').parse().map_err(|_| bad())?);
+        if a > b || b - a > 10_000 {
+            return Err(bad());
+        }
+        return Ok((a..=b).collect());
+    }
+    spec.split(',').map(|s| s.trim().parse().map_err(|_| bad())).collect()
+}
+
+/// One line (or JSON object) per seed, and how many met every requirement.
+fn sweep(path: &str, args: &[String], spec: &str, json: bool, strict: bool) -> Result<(), String> {
+    let seeds = parse_seeds(spec)?;
+    let mut rows = Vec::new();
+    let mut good = 0;
+    for &seed in &seeds {
+        let (solved, root) = solve_once(path, args, None, Some(seed))?;
+        good += usize::from(met(&solved));
+        if json {
+            rows.push(report_json(path, &root, &solved, Some(seed)));
+        } else {
+            let r = &solved.report;
+            let u = solved.layout.units.symbol();
+            println!(
+                "seed {seed:>4}  {:<10} unmet {:<3} preferences {:<3} leftover {:>6.2} {u}²  {:>7.0} ms  {:>9} moves",
+                format!("{:?}", r.status).to_lowercase(),
+                r.unmet,
+                r.preferences,
+                r.leftover,
+                solved.timings.solve_ms,
+                solved.moves,
+            );
+        }
+    }
+    if json {
+        let v = serde_json::json!({ "file": path, "seeds": seeds.len(), "met": good, "runs": rows });
+        println!("{}", serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?);
+    } else {
+        println!("{good} of {} seeds meet every requirement with no floor left over", seeds.len());
+    }
+    if strict && good < seeds.len() {
+        return Err(format!("{path}: {} of {} seeds fall short", seeds.len() - good, seeds.len()));
+    }
+    Ok(())
+}
+
+/// Where a diagnostic is, from where we are: the file it names (an import, maybe) or `path`.
+fn diagnostic_path(path: &str, root: &std::path::Path, d: &Diagnostic) -> String {
+    let cwd = std::env::current_dir().unwrap_or_default();
+    match &d.file {
+        Some(f) => {
+            let full = root.join(f);
+            let shown = full.strip_prefix(&cwd).unwrap_or(&full).display().to_string();
+            shown.strip_prefix(r"\\?\").map(str::to_owned).unwrap_or(shown)
+        }
+        None => path.to_owned(),
+    }
+}
+
+/// `plate check --json`: everything an agent needs to judge a solve without reading text.
+fn report_json(
+    path: &str,
+    root: &std::path::Path,
+    solved: &plate_server::engine::Solved,
+    seed: Option<u64>,
+) -> serde_json::Value {
+    use plate_core::layout::ElementKind;
+    use serde_json::json;
+    let layout = &solved.layout;
+    let mut counts = serde_json::Map::new();
+    for e in &layout.elements {
+        let k =
+            serde_json::to_value(e.kind).ok().and_then(|v| v.as_str().map(str::to_owned)).unwrap_or_default();
+        let n = counts.entry(k).or_insert(json!(0));
+        *n = json!(n.as_u64().unwrap_or(0) + 1);
+    }
+    let spaces: Vec<_> = layout
+        .elements
+        .iter()
+        .filter(|e| e.kind == ElementKind::Space)
+        .map(|e| {
+            let info = e.space.as_ref();
+            json!({
+                "id": e.id,
+                "area": e.area,
+                "typical": info.and_then(|i| i.typical.clone()),
+                "bounds": plate_core::Bounds::from_points(&e.points),
+            })
+        })
+        .collect();
+    let diagnostics: Vec<_> = solved
+        .diagnostics
+        .iter()
+        .map(|d| {
+            json!({
+                "severity": d.severity,
+                "code": d.code,
+                "message": d.message,
+                "notes": d.notes,
+                "file": diagnostic_path(path, root, d),
+                "line": d.span.map(|s| s.start_line),
+                "column": d.span.map(|s| s.start_col),
+                "pointer": d.pointer,
+            })
+        })
+        .collect();
+    json!({
+        "file": path,
+        "name": layout.name,
+        "seed": seed,
+        "met": met(solved),
+        "report": solved.report,
+        "units": layout.units,
+        "counts": counts,
+        "spaces": spaces,
+        "circuits": layout.circuits.len(),
+        "timings": solved.timings,
+        "moves": solved.moves,
+        "diagnostics": diagnostics,
+    })
+}
+
+/// `plate check`'s summary line, spaces with `-v`, then diagnostics.
+fn print_report(path: &str, root: &std::path::Path, solved: &plate_server::engine::Solved, verbose: bool) {
     use plate_core::layout::ElementKind;
     let layout = &solved.layout;
     let u = layout.units.symbol();
@@ -283,15 +490,16 @@ fn check(args: &[String]) -> Result<(), String> {
         status = format!("{status} ({})", why.join(", "));
     }
     println!(
-        "{status}: \"{}\": {shape}; {} spaces, {} doors, {} windows (eval {} ms, solve {} ms)",
+        "{status}: \"{}\": {shape}; {} spaces, {} doors, {} windows (eval {} ms, solve {} ms, {} moves)",
         layout.name,
         count(ElementKind::Space),
         count(ElementKind::Door),
         count(ElementKind::Window),
         solved.timings.eval_ms,
         solved.timings.solve_ms,
+        solved.moves,
     );
-    if args.iter().any(|a| a == "-v" || a == "--verbose") {
+    if verbose {
         for e in layout.elements.iter().filter(|e| e.kind == ElementKind::Space) {
             let info = e.space.as_ref().expect("space info");
             let typical = info.typical.as_ref().map(|t| format!(" [type {t}]")).unwrap_or_default();
@@ -299,8 +507,19 @@ fn check(args: &[String]) -> Result<(), String> {
         }
     }
     if !solved.diagnostics.is_empty() {
-        println!("{}", print_diagnostics(&args[0], &root, &solved.diagnostics));
+        println!("{}", print_diagnostics(path, root, &solved.diagnostics));
     }
+}
+
+/// `plate slot plate.ncl space`: the slot a plate gives a space, to solve its plan file in
+/// (`plate check plan.ncl --slot slot.json`) without solving the plate again.
+fn slot(args: &[String]) -> Result<(), String> {
+    let (plate, space) = match args {
+        [plate, space, ..] => (plate, space),
+        _ => return Err(USAGE.to_owned()),
+    };
+    let slot = slot_of(plate, space, seed_flag(args)?)?;
+    println!("{}", serde_json::to_string_pretty(&slot).map_err(|e| e.to_string())?);
     Ok(())
 }
 
@@ -319,7 +538,7 @@ fn export(args: &[String]) -> Result<(), String> {
         .get(1)
         .and_then(|f| plate_export::Format::parse(f))
         .ok_or_else(|| format!("expected an export format (dxf, svg, json)\n{USAGE}"))?;
-    let (solved, _) = run_file(path, args)?;
+    let (solved, _) = solve_once(path, args, None, seed_flag(args)?)?;
     let bytes = plate_export::export(&solved.layout, format).map_err(|e| e.to_string())?;
     let out = flag(args, "-o")
         .unwrap_or_else(|| format!("{}.{}", plate_export::file_stem(&solved.layout), format.extension()));

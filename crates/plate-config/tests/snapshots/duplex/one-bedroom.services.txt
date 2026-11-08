@@ -1,0 +1,8 @@
+part lighting.downlight in hall × 3
+part lighting.light in bath × 1
+part lighting.light in bedroom × 1
+part lighting.light in living × 3
+part lighting.switch in bath × 1
+part lighting.switch in bedroom × 1
+part lighting.switch in hall × 1
+part lighting.switch in living × 1

@@ -39,7 +39,7 @@ impl Solver for PlateSolver {
 
 impl Solution {
     pub fn new(layout: Layout, diagnostics: Vec<Diagnostic>, report: crate::layout::Report) -> Self {
-        Solution { layout, diagnostics, report }
+        Solution { layout, diagnostics, report, moves: 0 }
     }
 }
 

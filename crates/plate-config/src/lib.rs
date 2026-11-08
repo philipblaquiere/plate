@@ -698,87 +698,270 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
         files
     }
 
+    /// One test per example file, so `cargo test -p plate-config examples::duplex` checks one
+    /// project and every failing file is listed, not just the first. A plate must solve with
+    /// nothing unmet and no floor left over at its seed; a plan, every preview it offers; a
+    /// library must match its own definition. `every_example_file_has_a_test` keeps the list whole.
+    macro_rules! example_tests {
+        ($($name:ident => $project:literal, $file:literal;)*) => {
+            mod examples {
+                $(
+                    #[test]
+                    fn $name() {
+                        super::check_example_file($project, $file);
+                    }
+                )*
+            }
+            const EXAMPLE_FILES: &[(&str, &str)] = &[$(($project, $file)),*];
+        };
+    }
+
+    example_tests! {
+        commercial_annex => "commercial", "annex.ncl";
+        commercial_hotel => "commercial", "hotel.ncl";
+        commercial_hotel_bathroom => "commercial", "hotel/bathroom.ncl";
+        commercial_hotel_cafe => "commercial", "hotel/cafe.ncl";
+        commercial_hotel_guest_room => "commercial", "hotel/guest-room.ncl";
+        commercial_hotel_public => "commercial", "hotel/public.ncl";
+        commercial_hotel_wing => "commercial", "hotel/wing.ncl";
+        commercial_office => "commercial", "office.ncl";
+        commercial_office_core => "commercial", "office/core.ncl";
+        commercial_office_meeting => "commercial", "office/meeting.ncl";
+        commercial_office_pantry => "commercial", "office/pantry.ncl";
+        commercial_office_workplace => "commercial", "office/workplace.ncl";
+        duplex_build_assemblies_basic => "duplex", "build/assemblies/basic.ncl";
+        duplex_build_assemblies_wood_frame => "duplex", "build/assemblies/wood-frame.ncl";
+        duplex_build_codes_cec => "duplex", "build/codes/cec.ncl";
+        duplex_build_codes_nec => "duplex", "build/codes/nec.ncl";
+        duplex_build_media_nm_b => "duplex", "build/media/nm-b.ncl";
+        duplex_build_media_nmd90 => "duplex", "build/media/nmd90.ncl";
+        duplex_build_services_heat => "duplex", "build/services/heat.ncl";
+        duplex_build_services_lighting => "duplex", "build/services/lighting.ncl";
+        duplex_build_services_plumbing => "duplex", "build/services/plumbing.ncl";
+        duplex_build_services_power => "duplex", "build/services/power.ncl";
+        duplex_duplex => "duplex", "duplex.ncl";
+        duplex_one_bedroom => "duplex", "one-bedroom.ncl";
+        duplex_plans_flat => "duplex", "plans/flat.ncl";
+        home_apartment => "home", "apartment.ncl";
+        home_plans_bathroom => "home", "plans/bathroom.ncl";
+        home_plans_bedroom => "home", "plans/bedroom.ncl";
+        home_plans_house => "home", "plans/house.ncl";
+        home_plans_kitchen => "home", "plans/kitchen.ncl";
+        home_plans_living => "home", "plans/living.ncl";
+        home_studio => "home", "studio.ncl";
+        home_villa => "home", "villa.ncl";
+    }
+
     #[test]
-    fn every_example_passes_the_schema_and_the_rust_types() {
-        let mut libraries = 0;
-        let mut plates = 0;
+    fn every_example_file_has_a_test() {
+        let mut found = Vec::new();
+        let (mut plates, mut libraries) = (0, 0);
         for project in example_projects() {
             let files = example(&project);
-            plates += check_example_project(&project, &files, &mut libraries);
+            for (name, source) in &files {
+                found.push(format!("{project}/{name}"));
+                if is_plate(source) {
+                    plates += 1;
+                } else if let Ok((_, ev)) = check_files(Workspace { main: name, files: &files }) {
+                    libraries += usize::from(matches!(ev.kind.definition(), Some("Service" | "Assemblies")));
+                }
+            }
+        }
+        let listed: Vec<String> = EXAMPLE_FILES.iter().map(|(p, f)| format!("{p}/{f}")).collect();
+        for f in &found {
+            assert!(listed.contains(f), "add `{f}` to example_tests! in plate-config/src/lib.rs");
+        }
+        for f in &listed {
+            assert!(found.contains(f), "`{f}` is in example_tests! but not in examples/");
         }
         assert!(plates >= 3);
         assert!(libraries >= 4, "example services and assemblies");
     }
 
-    /// Checks every plate and plan of a project. How many plates it has.
-    fn check_example_project(
-        project: &str,
-        files: &BTreeMap<String, String>,
-        libraries: &mut usize,
-    ) -> usize {
-        let mut count = 0;
-        // Plate files are checked as plates (with whatever they import); plans are imported.
-        for name in files.iter().filter(|(_, s)| is_plate(s)).map(|(n, _)| n) {
-            count += 1;
-            let (config, evaluation) = check_files(Workspace { main: name, files })
-                .unwrap_or_else(|e| panic!("{project}/{name}: {e:?}"));
-            // Every example meets every requirement at the seed it ships with, with no floor
-            // left over (preferences may be missed: the report says so).
+    /// Test fixtures (`fixtures/*.ncl`) are pinned: every requirement met, and nothing for the
+    /// engine to move, so the layouts the web tests read from `web/src/fixtures/` stay put.
+    #[test]
+    fn fixtures_are_pinned_and_met() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures");
+        let mut files = BTreeMap::new();
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let path = entry.unwrap().path();
+            if path.extension().is_some_and(|e| e == "ncl") {
+                let name = path.file_name().unwrap().to_string_lossy().into_owned();
+                files.insert(name, std::fs::read_to_string(&path).unwrap());
+            }
+        }
+        assert!(!files.is_empty());
+        for name in files.keys() {
+            let (config, _) = check_files(Workspace { main: name, files: &files })
+                .unwrap_or_else(|e| panic!("{name}: {e:?}"));
             let solved = plate_core::solve::solve(&config);
+            let found: Vec<&str> = solved.diagnostics.iter().map(|d| d.message.as_str()).collect();
+            assert!(solved.report.unmet == 0 && solved.report.leftover < 1e-6, "{name}: {found:?}");
+            assert_eq!(solved.moves, 0, "{name}: a fixture must pin every space");
+        }
+    }
+
+    /// What each example solves to, in short, checked against `tests/snapshots/`: one file for
+    /// the layout (the report, every space's size and place, walls by assembly, openings) and one
+    /// for services (parts per room, circuits). A change that should only touch services leaves
+    /// the layout file alone; one that moves rooms shows which. Areas and coordinates are rounded
+    /// to 2 decimals. `PLATE_SNAPSHOTS=update cargo test -p plate-config` accepts what changed;
+    /// review the diff before committing it. A missing snapshot is written and passes.
+    fn snapshot(project: &str, name: &str, solved: &plate_core::solve::Solution) {
+        use plate_core::layout::ElementKind;
+        use std::collections::BTreeMap;
+        use std::fmt::Write;
+        let r = &solved.report;
+        let mut layout = format!(
+            "status {:?} · unmet {} · preferences {} · leftover {:.2} · spaces {}\n",
+            r.status, r.unmet, r.preferences, r.leftover, r.spaces
+        )
+        .to_lowercase();
+        let mut walls: BTreeMap<String, usize> = BTreeMap::new();
+        let mut parts: BTreeMap<(String, String), usize> = BTreeMap::new();
+        for e in &solved.layout.elements {
+            match e.kind {
+                ElementKind::Space => {
+                    let b = plate_core::Bounds::from_points(&e.points);
+                    let kind =
+                        e.space.as_ref().map(|s| format!("{:?}", s.kind).to_lowercase()).unwrap_or_default();
+                    let _ = writeln!(
+                        layout,
+                        "space {} {kind} {:.2} [{:.2}, {:.2} → {:.2}, {:.2}]",
+                        e.id,
+                        e.area.unwrap_or(0.0),
+                        b.min_x,
+                        b.min_y,
+                        b.max_x,
+                        b.max_y
+                    );
+                }
+                ElementKind::Door | ElementKind::Window => {
+                    let _ = writeln!(layout, "{:?} {}", e.kind, e.id);
+                }
+                ElementKind::Wall => {
+                    *walls
+                        .entry(e.wall.as_ref().map(|w| w.assembly.clone()).unwrap_or_default())
+                        .or_default() += 1;
+                }
+                ElementKind::Part => {
+                    if let Some(p) = &e.part {
+                        *parts.entry((format!("{}.{}", p.service, p.part), p.space.clone())).or_default() +=
+                            1;
+                    }
+                }
+                _ => {}
+            }
+        }
+        for (assembly, n) in &walls {
+            let _ = writeln!(layout, "walls {assembly} × {n}");
+        }
+        let mut services = String::new();
+        for ((part, space), n) in &parts {
+            let _ = writeln!(services, "part {part} in {space} × {n}");
+        }
+        for c in &solved.layout.circuits {
+            let devices: Vec<String> = c.devices.iter().map(|(d, n)| format!("{d} × {n}")).collect();
+            let _ = writeln!(
+                services,
+                "circuit {}/{} {} #{} {} {:.2} [{}]",
+                c.service,
+                c.network,
+                c.scope,
+                c.group,
+                c.medium.as_deref().unwrap_or("-"),
+                c.length,
+                devices.join(", ")
+            );
+        }
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots").join(project);
+        let stem = name.replace('/', "__").replace(".ncl", "");
+        let mut failures = Vec::new();
+        for (what, text) in [("layout", layout), ("services", services)] {
+            let path = dir.join(format!("{stem}.{what}.txt"));
+            let update = std::env::var("PLATE_SNAPSHOTS").is_ok_and(|v| v == "update");
+            match std::fs::read_to_string(&path) {
+                Ok(old) if old == text => {}
+                Ok(old) if !update => {
+                    let (a, b): (Vec<&str>, Vec<&str>) = (old.lines().collect(), text.lines().collect());
+                    let gone: Vec<String> =
+                        a.iter().filter(|l| !b.contains(l)).map(|l| format!("  - {l}")).collect();
+                    let new: Vec<String> =
+                        b.iter().filter(|l| !a.contains(l)).map(|l| format!("  + {l}")).collect();
+                    let shown: Vec<String> = gone.into_iter().chain(new).take(40).collect();
+                    failures.push(format!("{}:\n{}", path.display(), shown.join("\n")));
+                }
+                _ => {
+                    std::fs::create_dir_all(&dir).unwrap();
+                    std::fs::write(&path, text).unwrap();
+                }
+            }
+        }
+        assert!(
+            failures.is_empty(),
+            "{project}/{name} solves differently from its snapshot (PLATE_SNAPSHOTS=update to accept):\n{}",
+            failures.join("\n")
+        );
+    }
+
+    /// Checks one file of an example project: a plate solves (with whatever it imports); a plan
+    /// file is checked against `Plan` and each of its previews solves; a library against its own
+    /// definition.
+    fn check_example_file(project: &str, name: &str) {
+        let files = example(project);
+        let source = files.get(name).unwrap_or_else(|| panic!("no {project}/{name}"));
+        let met = |solved: &plate_core::solve::Solution, what: &str| {
             let found: Vec<&str> = solved
                 .diagnostics
                 .iter()
                 .filter(|d| d.code != Some(plate_core::diagnostic::Code::Preference))
                 .map(|d| d.message.as_str())
                 .collect();
-            assert!(solved.report.unmet == 0 && solved.report.leftover < 1e-6, "{project}/{name}: {found:?}");
+            assert!(solved.report.unmet == 0 && solved.report.leftover < 1e-6, "{project}/{what}: {found:?}");
+        };
+        let schema = schema_json().unwrap();
+        if is_plate(source) {
+            let (config, evaluation) = check_files(Workspace { main: name, files: &files })
+                .unwrap_or_else(|e| panic!("{project}/{name}: {e:?}"));
+            // Every example meets every requirement at the seed it ships with, with no floor
+            // left over (preferences may be missed: the report says so).
+            let solved = plate_core::solve::solve(&config);
+            met(&solved, name);
             assert!(solved.report.status != plate_core::layout::Status::Incomplete, "{name}");
+            snapshot(project, name, &solved);
             // The data also passes a standard JSON Schema validator, which keeps the schema
             // honest JSON Schema rather than something only our compiler reads.
-            let validator = jsonschema::validator_for(schema_json().unwrap()).unwrap();
+            let validator = jsonschema::validator_for(schema).unwrap();
             if let Err(e) = validator.validate(&evaluation.value) {
                 panic!("{name}: {e}");
             }
+            return;
         }
         // Plan files are checked on their own too (they're previewed), against `Plan`.
-        let schema = schema_json().unwrap();
-        let plan_schema = serde_json::json!({ "$ref": "#/$defs/Plan", "$defs": schema["$defs"].clone() });
-        let validator = jsonschema::validator_for(&plan_schema).unwrap();
-        for name in files.iter().filter(|(_, s)| !is_plate(s)).map(|(n, _)| n) {
-            let (config, evaluation) =
-                check_files(Workspace { main: name, files }).unwrap_or_else(|e| panic!("{name}: {e:?}"));
-            // A library (a service, a set of assemblies) is checked against its own definition.
-            if let Some(def @ ("Service" | "Assemblies")) = evaluation.kind.definition() {
-                *libraries += 1;
-                let def_schema =
-                    serde_json::json!({ "$ref": format!("#/$defs/{def}"), "$defs": schema["$defs"].clone() });
-                let v = jsonschema::validator_for(&def_schema).unwrap();
-                if let Err(e) = v.validate(&evaluation.value) {
-                    panic!("{name}: {e}");
-                }
-                continue;
-            }
-            assert!(config.is_plan(), "{name}");
-            if let Err(e) = validator.validate(&evaluation.value) {
+        let (config, evaluation) =
+            check_files(Workspace { main: name, files: &files }).unwrap_or_else(|e| panic!("{name}: {e:?}"));
+        // A library (a service, a set of assemblies) is checked against its own definition.
+        if let Some(def @ ("Service" | "Assemblies")) = evaluation.kind.definition() {
+            let def_schema =
+                serde_json::json!({ "$ref": format!("#/$defs/{def}"), "$defs": schema["$defs"].clone() });
+            if let Err(e) = jsonschema::validator_for(&def_schema).unwrap().validate(&evaluation.value) {
                 panic!("{name}: {e}");
             }
-            // Every preview it offers solves without complaint.
-            let cases = config.preview.as_ref().map_or(1, |p| p.cases().len());
-            for i in 0..cases {
-                let solved = plate_core::solve::solve_view(&config, &plate_core::View::Case(i));
-                let found: Vec<&str> = solved
-                    .diagnostics
-                    .iter()
-                    .filter(|d| d.code != Some(plate_core::diagnostic::Code::Preference))
-                    .map(|d| d.message.as_str())
-                    .collect();
-                assert!(
-                    solved.report.unmet == 0 && solved.report.leftover < 1e-6,
-                    "{name}, preview {i}: {found:?}"
-                );
-            }
+            return;
         }
-        count
+        assert!(config.is_plan(), "{name}");
+        let plan_schema = serde_json::json!({ "$ref": "#/$defs/Plan", "$defs": schema["$defs"].clone() });
+        if let Err(e) = jsonschema::validator_for(&plan_schema).unwrap().validate(&evaluation.value) {
+            panic!("{name}: {e}");
+        }
+        // Every preview it offers solves without complaint.
+        let cases = config.preview.as_ref().map_or(1, |p| p.cases().len());
+        for i in 0..cases {
+            let solved = plate_core::solve::solve_view(&config, &plate_core::View::Case(i));
+            met(&solved, &format!("{name}, preview {i}"));
+            snapshot(project, &format!("{name}.case{i}"), &solved);
+        }
     }
 
     /// The examples show what the app can do: every field, rule helper and kind of space is used

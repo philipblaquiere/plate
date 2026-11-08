@@ -24,6 +24,8 @@ pub struct Solved {
     pub report: plate_core::layout::Report,
     pub solver: &'static str,
     pub timings: Timings,
+    /// Annealing moves the solve made: 0 when nothing could move (every space pinned).
+    pub moves: u64,
 }
 
 /// The solver used for every request. When user-supplied solvers arrive, this becomes a
@@ -149,6 +151,7 @@ fn solve(
         report: solution.report,
         solver: solver.name(),
         timings: Timings { eval_ms: ms(eval), solve_ms: ms(solve_time) },
+        moves: solution.moves,
     })
 }
 

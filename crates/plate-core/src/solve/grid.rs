@@ -687,9 +687,39 @@ struct Foreseen {
 
 pub fn solve(plan: &Plan, slot: &Slot, ctx: &Ctx) -> LevelResult {
     let mut issues = Vec::new();
+    let Some((mut problem, mut rects)) = setup(plan, slot, ctx, &mut issues) else {
+        return LevelResult { issues, ..Default::default() };
+    };
+    problem.anneal(&mut rects);
+
+    // Number instances by position, then report against the final names.
+    problem.renumber(&mut rects);
+    problem.rules = problem.compile(plan, &mut Vec::new());
+    problem.report(&rects, &mut issues);
+    if std::env::var_os("PLATE_DEBUG").is_some() && issues.iter().any(|i| i.level == Level::Required) {
+        eprintln!("--- slot {:?}", slot.boundary);
+        for p in &slot.ports {
+            eprintln!("    {:?} {:.2},{:.2} - {:.2},{:.2}", p.roles, p.a.x, p.a.y, p.b.x, p.b.y);
+        }
+        for i in &issues {
+            eprintln!("    ! {}", i.message);
+        }
+    }
+    problem.result(rects, issues, slot)
+}
+
+/// The problem a level poses, and where its rectangles start (pinned ones in place), before any
+/// annealing: what `solve` anneals, and what the tests below drive move by move. `None` when
+/// there's nothing to place (or no room to place it; `issues` says so).
+fn setup<'a>(
+    plan: &Plan,
+    slot: &Slot,
+    ctx: &'a Ctx,
+    issues: &mut Vec<Issue>,
+) -> Option<(Problem<'a>, Vec<R>)> {
     let types = SpaceType::all(plan, ctx.units);
     if types.is_empty() {
-        return LevelResult::default();
+        return None;
     }
 
     // The area to pack into: the slot, or a square around the origin or spine.
@@ -708,7 +738,7 @@ pub fn solve(plan: &Plan, slot: &Slot, ctx: &Ctx) -> LevelResult {
     let grid = Grid::new(&polygon, &holes, ctx.grid, max_cells(&types, ctx));
     if grid.inside_cells == 0 {
         issues.push(Issue::new("/spaces", "the space is too small for the grid to place anything"));
-        return LevelResult { issues, ..Default::default() };
+        return None;
     }
     let cell = grid.gx * grid.gy;
     let inside_area = grid.inside_cells as f64 * cell;
@@ -880,27 +910,12 @@ pub fn solve(plan: &Plan, slot: &Slot, ctx: &Ctx) -> LevelResult {
         walls: Foreseen::default(),
     };
     problem.ordered = problem.types.iter().map(|_| false).collect();
-    problem.rules = problem.compile(plan, &mut issues);
+    problem.rules = problem.compile(plan, issues);
     problem.foresee_walls(plan, slot);
 
     let mut rects = problem.initial();
-    problem.pin(&mut rects, &pin_at, &mut issues);
-    problem.anneal(&mut rects);
-
-    // Number instances by position, then report against the final names.
-    problem.renumber(&mut rects);
-    problem.rules = problem.compile(plan, &mut Vec::new());
-    problem.report(&rects, &mut issues);
-    if std::env::var_os("PLATE_DEBUG").is_some() && issues.iter().any(|i| i.level == Level::Required) {
-        eprintln!("--- slot {:?}", slot.boundary);
-        for p in &slot.ports {
-            eprintln!("    {:?} {:.2},{:.2} - {:.2},{:.2}", p.roles, p.a.x, p.a.y, p.b.x, p.b.y);
-        }
-        for i in &issues {
-            eprintln!("    ! {}", i.message);
-        }
-    }
-    problem.result(rects, issues, slot)
+    problem.pin(&mut rects, &pin_at, issues);
+    Some((problem, rects))
 }
 
 fn port_lines(ports: &[PortSeg], grid: &Grid) -> Vec<PortLine> {
@@ -2218,6 +2233,7 @@ impl Problem<'_> {
             if active.is_empty() && optional.is_empty() {
                 break;
             }
+            self.ctx.moves.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let roll = rng.f64();
             let mut changed: Vec<(usize, R)> = Vec::with_capacity(2);
             if (roll < 0.08 && !optional.is_empty()) || active.is_empty() {
@@ -3622,4 +3638,280 @@ fn centred(seg: (Point, Point), width: f64, clear: f64) -> Option<(Point, Point)
         Point::new(mid.x - ux * w / 2.0, mid.y - uy * w / 2.0),
         Point::new(mid.x + ux * w / 2.0, mid.y + uy * w / 2.0),
     ))
+}
+
+/// The engine's cost terms, driven move by move without annealing. The running total the
+/// annealer keeps (`apply` + `FillState::update`/`recut`/`restore`) must always equal a full
+/// recount (`total`). In `anneal_once` a `debug_assert` checks that every 1,000 moves, on
+/// whatever moves the seed happens to make; here every move is checked, so a drift is caught at
+/// the move that caused it, with the instance and both rectangles named.
+#[cfg(test)]
+mod tests {
+    use serde_json::{json, Value};
+
+    use super::*;
+    use crate::config::Config;
+    use crate::units::Units;
+
+    /// A plate's root level, as `solve_plate` poses it (the boundary must start with its
+    /// longest edge along +x from the origin, so no turning is needed).
+    fn level(v: Value) -> (Plan, Slot, Units, f64) {
+        let config = Config::from_value(v).unwrap();
+        let units = config.units();
+        let points = config.start_points();
+        let roles = config.edge_roles();
+        let n = points.len();
+        let ports = (0..n).map(|i| PortSeg::new(roles[i].clone(), points[i], points[(i + 1) % n])).collect();
+        let slot =
+            Slot { boundary: Some(points), ports, spine: None, pin: Transform::IDENTITY, holes: Vec::new() };
+        let (plan, _) = super::super::context::prepare(&config.plan(), None, None, "");
+        let grid = super::super::plan_grid(&plan, units, None);
+        (plan, slot, units, grid)
+    }
+
+    fn ctx(units: Units, grid: f64) -> Ctx<'static> {
+        Ctx {
+            units,
+            grid,
+            seed: 1,
+            work: Default::default(),
+            moves: Default::default(),
+            plan_pointer: "",
+            root: true,
+        }
+    }
+
+    /// Make `steps` random moves of the kinds annealing makes (shift, resize, turn, switch an
+    /// optional instance), rejecting about a third (undone as annealing undoes them), and check
+    /// the running cost against a full recount after every one.
+    fn running_cost_never_drifts(v: Value, seeds: u64, steps: usize) {
+        let (plan, slot, units, grid) = level(v);
+        let ctx = ctx(units, grid);
+        let mut issues = Vec::new();
+        let (p, start) = setup(&plan, &slot, &ctx, &mut issues).expect("something to place");
+        let members = p.membership();
+        let n = start.len();
+        let movable: Vec<usize> = (0..n).filter(|&i| !p.pinned[i]).collect();
+        assert!(!movable.is_empty(), "nothing to move");
+        for seed in 1..=seeds {
+            let mut rng = Rng::new(seed);
+            let mut rects = start.clone();
+            let hs = 0.5 + rng.f64();
+            let mut fill = p.fill.as_ref().map(|_| FillState::new(&p, &rects, hs, false));
+            let mut cost = p.total(&rects, hs);
+            for step in 0..steps {
+                let i = movable[rng.below(movable.len())];
+                let old = rects[i];
+                let mut r = old;
+                match rng.below(5) {
+                    0 => {
+                        r.x += rng.around(3);
+                        r.y += rng.around(3);
+                    }
+                    1 => r.w += rng.around(2),
+                    2 => r.h += rng.around(2),
+                    3 if p.fixture(i).is_some() => turn(&mut r, 1 + rng.below(3) as u8),
+                    3 => turn(&mut r, 1),
+                    _ if !p.mandatory[i] => r.on = !r.on,
+                    _ => move_side(&mut r, rng.below(4), rng.around(2)),
+                }
+                p.clamp(&mut r);
+                let mut delta = p.apply(i, r, &mut rects, &members, hs, &mut fill);
+                let undo = fill.as_mut().map(|f| {
+                    let (d, undo) = f.update(&p, &rects, &[(i, old, r)], hs);
+                    delta += d;
+                    undo
+                });
+                if let Some(f) = fill.as_mut() {
+                    delta += f.recut(&p, hs);
+                }
+                if rng.below(3) == 0 {
+                    if let Some(f) = fill.as_mut() {
+                        f.occ.shift(&p.grid, &rects[i], &old);
+                    }
+                    rects[i] = old;
+                    if let (Some(f), Some(u)) = (fill.as_mut(), undo) {
+                        f.restore(u);
+                    }
+                } else {
+                    cost += delta;
+                }
+                let full = p.total(&rects, hs);
+                assert!(
+                    (cost - full).abs() < 1e-6 * (1.0 + full.abs()),
+                    "seed {seed}, move {step}: {} {old:?} → {r:?}: running {cost}, recounted {full}",
+                    p.inst[i].name
+                );
+            }
+        }
+    }
+
+    fn plate(w: f64, h: f64, rest: Value) -> Value {
+        let mut v = json!({
+            "start": { "mode": "boundary", "points": [[0, 0], [w, 0], [w, h], [0, h]], "ports": ["facade", "party", "facade", "party"] },
+        });
+        for (k, x) in rest.as_object().unwrap() {
+            v[k] = x.clone();
+        }
+        v
+    }
+
+    #[test]
+    fn rooms_and_rules() {
+        running_cost_never_drifts(
+            plate(
+                14.0,
+                9.0,
+                json!({
+                    "spaces": {
+                        "living": { "area": { "min": 25, "max": 40 }, "side": { "min": 4 } },
+                        "kitchen": { "area": { "min": 10, "max": 16 }, "aspect": 2 },
+                        "bedroom": { "count": 2, "area": { "min": 11, "max": 15 }, "side": { "min": 3 } },
+                        "bath": { "area": { "min": 4, "max": 7 } },
+                    },
+                    "rules": [
+                        { "rule": "door", "a": ["bedroom", "bath", "kitchen"], "b": "living" },
+                        { "rule": "window", "a": ["living", "bedroom"] },
+                        { "rule": "touch", "a": "kitchen", "b": "living" },
+                        { "rule": "near", "a": "bath", "b": "bedroom", "distance": 2 },
+                        { "rule": "apart", "a": "bath", "b": "kitchen", "distance": 3 },
+                    ],
+                }),
+            ),
+            6,
+            400,
+        );
+    }
+
+    #[test]
+    fn a_fill_and_optional_rooms() {
+        running_cost_never_drifts(
+            plate(
+                16.0,
+                10.0,
+                json!({
+                    "spaces": {
+                        "hall": { "kind": "circulation", "fill": true, "area": { "min": 10, "max": 60 }, "side": { "min": 1.2 } },
+                        "office": { "count": { "min": 2, "max": 6 }, "area": { "min": 9, "max": 14 }, "side": { "min": 2.8 } },
+                        "meeting": { "area": { "min": 18, "max": 26 } },
+                    },
+                    "rules": [
+                        { "rule": "door", "a": ["office", "meeting"], "b": "hall" },
+                        { "rule": "window", "a": "office" },
+                    ],
+                }),
+            ),
+            6,
+            300,
+        );
+    }
+
+    #[test]
+    fn fixtures_with_clearances() {
+        running_cost_never_drifts(
+            plate(
+                3.0,
+                2.5,
+                json!({
+                    "spaces": {
+                        "toilet": { "kind": "fixture", "width": 0.4, "depth": 0.7, "clearance": { "front": 0.6 }, "against": "wall" },
+                        "basin": { "kind": "fixture", "width": 0.6, "depth": 0.45, "clearance": { "front": 0.7 }, "against": "wall" },
+                        "shower": { "kind": "fixture", "width": 0.9, "depth": 0.9, "clearance": { "front": 0.6 }, "against": "wall" },
+                    },
+                    "rules": [{ "rule": "apart", "a": "toilet", "b": "basin", "distance": 0.2 }],
+                }),
+            ),
+            6,
+            400,
+        );
+    }
+
+    #[test]
+    fn rooms_with_plans_inside_and_walls() {
+        let bedroom = json!({
+            "needs": { "width": { "min": 3 }, "depth": { "min": 3 } },
+            "spaces": { "bed": { "kind": "fixture", "width": 1.5, "depth": 2, "clearance": { "front": 0.6 } } },
+        });
+        running_cost_never_drifts(
+            plate(
+                12.0,
+                8.0,
+                json!({
+                    "assemblies": {
+                        "exterior": { "on": "facade", "thickness": 0.3 },
+                        "party": { "on": "party", "thickness": 0.25 },
+                        "partition": { "on": ["partition", "link", "entrance"], "thickness": 0.12 },
+                    },
+                    "spaces": {
+                        "hall": { "kind": "circulation", "fill": true, "area": { "min": 8, "max": 50 }, "side": { "min": 1.2 } },
+                        "bedroom": { "count": 2, "area": { "min": 11, "max": 16 }, "plan": bedroom },
+                        "living": { "area": { "min": 20, "max": 34 } },
+                    },
+                    "rules": [{ "rule": "door", "a": ["bedroom", "living"], "b": "hall" }],
+                }),
+            ),
+            4,
+            300,
+        );
+    }
+
+    #[test]
+    fn pinned_spaces_start_where_they_are_pinned_and_leave_nothing_to_move() {
+        let (plan, slot, units, grid) = level(plate(
+            10.0,
+            6.0,
+            json!({
+                "spaces": {
+                    "a": { "at": [0, 0], "width": 4, "depth": 3 },
+                    "b": { "at": [6, 3], "width": 4, "depth": 3 },
+                },
+            }),
+        ));
+        let ctx = ctx(units, grid);
+        let mut issues = Vec::new();
+        let (p, rects) = setup(&plan, &slot, &ctx, &mut issues).unwrap();
+        assert!(issues.is_empty(), "{:?}", issues.iter().map(|i| &i.message).collect::<Vec<_>>());
+        assert!(p.pinned.iter().all(|&x| x));
+        let got: Vec<Rect> = rects.iter().map(|r| p.grid.rect(r)).collect();
+        let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        assert!(
+            near(got[0].x0, 0.0) && near(got[0].y0, 0.0) && near(got[0].x1, 4.0) && near(got[0].y1, 3.0),
+            "{got:?}"
+        );
+        assert!(
+            near(got[1].x0, 6.0) && near(got[1].y0, 3.0) && near(got[1].x1, 10.0) && near(got[1].y1, 6.0),
+            "{got:?}"
+        );
+        // And the engine makes no move at all.
+        let result = solve(&plan, &slot, &ctx);
+        assert_eq!(result.placed.len(), 2);
+        assert_eq!(ctx.moves.load(std::sync::atomic::Ordering::Relaxed), 0);
+    }
+
+    #[test]
+    fn overlapping_and_outside_cost_more_than_side_by_side_inside() {
+        let (plan, slot, units, grid) = level(plate(
+            10.0,
+            6.0,
+            json!({
+                "spaces": { "a": { "width": 4, "depth": 3 }, "b": { "width": 4, "depth": 3 } },
+            }),
+        ));
+        let ctx = ctx(units, grid);
+        let (p, start) = setup(&plan, &slot, &ctx, &mut Vec::new()).unwrap();
+        let cells = |m: f64| (m / p.grid.gx).round() as i32;
+        let at = |x: f64, y: f64| R {
+            x: cells(x),
+            y: cells(y),
+            w: cells(4.0),
+            h: cells(3.0),
+            on: true,
+            f: start[0].f,
+        };
+        let side_by_side = p.total(&[at(0.0, 0.0), at(4.0, 0.0)], 1.0);
+        let overlapping = p.total(&[at(0.0, 0.0), at(2.0, 0.0)], 1.0);
+        let outside = p.total(&[at(0.0, 0.0), at(8.0, 0.0)], 1.0);
+        assert!(overlapping > side_by_side + HARD * 0.5, "{overlapping} vs {side_by_side}");
+        assert!(outside > side_by_side + HARD * 0.5, "{outside} vs {side_by_side}");
+    }
 }

@@ -1,0 +1,3642 @@
+{
+  "name": "Pinned flat",
+  "system": "metric",
+  "units": "m",
+  "elements": [
+    {
+      "id": "boundary",
+      "kind": "boundary",
+      "layer": "PLATE-BOUNDARY",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 8.0
+        },
+        {
+          "x": 0.0,
+          "y": 8.0
+        }
+      ],
+      "closed": true,
+      "area": 96.0,
+      "length": 40.0,
+      "source": "/start/points"
+    },
+    {
+      "id": "bath",
+      "kind": "space",
+      "layer": "PLATE-SPACE-ROOM",
+      "points": [
+        {
+          "x": 0.25,
+          "y": 6.075
+        },
+        {
+          "x": 3.4250000000000007,
+          "y": 6.075
+        },
+        {
+          "x": 3.4250000000000007,
+          "y": 7.7
+        },
+        {
+          "x": 0.25,
+          "y": 7.7
+        }
+      ],
+      "closed": true,
+      "area": 5.159375000000001,
+      "length": 9.600000000000001,
+      "source": "/spaces/bath",
+      "space": {
+        "name": "bath",
+        "type": "bath",
+        "label": "bath",
+        "kind": "room",
+        "depth": 0,
+        "plan": "",
+        "unique": false,
+        "hasPlan": false,
+        "ok": true,
+        "front": [
+          {
+            "x": 0.0,
+            "y": 6.0
+          },
+          {
+            "x": 3.5,
+            "y": 6.0
+          }
+        ],
+        "tags": [
+          "wet"
+        ],
+        "gross": 7.0
+      }
+    },
+    {
+      "id": "bedroom",
+      "kind": "space",
+      "layer": "PLATE-SPACE-ROOM",
+      "points": [
+        {
+          "x": 8.05,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 11.75,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 11.75,
+          "y": 3.45
+        },
+        {
+          "x": 8.05,
+          "y": 3.45
+        }
+      ],
+      "closed": true,
+      "area": 11.655,
+      "length": 13.7,
+      "source": "/spaces/bedroom",
+      "space": {
+        "name": "bedroom",
+        "type": "bedroom",
+        "label": "bedroom",
+        "kind": "room",
+        "depth": 0,
+        "plan": "",
+        "unique": false,
+        "hasPlan": false,
+        "ok": true,
+        "front": [
+          {
+            "x": 12.0,
+            "y": 3.5
+          },
+          {
+            "x": 8.0,
+            "y": 3.5
+          }
+        ],
+        "tags": [
+          "sleep"
+        ],
+        "gross": 14.0
+      }
+    },
+    {
+      "id": "living",
+      "kind": "space",
+      "layer": "PLATE-SPACE-ROOM",
+      "points": [
+        {
+          "x": 0.25,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 5.95,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 5.95,
+          "y": 4.45
+        },
+        {
+          "x": 0.25,
+          "y": 4.45
+        }
+      ],
+      "closed": true,
+      "area": 23.655,
+      "length": 19.700000000000003,
+      "source": "/spaces/living",
+      "space": {
+        "name": "living",
+        "type": "living",
+        "label": "living",
+        "kind": "room",
+        "depth": 0,
+        "plan": "",
+        "unique": false,
+        "hasPlan": false,
+        "ok": true,
+        "front": [
+          {
+            "x": 6.0,
+            "y": 4.5
+          },
+          {
+            "x": 0.0,
+            "y": 4.5
+          }
+        ],
+        "gross": 27.0
+      }
+    },
+    {
+      "id": "hall",
+      "kind": "space",
+      "layer": "PLATE-SPACE-CIRCULATION",
+      "points": [
+        {
+          "x": 0.25,
+          "y": 4.55
+        },
+        {
+          "x": 6.05,
+          "y": 4.55
+        },
+        {
+          "x": 6.05,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 7.95,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 7.95,
+          "y": 3.55
+        },
+        {
+          "x": 11.75,
+          "y": 3.55
+        },
+        {
+          "x": 11.75,
+          "y": 7.7
+        },
+        {
+          "x": 3.5749999999999993,
+          "y": 7.7
+        },
+        {
+          "x": 3.5749999999999993,
+          "y": 5.925
+        },
+        {
+          "x": 0.25,
+          "y": 5.925
+        }
+      ],
+      "closed": true,
+      "area": 42.198125000000005,
+      "length": 37.8,
+      "source": "/spaces/hall",
+      "space": {
+        "name": "hall",
+        "type": "hall",
+        "label": "hall",
+        "kind": "circulation",
+        "depth": 0,
+        "plan": "",
+        "unique": false,
+        "hasPlan": false,
+        "ok": true,
+        "fill": true,
+        "gross": 48.0
+      },
+      "labelAt": {
+        "x": 7.9765625,
+        "y": 5.734375
+      }
+    },
+    {
+      "id": "wall:bath|hall#0",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 5.925
+        },
+        {
+          "x": 3.5749999999999993,
+          "y": 5.925
+        },
+        {
+          "x": 3.5749999999999993,
+          "y": 6.075
+        },
+        {
+          "x": 0.0,
+          "y": 6.075
+        }
+      ],
+      "closed": true,
+      "area": 0.5362500000000026,
+      "length": 7.449999999999999,
+      "source": "/assemblies/wet",
+      "wall": {
+        "assembly": "wet",
+        "label": "wet",
+        "thickness": 0.15,
+        "cavity": 0.14,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "entrance",
+          "partition",
+          "link",
+          "wet"
+        ],
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "because": "partition + wet",
+        "line": [
+          {
+            "x": 0.0,
+            "y": 6.0
+          },
+          {
+            "x": 3.5,
+            "y": 6.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bath|hall#1",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 3.5749999999999993,
+          "y": 5.925
+        },
+        {
+          "x": 3.5749999999999993,
+          "y": 8.0
+        },
+        {
+          "x": 3.4250000000000007,
+          "y": 8.0
+        },
+        {
+          "x": 3.4250000000000007,
+          "y": 5.925
+        }
+      ],
+      "closed": true,
+      "area": 0.3112499999999976,
+      "length": 4.4499999999999975,
+      "source": "/assemblies/wet",
+      "wall": {
+        "assembly": "wet",
+        "label": "wet",
+        "thickness": 0.15,
+        "cavity": 0.14,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "entrance",
+          "partition",
+          "link",
+          "wet"
+        ],
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "because": "partition + wet",
+        "line": [
+          {
+            "x": 3.5,
+            "y": 6.0
+          },
+          {
+            "x": 3.5,
+            "y": 8.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bath|'facade#2",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 3.5,
+          "y": 8.0
+        },
+        {
+          "x": 0.0,
+          "y": 8.0
+        },
+        {
+          "x": 0.0,
+          "y": 7.7
+        },
+        {
+          "x": 3.5,
+          "y": 7.7
+        }
+      ],
+      "closed": true,
+      "area": 1.0500000000000007,
+      "length": 7.6,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": 0.14,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "bath",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 3.5,
+            "y": 7.85
+          },
+          {
+            "x": 0.0,
+            "y": 7.85
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bath|'blank#3",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 8.0
+        },
+        {
+          "x": 0.0,
+          "y": 6.0
+        },
+        {
+          "x": 0.25,
+          "y": 6.0
+        },
+        {
+          "x": 0.25,
+          "y": 8.0
+        }
+      ],
+      "closed": true,
+      "area": 0.5,
+      "length": 4.5,
+      "source": "/assemblies/party",
+      "wall": {
+        "assembly": "party",
+        "label": "party",
+        "thickness": 0.25,
+        "cavity": -0.0,
+        "fire": 1.0,
+        "pattern": "solid",
+        "cross": "firestop",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "bath",
+          "'blank"
+        ],
+        "because": "party",
+        "line": [
+          {
+            "x": 0.125,
+            "y": 8.0
+          },
+          {
+            "x": 0.125,
+            "y": 6.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bedroom|'facade#4",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 8.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 8.0,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": true,
+      "area": 1.1999999999999993,
+      "length": 8.600000000000001,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": 0.14,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "bedroom",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 8.0,
+            "y": 0.15000000000000036
+          },
+          {
+            "x": 12.0,
+            "y": 0.15000000000000036
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bedroom|'blank#5",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 0.0
+        },
+        {
+          "x": 12.0,
+          "y": 3.5
+        },
+        {
+          "x": 11.75,
+          "y": 3.5
+        },
+        {
+          "x": 11.75,
+          "y": 0.0
+        }
+      ],
+      "closed": true,
+      "area": 0.875,
+      "length": 7.5,
+      "source": "/assemblies/party",
+      "wall": {
+        "assembly": "party",
+        "label": "party",
+        "thickness": 0.25,
+        "cavity": -0.0,
+        "fire": 1.0,
+        "pattern": "solid",
+        "cross": "firestop",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "bedroom",
+          "'blank"
+        ],
+        "because": "party",
+        "line": [
+          {
+            "x": 11.875,
+            "y": 0.0
+          },
+          {
+            "x": 11.875,
+            "y": 3.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bedroom|hall#6",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 3.55
+        },
+        {
+          "x": 7.95,
+          "y": 3.55
+        },
+        {
+          "x": 7.95,
+          "y": 3.45
+        },
+        {
+          "x": 12.0,
+          "y": 3.45
+        }
+      ],
+      "closed": true,
+      "area": 0.4049999999999905,
+      "length": 8.299999999999999,
+      "source": "/assemblies/partition",
+      "wall": {
+        "assembly": "partition",
+        "label": "partition",
+        "thickness": 0.1,
+        "cavity": 0.09,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "entrance",
+          "partition",
+          "link"
+        ],
+        "between": [
+          "bedroom",
+          "hall"
+        ],
+        "because": "partition",
+        "line": [
+          {
+            "x": 12.0,
+            "y": 3.5
+          },
+          {
+            "x": 8.0,
+            "y": 3.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:bedroom|hall#7",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 7.95,
+          "y": 3.55
+        },
+        {
+          "x": 7.95,
+          "y": 0.0
+        },
+        {
+          "x": 8.05,
+          "y": 0.0
+        },
+        {
+          "x": 8.05,
+          "y": 3.55
+        }
+      ],
+      "closed": true,
+      "area": 0.3550000000000004,
+      "length": 7.300000000000001,
+      "source": "/assemblies/partition",
+      "wall": {
+        "assembly": "partition",
+        "label": "partition",
+        "thickness": 0.1,
+        "cavity": 0.09,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "entrance",
+          "partition",
+          "link"
+        ],
+        "between": [
+          "bedroom",
+          "hall"
+        ],
+        "because": "partition",
+        "line": [
+          {
+            "x": 8.0,
+            "y": 3.5
+          },
+          {
+            "x": 8.0,
+            "y": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:living|'facade#8",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 6.0,
+          "y": 0.0
+        },
+        {
+          "x": 6.0,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 0.0,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": true,
+      "area": 1.799999999999999,
+      "length": 12.600000000000001,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": 0.14,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "living",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 0.0,
+            "y": 0.15000000000000036
+          },
+          {
+            "x": 6.0,
+            "y": 0.15000000000000036
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:living|hall#9",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 6.05,
+          "y": 0.0
+        },
+        {
+          "x": 6.05,
+          "y": 4.55
+        },
+        {
+          "x": 5.95,
+          "y": 4.55
+        },
+        {
+          "x": 5.95,
+          "y": 0.0
+        }
+      ],
+      "closed": true,
+      "area": 0.45500000000000185,
+      "length": 9.299999999999999,
+      "source": "/assemblies/partition",
+      "wall": {
+        "assembly": "partition",
+        "label": "partition",
+        "thickness": 0.1,
+        "cavity": 0.09,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "entrance",
+          "partition",
+          "link"
+        ],
+        "between": [
+          "living",
+          "hall"
+        ],
+        "because": "partition",
+        "line": [
+          {
+            "x": 6.0,
+            "y": 0.0
+          },
+          {
+            "x": 6.0,
+            "y": 4.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:living|hall#10",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 6.05,
+          "y": 4.55
+        },
+        {
+          "x": 0.0,
+          "y": 4.55
+        },
+        {
+          "x": 0.0,
+          "y": 4.45
+        },
+        {
+          "x": 6.05,
+          "y": 4.45
+        }
+      ],
+      "closed": true,
+      "area": 0.6050000000000004,
+      "length": 12.299999999999999,
+      "source": "/assemblies/partition",
+      "wall": {
+        "assembly": "partition",
+        "label": "partition",
+        "thickness": 0.1,
+        "cavity": 0.09,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "entrance",
+          "partition",
+          "link"
+        ],
+        "between": [
+          "living",
+          "hall"
+        ],
+        "because": "partition",
+        "line": [
+          {
+            "x": 6.0,
+            "y": 4.5
+          },
+          {
+            "x": 0.0,
+            "y": 4.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:living|'blank#11",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 4.5
+        },
+        {
+          "x": 0.0,
+          "y": 0.0
+        },
+        {
+          "x": 0.25,
+          "y": 0.0
+        },
+        {
+          "x": 0.25,
+          "y": 4.5
+        }
+      ],
+      "closed": true,
+      "area": 1.125,
+      "length": 9.5,
+      "source": "/assemblies/party",
+      "wall": {
+        "assembly": "party",
+        "label": "party",
+        "thickness": 0.25,
+        "cavity": -0.0,
+        "fire": 1.0,
+        "pattern": "solid",
+        "cross": "firestop",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "living",
+          "'blank"
+        ],
+        "because": "party",
+        "line": [
+          {
+            "x": 0.125,
+            "y": 4.5
+          },
+          {
+            "x": 0.125,
+            "y": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:hall|'facade#12",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 6.0,
+          "y": 0.0
+        },
+        {
+          "x": 8.0,
+          "y": 0.0
+        },
+        {
+          "x": 8.0,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 6.0,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": true,
+      "area": 0.5999999999999996,
+      "length": 4.6,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": 0.14,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "hall",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 6.0,
+            "y": 0.15000000000000036
+          },
+          {
+            "x": 8.0,
+            "y": 0.15000000000000036
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:hall|'blank#13",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 3.5
+        },
+        {
+          "x": 12.0,
+          "y": 8.0
+        },
+        {
+          "x": 11.75,
+          "y": 8.0
+        },
+        {
+          "x": 11.75,
+          "y": 3.5
+        }
+      ],
+      "closed": true,
+      "area": 1.125,
+      "length": 9.5,
+      "source": "/assemblies/party",
+      "wall": {
+        "assembly": "party",
+        "label": "party",
+        "thickness": 0.25,
+        "cavity": -0.0,
+        "fire": 1.0,
+        "pattern": "solid",
+        "cross": "firestop",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "hall",
+          "'blank"
+        ],
+        "because": "party",
+        "line": [
+          {
+            "x": 11.875,
+            "y": 3.5
+          },
+          {
+            "x": 11.875,
+            "y": 8.0
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:hall|'facade#14",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 8.0
+        },
+        {
+          "x": 3.5,
+          "y": 8.0
+        },
+        {
+          "x": 3.5,
+          "y": 7.7
+        },
+        {
+          "x": 12.0,
+          "y": 7.7
+        }
+      ],
+      "closed": true,
+      "area": 2.549999999999997,
+      "length": 17.6,
+      "source": "/assemblies/exterior",
+      "wall": {
+        "assembly": "exterior",
+        "label": "exterior",
+        "thickness": 0.3,
+        "cavity": 0.14,
+        "pattern": "solid",
+        "cross": "yes",
+        "roles": [
+          "facade"
+        ],
+        "between": [
+          "hall",
+          "'facade"
+        ],
+        "because": "exterior",
+        "line": [
+          {
+            "x": 12.0,
+            "y": 7.85
+          },
+          {
+            "x": 3.5,
+            "y": 7.85
+          }
+        ]
+      }
+    },
+    {
+      "id": "wall:hall|'blank#15",
+      "kind": "wall",
+      "layer": "PLATE-WALL",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 6.0
+        },
+        {
+          "x": 0.0,
+          "y": 4.5
+        },
+        {
+          "x": 0.25,
+          "y": 4.5
+        },
+        {
+          "x": 0.25,
+          "y": 6.0
+        }
+      ],
+      "closed": true,
+      "area": 0.375,
+      "length": 3.5,
+      "source": "/assemblies/party",
+      "wall": {
+        "assembly": "party",
+        "label": "party",
+        "thickness": 0.25,
+        "cavity": -0.0,
+        "fire": 1.0,
+        "pattern": "solid",
+        "cross": "firestop",
+        "roles": [
+          "blank"
+        ],
+        "between": [
+          "hall",
+          "'blank"
+        ],
+        "because": "party",
+        "line": [
+          {
+            "x": 0.125,
+            "y": 6.0
+          },
+          {
+            "x": 0.125,
+            "y": 4.5
+          }
+        ]
+      }
+    },
+    {
+      "id": "door:bath|hall",
+      "kind": "door",
+      "layer": "PLATE-DOOR",
+      "points": [
+        {
+          "x": 0.09999999999999964,
+          "y": 6.0
+        },
+        {
+          "x": 1.0,
+          "y": 6.0
+        }
+      ],
+      "closed": false,
+      "length": 0.9000000000000004,
+      "opening": {
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "width": 0.9000000000000004,
+        "depth": 0.15
+      }
+    },
+    {
+      "id": "door:bedroom|hall",
+      "kind": "door",
+      "layer": "PLATE-DOOR",
+      "points": [
+        {
+          "x": 8.1,
+          "y": 3.5
+        },
+        {
+          "x": 9.0,
+          "y": 3.5
+        }
+      ],
+      "closed": false,
+      "length": 0.9000000000000004,
+      "opening": {
+        "between": [
+          "bedroom",
+          "hall"
+        ],
+        "width": 0.8999999999999999,
+        "depth": 0.1
+      }
+    },
+    {
+      "id": "door:living|hall",
+      "kind": "door",
+      "layer": "PLATE-DOOR",
+      "points": [
+        {
+          "x": 0.09999999999999964,
+          "y": 4.5
+        },
+        {
+          "x": 1.0,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 0.9000000000000004,
+      "opening": {
+        "between": [
+          "living",
+          "hall"
+        ],
+        "width": 0.9000000000000004,
+        "depth": 0.1
+      }
+    },
+    {
+      "id": "window:bedroom|'facade",
+      "kind": "window",
+      "layer": "PLATE-WINDOW",
+      "points": [
+        {
+          "x": 9.4,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 10.6,
+          "y": 0.15000000000000036
+        }
+      ],
+      "closed": false,
+      "length": 1.1999999999999993,
+      "opening": {
+        "between": [
+          "bedroom",
+          "'facade"
+        ],
+        "width": 1.2000000000000002,
+        "depth": 0.3
+      }
+    },
+    {
+      "id": "window:living|'facade",
+      "kind": "window",
+      "layer": "PLATE-WINDOW",
+      "points": [
+        {
+          "x": 2.4000000000000004,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 3.5999999999999996,
+          "y": 0.15000000000000036
+        }
+      ],
+      "closed": false,
+      "length": 1.1999999999999993,
+      "opening": {
+        "between": [
+          "living",
+          "'facade"
+        ],
+        "width": 1.1999999999999993,
+        "depth": 0.3
+      }
+    },
+    {
+      "id": "run:plumbing:0:#0",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 1.8375000000000004,
+          "y": 6.8875
+        },
+        {
+          "x": 1.8375000000000004,
+          "y": 6.0
+        }
+      ],
+      "closed": false,
+      "length": 0.8875000000000002,
+      "source": "/services/plumbing/connect/0",
+      "run": {
+        "service": "plumbing",
+        "network": "plumbing",
+        "group": "1",
+        "home": true,
+        "draw": "routed",
+        "along": "drop",
+        "cable": 0,
+        "length": 1.600000000000001
+      }
+    },
+    {
+      "id": "run:plumbing:0:#1",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 1.8375000000000004,
+          "y": 6.0
+        },
+        {
+          "x": 1.1999999999999997,
+          "y": 6.0
+        }
+      ],
+      "closed": false,
+      "length": 0.6375000000000006,
+      "source": "/services/plumbing/connect/0",
+      "run": {
+        "service": "plumbing",
+        "network": "plumbing",
+        "group": "1",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 0,
+        "length": 1.600000000000001
+      }
+    },
+    {
+      "id": "run:plumbing:0:#2",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 1.1999999999999997,
+          "y": 6.0
+        },
+        {
+          "x": 1.1999999999999997,
+          "y": 6.075
+        }
+      ],
+      "closed": false,
+      "length": 0.07500000000000018,
+      "source": "/services/plumbing/connect/0",
+      "run": {
+        "service": "plumbing",
+        "network": "plumbing",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 0,
+        "length": 1.600000000000001
+      }
+    },
+    {
+      "id": "run:plumbing:0:#3",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 1.8375000000000004,
+          "y": 6.8875
+        },
+        {
+          "x": 1.51875,
+          "y": 6.48125
+        }
+      ],
+      "closed": false,
+      "length": 0.5163725641433714,
+      "source": "/services/plumbing/connect/0",
+      "run": {
+        "service": "plumbing",
+        "network": "plumbing",
+        "group": "1",
+        "home": true,
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#4",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 2.5791666666666684,
+          "y": 4.45
+        },
+        {
+          "x": 2.5791666666666684,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 1,
+        "length": 3.258333333333331
+      }
+    },
+    {
+      "id": "run:power:0:#5",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 2.5791666666666684,
+          "y": 4.5
+        },
+        {
+          "x": 5.7375,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 3.1583333333333314,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 1,
+        "length": 3.258333333333331
+      }
+    },
+    {
+      "id": "run:power:0:#6",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 5.7375,
+          "y": 4.5
+        },
+        {
+          "x": 5.7375,
+          "y": 4.45
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 1,
+        "length": 3.258333333333331
+      }
+    },
+    {
+      "id": "run:power:0:#7",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 2.5791666666666684,
+          "y": 4.45
+        },
+        {
+          "x": 2.8423611111111127,
+          "y": 4.546504629629629
+        },
+        {
+          "x": 3.105555555555557,
+          "y": 4.625462962962963
+        },
+        {
+          "x": 3.3687500000000012,
+          "y": 4.686875000000001
+        },
+        {
+          "x": 3.6319444444444455,
+          "y": 4.730740740740742
+        },
+        {
+          "x": 3.8951388888888894,
+          "y": 4.757060185185185
+        },
+        {
+          "x": 4.158333333333334,
+          "y": 4.765833333333333
+        },
+        {
+          "x": 4.421527777777778,
+          "y": 4.7570601851851855
+        },
+        {
+          "x": 4.684722222222223,
+          "y": 4.730740740740741
+        },
+        {
+          "x": 4.947916666666667,
+          "y": 4.686875000000001
+        },
+        {
+          "x": 5.211111111111111,
+          "y": 4.625462962962963
+        },
+        {
+          "x": 5.4743055555555555,
+          "y": 4.54650462962963
+        },
+        {
+          "x": 5.7375,
+          "y": 4.45
+        }
+      ],
+      "closed": false,
+      "length": 3.240098289755195,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#8",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 5.7375,
+          "y": 4.45
+        },
+        {
+          "x": 5.7375,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 2,
+        "length": 3.3583333333333343
+      }
+    },
+    {
+      "id": "run:power:0:#9",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 5.7375,
+          "y": 4.5
+        },
+        {
+          "x": 6.0,
+          "y": 4.5
+        },
+        {
+          "x": 6.0,
+          "y": 1.5041666666666655
+        }
+      ],
+      "closed": false,
+      "length": 3.2583333333333346,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 2,
+        "length": 3.3583333333333343
+      }
+    },
+    {
+      "id": "run:power:0:#10",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 6.0,
+          "y": 1.5041666666666655
+        },
+        {
+          "x": 5.95,
+          "y": 1.5041666666666655
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 2,
+        "length": 3.3583333333333343
+      }
+    },
+    {
+      "id": "run:power:0:#11",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 5.7375,
+          "y": 4.45
+        },
+        {
+          "x": 5.845219907407407,
+          "y": 4.211006944444444
+        },
+        {
+          "x": 5.936574074074075,
+          "y": 3.9708333333333337
+        },
+        {
+          "x": 6.0115625,
+          "y": 3.7294791666666667
+        },
+        {
+          "x": 6.070185185185187,
+          "y": 3.4869444444444446
+        },
+        {
+          "x": 6.112442129629629,
+          "y": 3.2432291666666657
+        },
+        {
+          "x": 6.138333333333334,
+          "y": 2.998333333333333
+        },
+        {
+          "x": 6.147858796296298,
+          "y": 2.7522569444444436
+        },
+        {
+          "x": 6.1410185185185195,
+          "y": 2.5049999999999994
+        },
+        {
+          "x": 6.1178125,
+          "y": 2.2565624999999994
+        },
+        {
+          "x": 6.078240740740741,
+          "y": 2.0069444444444433
+        },
+        {
+          "x": 6.022303240740741,
+          "y": 1.7561458333333324
+        },
+        {
+          "x": 5.95,
+          "y": 1.5041666666666655
+        }
+      ],
+      "closed": false,
+      "length": 3.0299496001966664,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#12",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 5.95,
+          "y": 1.5041666666666655
+        },
+        {
+          "x": 6.0,
+          "y": 1.5041666666666655
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 3,
+        "length": 3.558333333333331
+      }
+    },
+    {
+      "id": "run:power:0:#13",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 6.0,
+          "y": 1.5041666666666655
+        },
+        {
+          "x": 6.0,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 3.9958333333333336,
+          "y": 0.15000000000000036
+        }
+      ],
+      "closed": false,
+      "length": 3.3583333333333316,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 3,
+        "length": 3.558333333333331
+      }
+    },
+    {
+      "id": "run:power:0:#14",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 3.9958333333333336,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 3.9958333333333336,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": false,
+      "length": 0.14999999999999947,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 3,
+        "length": 3.558333333333331
+      }
+    },
+    {
+      "id": "run:power:0:#15",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 5.95,
+          "y": 1.5041666666666655
+        },
+        {
+          "x": 5.823946759259259,
+          "y": 1.3441087962962952
+        },
+        {
+          "x": 5.691203703703704,
+          "y": 1.1949074074074064
+        },
+        {
+          "x": 5.551770833333333,
+          "y": 1.0565624999999992
+        },
+        {
+          "x": 5.405648148148148,
+          "y": 0.9290740740740734
+        },
+        {
+          "x": 5.252835648148148,
+          "y": 0.8124421296296286
+        },
+        {
+          "x": 5.093333333333333,
+          "y": 0.706666666666666
+        },
+        {
+          "x": 4.9271412037037035,
+          "y": 0.6117476851851846
+        },
+        {
+          "x": 4.75425925925926,
+          "y": 0.5276851851851847
+        },
+        {
+          "x": 4.5746875,
+          "y": 0.45447916666666627
+        },
+        {
+          "x": 4.388425925925926,
+          "y": 0.3921296296296293
+        },
+        {
+          "x": 4.195474537037037,
+          "y": 0.34063657407407383
+        },
+        {
+          "x": 3.9958333333333336,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": false,
+      "length": 2.3548077042097857,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#16",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 3.9958333333333336,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 3.9958333333333336,
+          "y": 0.15000000000000036
+        }
+      ],
+      "closed": false,
+      "length": 0.14999999999999947,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 4,
+        "length": 3.458333333333332
+      }
+    },
+    {
+      "id": "run:power:0:#17",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 3.9958333333333336,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 0.8375000000000004,
+          "y": 0.15000000000000036
+        }
+      ],
+      "closed": false,
+      "length": 3.158333333333333,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 4,
+        "length": 3.458333333333332
+      }
+    },
+    {
+      "id": "run:power:0:#18",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 0.8375000000000004,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 0.8375000000000004,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": false,
+      "length": 0.14999999999999947,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 4,
+        "length": 3.458333333333332
+      }
+    },
+    {
+      "id": "run:power:0:#19",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 3.9958333333333336,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 3.732638888888889,
+          "y": 0.20349537037037016
+        },
+        {
+          "x": 3.469444444444445,
+          "y": 0.12453703703703686
+        },
+        {
+          "x": 3.2062500000000003,
+          "y": 0.0631249999999998
+        },
+        {
+          "x": 2.943055555555556,
+          "y": 0.019259259259259073
+        },
+        {
+          "x": 2.679861111111111,
+          "y": -0.007060185185185371
+        },
+        {
+          "x": 2.416666666666667,
+          "y": -0.015833333333333532
+        },
+        {
+          "x": 2.1534722222222227,
+          "y": -0.0070601851851853775
+        },
+        {
+          "x": 1.890277777777778,
+          "y": 0.01925925925925906
+        },
+        {
+          "x": 1.6270833333333337,
+          "y": 0.0631249999999998
+        },
+        {
+          "x": 1.3638888888888892,
+          "y": 0.12453703703703689
+        },
+        {
+          "x": 1.100694444444445,
+          "y": 0.20349537037037013
+        },
+        {
+          "x": 0.8375000000000004,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": false,
+      "length": 3.2400982897551964,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#20",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 0.8375000000000004,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 0.8375000000000004,
+          "y": 0.15000000000000036
+        }
+      ],
+      "closed": false,
+      "length": 0.14999999999999947,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 5,
+        "length": 3.708333333333333
+      }
+    },
+    {
+      "id": "run:power:0:#21",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 0.8375000000000004,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 0.125,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 0.125,
+          "y": 2.8708333333333336
+        }
+      ],
+      "closed": false,
+      "length": 3.4333333333333336,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 5,
+        "length": 3.708333333333333
+      }
+    },
+    {
+      "id": "run:power:0:#22",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 0.125,
+          "y": 2.8708333333333336
+        },
+        {
+          "x": 0.25,
+          "y": 2.8708333333333336
+        }
+      ],
+      "closed": false,
+      "length": 0.125,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 5,
+        "length": 3.708333333333333
+      }
+    },
+    {
+      "id": "run:power:0:#23",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 0.8375000000000004,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 0.7099884259259263,
+          "y": 0.496284722222222
+        },
+        {
+          "x": 0.5967592592592595,
+          "y": 0.6958333333333332
+        },
+        {
+          "x": 0.4978125000000002,
+          "y": 0.8986458333333331
+        },
+        {
+          "x": 0.41314814814814843,
+          "y": 1.1047222222222222
+        },
+        {
+          "x": 0.34276620370370375,
+          "y": 1.3140625
+        },
+        {
+          "x": 0.2866666666666668,
+          "y": 1.5266666666666666
+        },
+        {
+          "x": 0.2448495370370371,
+          "y": 1.7425347222222223
+        },
+        {
+          "x": 0.2173148148148149,
+          "y": 1.9616666666666667
+        },
+        {
+          "x": 0.20406250000000004,
+          "y": 2.1840625
+        },
+        {
+          "x": 0.20509259259259263,
+          "y": 2.4097222222222228
+        },
+        {
+          "x": 0.22040509259259258,
+          "y": 2.6386458333333334
+        },
+        {
+          "x": 0.25,
+          "y": 2.8708333333333336
+        }
+      ],
+      "closed": false,
+      "length": 2.7053794667507867,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#24",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 2.5791666666666684,
+          "y": 4.45
+        },
+        {
+          "x": 2.5791666666666684,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "home": true,
+        "draw": "routed",
+        "along": "drop",
+        "cable": 6,
+        "length": 2.5291666666666677
+      }
+    },
+    {
+      "id": "run:power:0:#25",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 2.5791666666666684,
+          "y": 4.5
+        },
+        {
+          "x": 1.3499999999999996,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 1.2291666666666687,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 6,
+        "length": 2.5291666666666677
+      }
+    },
+    {
+      "id": "run:power:0:#26",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 1.3499999999999996,
+          "y": 4.5
+        },
+        {
+          "x": 1.3499999999999999,
+          "y": 4.55
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 6,
+        "length": 2.5291666666666677
+      }
+    },
+    {
+      "id": "run:power:0:#27",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 2.5791666666666684,
+          "y": 4.45
+        },
+        {
+          "x": 1.9811425001533278,
+          "y": 4.4986528135468475
+        }
+      ],
+      "closed": false,
+      "length": 0.6,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "1",
+        "home": true,
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#28",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.05,
+          "y": 1.8999999999999992
+        },
+        {
+          "x": 8.0,
+          "y": 1.8999999999999992
+        }
+      ],
+      "closed": false,
+      "length": 0.05000000000000071,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 7,
+        "length": 3.600000000000001
+      }
+    },
+    {
+      "id": "run:power:0:#29",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.0,
+          "y": 1.8999999999999992
+        },
+        {
+          "x": 8.0,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 9.650000000000002,
+          "y": 0.15000000000000036
+        }
+      ],
+      "closed": false,
+      "length": 3.4000000000000012,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 7,
+        "length": 3.600000000000001
+      }
+    },
+    {
+      "id": "run:power:0:#30",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 9.650000000000002,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 9.650000000000002,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": false,
+      "length": 0.14999999999999947,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 7,
+        "length": 3.600000000000001
+      }
+    },
+    {
+      "id": "run:power:0:#31",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.05,
+          "y": 1.8999999999999992
+        },
+        {
+          "x": 8.232222222222221,
+          "y": 1.8155555555555547
+        },
+        {
+          "x": 8.405555555555557,
+          "y": 1.7222222222222217
+        },
+        {
+          "x": 8.57,
+          "y": 1.6199999999999997
+        },
+        {
+          "x": 8.725555555555559,
+          "y": 1.5088888888888885
+        },
+        {
+          "x": 8.872222222222222,
+          "y": 1.3888888888888882
+        },
+        {
+          "x": 9.010000000000002,
+          "y": 1.2599999999999998
+        },
+        {
+          "x": 9.138888888888891,
+          "y": 1.122222222222222
+        },
+        {
+          "x": 9.25888888888889,
+          "y": 0.9755555555555555
+        },
+        {
+          "x": 9.370000000000001,
+          "y": 0.8199999999999998
+        },
+        {
+          "x": 9.472222222222225,
+          "y": 0.6555555555555553
+        },
+        {
+          "x": 9.565555555555559,
+          "y": 0.4822222222222221
+        },
+        {
+          "x": 9.650000000000002,
+          "y": 0.2999999999999998
+        }
+      ],
+      "closed": false,
+      "length": 2.321321006333469,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#32",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 9.650000000000002,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 9.650000000000002,
+          "y": 0.15000000000000036
+        }
+      ],
+      "closed": false,
+      "length": 0.14999999999999947,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 8,
+        "length": 3.7499999999999973
+      }
+    },
+    {
+      "id": "run:power:0:#33",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 9.650000000000002,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 11.875,
+          "y": 0.15000000000000036
+        },
+        {
+          "x": 11.875,
+          "y": 1.4000000000000004
+        }
+      ],
+      "closed": false,
+      "length": 3.474999999999998,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 8,
+        "length": 3.7499999999999973
+      }
+    },
+    {
+      "id": "run:power:0:#34",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 11.875,
+          "y": 1.4000000000000004
+        },
+        {
+          "x": 11.75,
+          "y": 1.4000000000000004
+        }
+      ],
+      "closed": false,
+      "length": 0.125,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 8,
+        "length": 3.7499999999999973
+      }
+    },
+    {
+      "id": "run:power:0:#35",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 9.650000000000002,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 9.79138888888889,
+          "y": 0.4558333333333331
+        },
+        {
+          "x": 9.938888888888892,
+          "y": 0.5999999999999998
+        },
+        {
+          "x": 10.092500000000001,
+          "y": 0.7324999999999998
+        },
+        {
+          "x": 10.252222222222224,
+          "y": 0.8533333333333332
+        },
+        {
+          "x": 10.418055555555554,
+          "y": 0.9624999999999997
+        },
+        {
+          "x": 10.59,
+          "y": 1.0599999999999998
+        },
+        {
+          "x": 10.768055555555557,
+          "y": 1.1458333333333333
+        },
+        {
+          "x": 10.952222222222224,
+          "y": 1.22
+        },
+        {
+          "x": 11.1425,
+          "y": 1.2825
+        },
+        {
+          "x": 11.338888888888889,
+          "y": 1.3333333333333335
+        },
+        {
+          "x": 11.54138888888889,
+          "y": 1.3725000000000003
+        },
+        {
+          "x": 11.75,
+          "y": 1.4000000000000004
+        }
+      ],
+      "closed": false,
+      "length": 2.4320269253969347,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#36",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 11.75,
+          "y": 1.4000000000000004
+        },
+        {
+          "x": 11.875,
+          "y": 1.4000000000000004
+        }
+      ],
+      "closed": false,
+      "length": 0.125,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 9,
+        "length": 3.55
+      }
+    },
+    {
+      "id": "run:power:0:#37",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 11.875,
+          "y": 1.4000000000000004
+        },
+        {
+          "x": 11.875,
+          "y": 3.5
+        },
+        {
+          "x": 10.6,
+          "y": 3.5
+        }
+      ],
+      "closed": false,
+      "length": 3.375,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "wall",
+        "cable": 9,
+        "length": 3.55
+      }
+    },
+    {
+      "id": "run:power:0:#38",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 10.6,
+          "y": 3.5
+        },
+        {
+          "x": 10.6,
+          "y": 3.45
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 9,
+        "length": 3.55
+      }
+    },
+    {
+      "id": "run:power:0:#39",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 11.75,
+          "y": 1.4000000000000004
+        },
+        {
+          "x": 11.591527777777776,
+          "y": 1.5356944444444447
+        },
+        {
+          "x": 11.444444444444446,
+          "y": 1.6777777777777783
+        },
+        {
+          "x": 11.30875,
+          "y": 1.8262500000000002
+        },
+        {
+          "x": 11.184444444444445,
+          "y": 1.9811111111111115
+        },
+        {
+          "x": 11.071527777777778,
+          "y": 2.142361111111111
+        },
+        {
+          "x": 10.97,
+          "y": 2.3100000000000005
+        },
+        {
+          "x": 10.879861111111111,
+          "y": 2.4840277777777784
+        },
+        {
+          "x": 10.801111111111112,
+          "y": 2.664444444444445
+        },
+        {
+          "x": 10.73375,
+          "y": 2.8512500000000003
+        },
+        {
+          "x": 10.677777777777777,
+          "y": 3.044444444444445
+        },
+        {
+          "x": 10.633194444444444,
+          "y": 3.244027777777778
+        },
+        {
+          "x": 10.6,
+          "y": 3.45
+        }
+      ],
+      "closed": false,
+      "length": 2.411383929009989,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "run:power:0:#40",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.05,
+          "y": 1.8999999999999992
+        },
+        {
+          "x": 8.0,
+          "y": 1.8999999999999992
+        }
+      ],
+      "closed": false,
+      "length": 0.05000000000000071,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "home": true,
+        "draw": "routed",
+        "along": "drop",
+        "cable": 10,
+        "length": 12.05
+      }
+    },
+    {
+      "id": "run:power:0:#41",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.0,
+          "y": 1.8999999999999992
+        },
+        {
+          "x": 8.0,
+          "y": 4.5
+        },
+        {
+          "x": 1.3499999999999996,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 9.25,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "ceiling",
+        "cable": 10,
+        "length": 12.05
+      }
+    },
+    {
+      "id": "run:power:0:#42",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 1.3499999999999996,
+          "y": 4.5
+        },
+        {
+          "x": 1.3499999999999999,
+          "y": 4.55
+        }
+      ],
+      "closed": false,
+      "length": 0.04999999999999982,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "draw": "routed",
+        "along": "drop",
+        "cable": 10,
+        "length": 12.05,
+        "marks": [
+          {
+            "at": {
+              "x": 8.0,
+              "y": 1.8999999999999992
+            },
+            "kind": "riser"
+          },
+          {
+            "at": {
+              "x": 1.3499999999999996,
+              "y": 4.5
+            },
+            "kind": "riser"
+          }
+        ]
+      }
+    },
+    {
+      "id": "run:power:0:#43",
+      "kind": "run",
+      "layer": "PLATE-RUN",
+      "points": [
+        {
+          "x": 8.05,
+          "y": 1.8999999999999992
+        },
+        {
+          "x": 7.492056681688588,
+          "y": 2.1206790736604835
+        }
+      ],
+      "closed": false,
+      "length": 0.5999999999999998,
+      "source": "/services/power/connect/0",
+      "run": {
+        "service": "power",
+        "network": "General",
+        "group": "2",
+        "home": true,
+        "draw": "arcs",
+        "alt": true
+      }
+    },
+    {
+      "id": "part:lighting.switch:bath#0",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 1.15,
+          "y": 6.075
+        },
+        {
+          "x": 1.3,
+          "y": 6.075
+        },
+        {
+          "x": 1.3,
+          "y": 6.2250000000000005
+        },
+        {
+          "x": 1.15,
+          "y": 6.2250000000000005
+        }
+      ],
+      "closed": true,
+      "area": 0.022499999999999964,
+      "length": 0.600000000000001,
+      "source": "/services/lighting/place/0",
+      "part": {
+        "service": "lighting",
+        "part": "switch",
+        "label": "switch",
+        "mount": "wall",
+        "above": 1.1,
+        "space": "bath",
+        "placed": "by the latch side of each door",
+        "at": {
+          "x": 1.225,
+          "y": 6.075
+        }
+      }
+    },
+    {
+      "id": "part:lighting.switch:bedroom#1",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 9.3,
+          "y": 3.45
+        },
+        {
+          "x": 9.15,
+          "y": 3.45
+        },
+        {
+          "x": 9.15,
+          "y": 3.3000000000000003
+        },
+        {
+          "x": 9.3,
+          "y": 3.3000000000000003
+        }
+      ],
+      "closed": true,
+      "area": 0.0224999999999973,
+      "length": 0.6000000000000005,
+      "source": "/services/lighting/place/0",
+      "part": {
+        "service": "lighting",
+        "part": "switch",
+        "label": "switch",
+        "mount": "wall",
+        "above": 1.1,
+        "space": "bedroom",
+        "placed": "by the latch side of each door",
+        "at": {
+          "x": 9.225,
+          "y": 3.45
+        }
+      }
+    },
+    {
+      "id": "part:lighting.switch:living#2",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 1.3000000000000007,
+          "y": 4.45
+        },
+        {
+          "x": 1.1500000000000004,
+          "y": 4.45
+        },
+        {
+          "x": 1.1500000000000004,
+          "y": 4.3
+        },
+        {
+          "x": 1.3000000000000007,
+          "y": 4.3
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000853,
+      "length": 0.6000000000000014,
+      "source": "/services/lighting/place/0",
+      "part": {
+        "service": "lighting",
+        "part": "switch",
+        "label": "switch",
+        "mount": "wall",
+        "above": 1.1,
+        "space": "living",
+        "placed": "by the latch side of each door",
+        "at": {
+          "x": 1.2250000000000005,
+          "y": 4.45
+        }
+      }
+    },
+    {
+      "id": "part:plumbing.stack:bath#3",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 1.15,
+          "y": 6.075
+        },
+        {
+          "x": 1.25,
+          "y": 6.075
+        },
+        {
+          "x": 1.25,
+          "y": 5.9750000000000005
+        },
+        {
+          "x": 1.15,
+          "y": 5.9750000000000005
+        }
+      ],
+      "closed": true,
+      "area": 0.009999999999998899,
+      "length": 0.39999999999999947,
+      "source": "/services/plumbing/place/0",
+      "part": {
+        "service": "plumbing",
+        "part": "stack",
+        "label": "stack",
+        "mount": "cavity",
+        "space": "bath",
+        "placed": "the best place in the room",
+        "at": {
+          "x": 1.1999999999999997,
+          "y": 6.075
+        }
+      }
+    },
+    {
+      "id": "part:power.panel:hall#4",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 1.15,
+          "y": 4.55
+        },
+        {
+          "x": 1.5499999999999998,
+          "y": 4.55
+        },
+        {
+          "x": 1.5499999999999998,
+          "y": 4.7
+        },
+        {
+          "x": 1.15,
+          "y": 4.7
+        }
+      ],
+      "closed": true,
+      "area": 0.05999999999999961,
+      "length": 1.1000000000000005,
+      "source": "/services/power/place/0",
+      "part": {
+        "service": "power",
+        "part": "panel",
+        "label": "panel",
+        "mount": "wall",
+        "above": 1.5,
+        "space": "hall",
+        "placed": "the best place in the room",
+        "at": {
+          "x": 1.3499999999999999,
+          "y": 4.55
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:bedroom#5",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 8.05,
+          "y": 1.9749999999999992
+        },
+        {
+          "x": 8.05,
+          "y": 1.8249999999999993
+        },
+        {
+          "x": 8.200000000000001,
+          "y": 1.8249999999999993
+        },
+        {
+          "x": 8.200000000000001,
+          "y": 1.9749999999999992
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000853,
+      "length": 0.6000000000000005,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "bedroom",
+        "placed": "every 3.6 along the walls",
+        "group": "2",
+        "network": "General",
+        "at": {
+          "x": 8.05,
+          "y": 1.8999999999999992
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:bedroom#6",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 9.575000000000001,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 9.725000000000001,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 9.725000000000001,
+          "y": 0.44999999999999984
+        },
+        {
+          "x": 9.575000000000001,
+          "y": 0.44999999999999984
+        }
+      ],
+      "closed": true,
+      "area": 0.022499999999999964,
+      "length": 0.6000000000000008,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "bedroom",
+        "placed": "every 3.6 along the walls",
+        "group": "2",
+        "network": "General",
+        "at": {
+          "x": 9.650000000000002,
+          "y": 0.2999999999999998
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:bedroom#7",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 11.75,
+          "y": 1.3250000000000004
+        },
+        {
+          "x": 11.75,
+          "y": 1.4750000000000003
+        },
+        {
+          "x": 11.6,
+          "y": 1.4750000000000003
+        },
+        {
+          "x": 11.6,
+          "y": 1.3250000000000004
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000853,
+      "length": 0.6000000000000005,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "bedroom",
+        "placed": "every 3.6 along the walls",
+        "group": "2",
+        "network": "General",
+        "at": {
+          "x": 11.75,
+          "y": 1.4000000000000004
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:bedroom#8",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 10.674999999999999,
+          "y": 3.45
+        },
+        {
+          "x": 10.525,
+          "y": 3.45
+        },
+        {
+          "x": 10.525,
+          "y": 3.3000000000000003
+        },
+        {
+          "x": 10.674999999999999,
+          "y": 3.3000000000000003
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000853,
+      "length": 0.599999999999997,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "bedroom",
+        "placed": "every 3.6 along the walls",
+        "group": "2",
+        "network": "General",
+        "at": {
+          "x": 10.6,
+          "y": 3.45
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:living#9",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 0.25,
+          "y": 2.9458333333333333
+        },
+        {
+          "x": 0.25,
+          "y": 2.7958333333333334
+        },
+        {
+          "x": 0.4,
+          "y": 2.7958333333333334
+        },
+        {
+          "x": 0.4,
+          "y": 2.9458333333333333
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000075,
+      "length": 0.5999999999999999,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "living",
+        "placed": "every 3.6 along the walls",
+        "group": "1",
+        "network": "General",
+        "at": {
+          "x": 0.25,
+          "y": 2.8708333333333336
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:living#10",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 0.7625000000000004,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 0.9125000000000003,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 0.9125000000000003,
+          "y": 0.44999999999999984
+        },
+        {
+          "x": 0.7625000000000004,
+          "y": 0.44999999999999984
+        }
+      ],
+      "closed": true,
+      "area": 0.022499999999999992,
+      "length": 0.5999999999999999,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "living",
+        "placed": "every 3.6 along the walls",
+        "group": "1",
+        "network": "General",
+        "at": {
+          "x": 0.8375000000000004,
+          "y": 0.2999999999999998
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:living#11",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 3.9208333333333334,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 4.070833333333334,
+          "y": 0.2999999999999998
+        },
+        {
+          "x": 4.070833333333334,
+          "y": 0.44999999999999984
+        },
+        {
+          "x": 3.9208333333333334,
+          "y": 0.44999999999999984
+        }
+      ],
+      "closed": true,
+      "area": 0.022499999999999964,
+      "length": 0.6000000000000008,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "living",
+        "placed": "every 3.6 along the walls",
+        "group": "1",
+        "network": "General",
+        "at": {
+          "x": 3.9958333333333336,
+          "y": 0.2999999999999998
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:living#12",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 5.95,
+          "y": 1.4291666666666656
+        },
+        {
+          "x": 5.95,
+          "y": 1.5791666666666655
+        },
+        {
+          "x": 5.8,
+          "y": 1.5791666666666655
+        },
+        {
+          "x": 5.8,
+          "y": 1.4291666666666656
+        }
+      ],
+      "closed": true,
+      "area": 0.022499999999999076,
+      "length": 0.6000000000000005,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "living",
+        "placed": "every 3.6 along the walls",
+        "group": "1",
+        "network": "General",
+        "at": {
+          "x": 5.95,
+          "y": 1.5041666666666655
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:living#13",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 5.8125,
+          "y": 4.45
+        },
+        {
+          "x": 5.6625,
+          "y": 4.45
+        },
+        {
+          "x": 5.6625,
+          "y": 4.3
+        },
+        {
+          "x": 5.8125,
+          "y": 4.3
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000853,
+      "length": 0.6000000000000014,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "living",
+        "placed": "every 3.6 along the walls",
+        "group": "1",
+        "network": "General",
+        "at": {
+          "x": 5.7375,
+          "y": 4.45
+        }
+      }
+    },
+    {
+      "id": "part:power.outlet:living#14",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 2.6541666666666686,
+          "y": 4.45
+        },
+        {
+          "x": 2.504166666666668,
+          "y": 4.45
+        },
+        {
+          "x": 2.504166666666668,
+          "y": 4.3
+        },
+        {
+          "x": 2.6541666666666686,
+          "y": 4.3
+        }
+      ],
+      "closed": true,
+      "area": 0.022499999999999076,
+      "length": 0.6000000000000014,
+      "source": "/services/power/place/1",
+      "part": {
+        "service": "power",
+        "part": "outlet",
+        "label": "outlet",
+        "mount": "wall",
+        "above": 0.3,
+        "space": "living",
+        "placed": "every 3.6 along the walls",
+        "group": "1",
+        "network": "General",
+        "at": {
+          "x": 2.5791666666666684,
+          "y": 4.45
+        }
+      }
+    },
+    {
+      "id": "part:lighting.light:bath#15",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 1.7625000000000004,
+          "y": 6.8125
+        },
+        {
+          "x": 1.9125000000000003,
+          "y": 6.8125
+        },
+        {
+          "x": 1.9125000000000003,
+          "y": 6.9625
+        },
+        {
+          "x": 1.7625000000000004,
+          "y": 6.9625
+        }
+      ],
+      "closed": true,
+      "area": 0.022499999999999076,
+      "length": 0.6000000000000005,
+      "source": "/services/lighting/place/1",
+      "part": {
+        "service": "lighting",
+        "part": "light",
+        "label": "light",
+        "mount": "ceiling",
+        "space": "bath",
+        "placed": "in the middle of the room",
+        "at": {
+          "x": 1.8375000000000004,
+          "y": 6.8875
+        }
+      }
+    },
+    {
+      "id": "part:lighting.light:bedroom#16",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 9.825000000000001,
+          "y": 1.8
+        },
+        {
+          "x": 9.975,
+          "y": 1.8
+        },
+        {
+          "x": 9.975,
+          "y": 1.95
+        },
+        {
+          "x": 9.825000000000001,
+          "y": 1.95
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000853,
+      "length": 0.599999999999997,
+      "source": "/services/lighting/place/1",
+      "part": {
+        "service": "lighting",
+        "part": "light",
+        "label": "light",
+        "mount": "ceiling",
+        "space": "bedroom",
+        "placed": "in the middle of the room",
+        "at": {
+          "x": 9.9,
+          "y": 1.875
+        }
+      }
+    },
+    {
+      "id": "part:lighting.light:living#17",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 3.025,
+          "y": 2.3
+        },
+        {
+          "x": 3.1750000000000003,
+          "y": 2.3
+        },
+        {
+          "x": 3.1750000000000003,
+          "y": 2.45
+        },
+        {
+          "x": 3.025,
+          "y": 2.45
+        }
+      ],
+      "closed": true,
+      "area": 0.022500000000000853,
+      "length": 0.6000000000000014,
+      "source": "/services/lighting/place/1",
+      "part": {
+        "service": "lighting",
+        "part": "light",
+        "label": "light",
+        "mount": "ceiling",
+        "space": "living",
+        "placed": "in the middle of the room",
+        "at": {
+          "x": 3.1,
+          "y": 2.375
+        }
+      }
+    },
+    {
+      "id": "part:plumbing.drain:bath#18",
+      "kind": "part",
+      "layer": "PLATE-PART",
+      "points": [
+        {
+          "x": 1.7625000000000004,
+          "y": 6.8125
+        },
+        {
+          "x": 1.9125000000000003,
+          "y": 6.8125
+        },
+        {
+          "x": 1.9125000000000003,
+          "y": 6.9625
+        },
+        {
+          "x": 1.7625000000000004,
+          "y": 6.9625
+        }
+      ],
+      "closed": true,
+      "area": 0.022499999999999076,
+      "length": 0.6000000000000005,
+      "source": "/services/plumbing/place/1",
+      "part": {
+        "service": "plumbing",
+        "part": "drain",
+        "label": "drain",
+        "mount": "floor",
+        "space": "bath",
+        "placed": "in the middle of the room",
+        "group": "1",
+        "network": "plumbing",
+        "at": {
+          "x": 1.8375000000000004,
+          "y": 6.8875
+        }
+      }
+    }
+  ],
+  "bounds": {
+    "minX": 0.0,
+    "minY": -0.015833333333333532,
+    "maxX": 12.0,
+    "maxY": 8.0
+  },
+  "circuits": [
+    {
+      "service": "plumbing",
+      "network": "plumbing",
+      "scope": "",
+      "group": "1",
+      "devices": [
+        [
+          "drain",
+          1
+        ]
+      ],
+      "load": 0.0,
+      "length": 1.600000000000001
+    },
+    {
+      "service": "power",
+      "network": "General",
+      "scope": "",
+      "group": "1",
+      "devices": [
+        [
+          "outlet",
+          6
+        ]
+      ],
+      "load": 0.0,
+      "length": 19.87083333333333
+    },
+    {
+      "service": "power",
+      "network": "General",
+      "scope": "",
+      "group": "2",
+      "devices": [
+        [
+          "outlet",
+          4
+        ]
+      ],
+      "load": 0.0,
+      "length": 22.95
+    }
+  ]
+}

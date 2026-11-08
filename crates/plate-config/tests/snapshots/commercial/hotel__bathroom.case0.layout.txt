@@ -1,0 +1,4 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 3
+space basin fixture 0.27 [0.50, 0.00 → 1.10, 0.45]
+space shower fixture 0.81 [1.10, 0.00 → 2.00, 0.90]
+space toilet fixture 0.28 [0.10, 1.70 → 0.50, 2.40]

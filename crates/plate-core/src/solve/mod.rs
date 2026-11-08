@@ -29,6 +29,8 @@ pub mod ports;
 pub mod route;
 mod spine;
 pub mod spread;
+#[cfg(test)]
+pub(crate) mod testkit;
 
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -73,6 +75,9 @@ pub struct Ctx<'a> {
     /// seed) is only spent while this is under [`WORK_LIMIT`]. Counted, not timed, so the same
     /// file always gets the same effort and the same answer.
     pub work: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Annealing moves actually made in this solve (a level with nothing to move makes none).
+    /// Only reported ([`Solution::moves`]); unlike `work`, it never decides anything.
+    pub moves: std::sync::Arc<std::sync::atomic::AtomicU64>,
     /// The plan's absolute pointer in the configuration ("" at the root).
     pub plan_pointer: &'a str,
     /// The top level of a plate: it builds the walls on the plate's boundary too.
@@ -253,6 +258,8 @@ struct Host {
     uses: HashMap<String, usize>,
     /// Moves made so far (see [`Ctx::work`]).
     work: std::sync::Arc<std::sync::atomic::AtomicU64>,
+    /// Moves actually made (see [`Ctx::moves`]).
+    moves: std::sync::Arc<std::sync::atomic::AtomicU64>,
 }
 
 /// Solved plans kept between solves, so editing one level doesn't re-solve the others. Keys
@@ -270,6 +277,10 @@ pub struct Solution {
     pub layout: Layout,
     pub diagnostics: Vec<Diagnostic>,
     pub report: Report,
+    /// Annealing moves this solve made ([`Ctx::moves`]): 0 when every level came from the cache
+    /// or had nothing to move (every space pinned). For tests and `plate check`; not part of the
+    /// layout, so it never changes what's drawn.
+    pub moves: u64,
 }
 
 /// What a plan file (one without a `start`) is shown in. Plates ignore it.
@@ -414,6 +425,7 @@ fn solve_plate(config: &Config, start: &Start) -> Solution {
             grid,
             seed: hash64(&[&config.seed.to_string(), "root"]),
             work: host.work.clone(),
+            moves: host.moves.clone(),
             plan_pointer: "",
             root: true,
         };
@@ -430,11 +442,17 @@ fn solve_plate(config: &Config, start: &Start) -> Solution {
             layout: Layout::new(config.name.clone(), config.system, units, elements).with_circuits(circuits),
             diagnostics,
             report,
+            moves: host.moves.load(std::sync::atomic::Ordering::Relaxed),
         };
     }
 
     let report = report(&diagnostics, 0.0, 0.0, 0);
-    Solution { layout: Layout::new(config.name.clone(), config.system, units, elements), diagnostics, report }
+    Solution {
+        layout: Layout::new(config.name.clone(), config.system, units, elements),
+        diagnostics,
+        report,
+        moves: 0,
+    }
 }
 
 /// A plan file on its own: solved in a preview slot exactly as a plate would solve it in a space
@@ -587,6 +605,7 @@ fn solve_preview(config: &Config, view: &View) -> Solution {
         layout: Layout::new(config.name.clone(), setup.system, units, elements).with_circuits(circuits),
         diagnostics,
         report,
+        moves: host.moves.load(std::sync::atomic::Ordering::Relaxed),
     }
 }
 
@@ -693,6 +712,7 @@ impl Host {
             cache: HashMap::new(),
             uses: HashMap::new(),
             work: Default::default(),
+            moves: Default::default(),
         }
     }
 
@@ -760,6 +780,7 @@ impl Host {
                     grid,
                     seed: hash64(&[&self.root_seed.to_string(), &key]),
                     work: self.work.clone(),
+                    moves: self.moves.clone(),
                     plan_pointer: abs,
                     root: false,
                 };
@@ -922,6 +943,7 @@ impl Host {
                 grid: ctx.grid,
                 seed,
                 work: ctx.work.clone(),
+                moves: ctx.moves.clone(),
                 plan_pointer: ctx.plan_pointer,
                 root: ctx.root,
             };
@@ -1116,6 +1138,7 @@ impl Host {
                     grid,
                     seed: hash64(&[&ctx.seed.to_string(), &placed.name, "fill"]),
                     work: self.work.clone(),
+                    moves: self.moves.clone(),
                     plan_pointer: &child_abs,
                     root: false,
                 };

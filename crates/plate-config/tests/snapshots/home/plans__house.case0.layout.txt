@@ -1,0 +1,42 @@
+status solved · unmet 0 · preferences 1 · leftover 0.00 · spaces 27
+space bath_1 room 7.50 [9.00, 8.00 → 12.00, 10.50]
+space bath_1.basin fixture 0.27 [10.60, 8.00 → 11.20, 8.45]
+space bath_1.shower fixture 0.81 [11.10, 9.40 → 12.00, 10.30]
+space bath_1.toilet fixture 0.28 [9.80, 9.80 → 10.20, 10.50]
+space bath_2 room 8.00 [12.00, 3.50 → 16.00, 5.50]
+space bath_2.basin fixture 0.27 [14.10, 3.50 → 14.70, 3.95]
+space bath_2.shower fixture 0.81 [15.10, 4.60 → 16.00, 5.50]
+space bath_2.toilet fixture 0.28 [12.00, 5.10 → 12.70, 5.50]
+space bedroom_1 room 15.75 [4.50, 0.00 → 9.00, 3.50]
+space bedroom_1.bed fixture 3.28 [6.60, 1.45 → 8.20, 3.50]
+space bedroom_1.wardrobe fixture 1.44 [6.20, 0.00 → 8.60, 0.60]
+space bedroom_2 room 15.75 [11.50, 0.00 → 16.00, 3.50]
+space bedroom_2.bed fixture 3.28 [13.60, 1.45 → 15.20, 3.50]
+space bedroom_2.wardrobe fixture 1.44 [13.00, 0.00 → 15.40, 0.60]
+space kitchen room 22.50 [0.00, 0.00 → 4.50, 5.00]
+space kitchen.counter fixture 2.47 [0.70, 0.00 → 4.50, 0.65]
+space kitchen.fridge fixture 0.49 [0.00, 0.00 → 0.70, 0.70]
+space living room 49.50 [0.00, 5.00 → 9.00, 10.50]
+space living.armchair_1 fixture 0.72 [8.12, 7.75 → 8.97, 8.60]
+space living.armchair_2 fixture 0.72 [4.80, 9.62 → 5.65, 10.48]
+space living.sofa fixture 2.47 [5.10, 8.05 → 7.70, 9.00]
+space living.tv fixture 0.81 [5.50, 5.00 → 7.30, 5.45]
+space master room 20.00 [12.00, 5.50 → 16.00, 10.50]
+space master.bed fixture 3.28 [12.00, 6.60 → 14.05, 8.20]
+space master.desk_1 fixture 0.72 [12.00, 9.20 → 12.60, 10.40]
+space master.wardrobe fixture 1.44 [13.50, 9.90 → 15.90, 10.50]
+space hall circulation 29.00 [4.50, 0.00 → 12.00, 8.00]
+Door door:hall|'entrance
+Door door:bath_1|hall
+Door door:bath_2|hall
+Door door:bedroom_1|hall
+Door door:bedroom_2|hall
+Door door:kitchen|hall
+Door door:living|hall
+Door door:master|hall
+Window window:living|'outdoor
+Window window:bedroom_1|'facade
+Window window:bedroom_2|'facade
+Window window:kitchen|'facade
+Window window:master|'facade
+Window window:master|'outdoor

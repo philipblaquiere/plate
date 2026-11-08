@@ -1,0 +1,4 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 3
+space armchair_1 fixture 0.72 [0.80, 3.03 → 1.65, 3.88]
+space sofa fixture 2.47 [1.90, 2.95 → 4.50, 3.90]
+space tv fixture 0.81 [1.30, 0.00 → 3.10, 0.45]

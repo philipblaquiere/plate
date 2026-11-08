@@ -1310,3 +1310,93 @@ fn part_element(k: usize, p: Placed, instances: &[Instance], units: Units) -> El
     });
     e
 }
+
+/// Placements on a pinned flat (`testkit::pinned_flat`): the rooms can't move, so positions are
+/// exact. Each room's clear rectangle is its pinned rectangle less its walls (exterior 0.3 grows
+/// inward, party 0.25 inward, partition 0.1 and wet 0.15 centred on the edge).
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::geometry::{Bounds, Point};
+    use crate::solve::testkit::*;
+
+    /// Living, bedroom and bath, clear: (min x, min y, max x, max y).
+    const CLEAR: [(&str, f64, f64, f64, f64); 3] = [
+        ("living", 0.25, 0.3, 5.95, 4.45),
+        ("bedroom", 8.05, 0.3, 11.75, 3.45),
+        ("bath", 0.25, 6.075, 3.425, 7.7),
+    ];
+
+    fn close(a: Point, b: Point) -> bool {
+        a.distance(b) < 1e-6
+    }
+
+    fn on_outline(p: Point, b: &Bounds) -> bool {
+        let inside =
+            p.x >= b.min_x - 1e-6 && p.x <= b.max_x + 1e-6 && p.y >= b.min_y - 1e-6 && p.y <= b.max_y + 1e-6;
+        let edge = [p.x - b.min_x, b.max_x - p.x, p.y - b.min_y, b.max_y - p.y]
+            .iter()
+            .fold(f64::MAX, |m, d| m.min(d.abs()));
+        inside && edge < 1e-6
+    }
+
+    #[test]
+    fn rooms_are_drawn_to_their_clear_rectangles() {
+        let s = run(pinned_flat(json!({})));
+        assert_met(&s);
+        for (id, x0, y0, x1, y1) in CLEAR {
+            let b = Bounds::from_points(&element(&s, id).points);
+            assert!(close(Point::new(b.min_x, b.min_y), Point::new(x0, y0)), "{id}: {b:?}");
+            assert!(close(Point::new(b.max_x, b.max_y), Point::new(x1, y1)), "{id}: {b:?}");
+        }
+    }
+
+    #[test]
+    fn over_puts_one_light_in_the_middle_of_each_room() {
+        let s = run(pinned_flat_with(json!({ "lighting": lighting() })));
+        assert_met(&s);
+        let lights = parts(&s, "light");
+        for (id, x0, y0, x1, y1) in CLEAR {
+            let here = in_space(&lights, id);
+            assert_eq!(here.len(), 1, "{id}");
+            let at = here[0].part.as_ref().unwrap().at;
+            assert!(close(at, Point::new((x0 + x1) / 2.0, (y0 + y1) / 2.0)), "{id}: {at:?}");
+        }
+    }
+
+    #[test]
+    fn every_puts_outlets_on_the_rooms_outline_no_further_apart_than_asked() {
+        let s = run(pinned_flat_with(json!({ "power": power() })));
+        assert_met(&s);
+        let outlets = parts(&s, "outlet");
+        // 3.6 apart at most around 19.7 m of living room and 13.7 m of bedroom (doors cut it).
+        for (id, want) in [("living", 6), ("bedroom", 4), ("bath", 0)] {
+            assert_eq!(in_space(&outlets, id).len(), want, "{id}");
+        }
+        for o in &outlets {
+            let p = o.part.as_ref().unwrap();
+            let (_, x0, y0, x1, y1) = CLEAR.iter().find(|c| c.0 == p.space).unwrap();
+            let b = Bounds { min_x: *x0, min_y: *y0, max_x: *x1, max_y: *y1 };
+            assert!(on_outline(p.at, &b), "{} at {:?} is off {}'s walls", o.id, p.at, p.space);
+            assert_eq!(p.above, Some(0.3));
+        }
+    }
+
+    #[test]
+    fn beside_puts_one_switch_by_each_rooms_door() {
+        let s = run(pinned_flat_with(json!({ "lighting": lighting() })));
+        assert_met(&s);
+        let switches = parts(&s, "switch");
+        let doors = of_kind(&s, crate::layout::ElementKind::Door);
+        for (id, x0, y0, x1, y1) in CLEAR {
+            let here = in_space(&switches, id);
+            assert_eq!(here.len(), 1, "{id}");
+            let at = here[0].part.as_ref().unwrap().at;
+            assert!(on_outline(at, &Bounds { min_x: x0, min_y: y0, max_x: x1, max_y: y1 }), "{id}: {at:?}");
+            let door = doors.iter().find(|d| d.id.contains(id)).unwrap();
+            let near = door.points.iter().map(|p| p.distance(at)).fold(f64::MAX, f64::min);
+            assert!(near < 0.5, "{id}'s switch is {near} from its door");
+        }
+    }
+}

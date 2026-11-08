@@ -442,3 +442,66 @@ fn project(p: Point, a: Point, b: Point) -> (Point, f64) {
     let t = (((p.x - a.x) * dx + (p.y - a.y) * dy) / len2).clamp(0.0, 1.0);
     (Point::new(a.x + dx * t, a.y + dy * t), t)
 }
+
+/// Routes on a pinned flat (`testkit::pinned_flat`).
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use super::project;
+    use crate::geometry::Point;
+    use crate::layout::ElementKind;
+    use crate::solve::testkit::*;
+
+    /// Pieces of routed runs as (along, a, b).
+    fn pieces(s: &crate::solve::Solution) -> Vec<(&'static str, Point, Point)> {
+        runs(s, "routed")
+            .iter()
+            .flat_map(|r| {
+                let along = r.run.as_ref().unwrap().along.unwrap_or("?");
+                r.points.windows(2).map(move |w| (along, w[0], w[1]))
+            })
+            .collect()
+    }
+
+    #[test]
+    fn runs_low_in_a_wall_never_pass_through_a_doorway() {
+        let s = run(pinned_flat_with(json!({ "power": power(), "plumbing": plumbing() })));
+        assert_met(&s);
+        let doors = of_kind(&s, ElementKind::Door);
+        assert_eq!(doors.len(), 3);
+        for (along, a, b) in pieces(&s).into_iter().filter(|p| p.0 == "wall") {
+            let steps = (a.distance(b) / 0.02).ceil().max(1.0) as usize;
+            for k in 0..=steps {
+                let t = k as f64 / steps as f64;
+                let p = Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
+                for d in &doors {
+                    let (q, u) = project(p, d.points[0], d.points[1]);
+                    // Inside the opening (not at its jambs) and within a wall's thickness of it.
+                    assert!(
+                        !(u > 0.02 && u < 0.98 && q.distance(p) < 0.2),
+                        "a {along} run passes through {} at {p:?}",
+                        d.id
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn every_piece_says_where_it_goes() {
+        let s = run(pinned_flat_with(json!({ "power": power() })));
+        for (along, a, b) in pieces(&s) {
+            assert!(["wall", "header", "ceiling", "drop"].contains(&along), "{along}: {a:?} → {b:?}");
+        }
+        // Power may cross the hall's ceiling, so at least one piece does or goes over a door.
+        assert!(pieces(&s).iter().any(|p| p.0 == "ceiling" || p.0 == "header"));
+    }
+
+    #[test]
+    fn routing_is_the_same_every_time() {
+        let a = run(pinned_flat_with(json!({ "power": power(), "plumbing": plumbing() })));
+        let b = run(pinned_flat_with(json!({ "power": power(), "plumbing": plumbing() })));
+        assert_eq!(pieces(&a), pieces(&b));
+    }
+}
