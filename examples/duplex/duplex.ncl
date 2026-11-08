@@ -17,6 +17,7 @@
 # the walls, over the doors, across the ceilings). Press A there for the schematic.
 
 let flat_plan = import "plans/flat.ncl" in
+let open_flat = import "plans/open-flat.ncl" in
 {
   name = "Duplex",
   system = 'imperial, # lengths shown in feet and inches
@@ -40,5 +41,10 @@ let flat_plan = import "plans/flat.ncl" in
   spaces = {
     flat = { count = 2, width = 30, depth = 36, tags = ['dwelling], plan = flat_plan },
   },
-  rules = [plate.door "flat" 'facade],
+  rules = [
+    plate.door "flat" 'facade,
+    # The second flat is the same program opened up (plans/open-flat.ncl): living, dining and
+    # kitchen with no wall between them, under the same services.
+    plate.instance "flat_2" open_flat,
+  ],
 }

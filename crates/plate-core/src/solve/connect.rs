@@ -24,7 +24,7 @@ use crate::layout::{Circuit, Element, ElementKind, RunInfo, RunMark};
 use crate::plan::{tag_of, Selector};
 use crate::service::{Draw, Feed, Load, Medium, Network, Role};
 
-use super::fit::{Instance, Issues, Model, Placed};
+use super::fit::{Face, Fixture, Instance, Issues, Model, Placed, Room};
 use super::num;
 use super::route::{Along, Edge, Route, Spot};
 
@@ -150,6 +150,7 @@ fn nodes(
     sel: &Selector,
     placed: &[Placed],
     elements: &[Element],
+    runs: &dyn Fn(&Face) -> bool,
 ) -> Vec<Node> {
     let mut out = Vec::new();
     for item in sel.items() {
@@ -158,17 +159,14 @@ fn nodes(
                 for f in &room.fixtures {
                     let Some(info) = &elements[f.element].space else { continue };
                     if crate::plan::has_tag(&info.tags, info.kind, tag) {
-                        let at = Point::new((f.back.0.x + f.back.1.x) / 2.0, (f.back.0.y + f.back.1.y) / 2.0);
-                        let tol = model.units.tolerance() * 100.0;
-                        let face = room
-                            .faces
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, face)| face.walled)
-                            .map(|(k, face)| (k, point_segment_distance(at, face.a, face.b)))
-                            .filter(|(_, d)| *d <= tol)
-                            .min_by(|x, y| x.1.total_cmp(&y.1))
-                            .map(|(k, _)| (r, k));
+                        let (at, face) = joint(
+                            room,
+                            f,
+                            &elements[f.element].points,
+                            model.units.tolerance() * 100.0,
+                            runs,
+                        );
+                        let face = face.map(|k| (r, k));
                         out.push(Node {
                             at,
                             room: room.path.clone(),
@@ -194,6 +192,96 @@ fn nodes(
         }
     }
     out
+}
+
+/// For a source about to be placed: from each of `spots`, the longest run the network would
+/// take to the terminals it feeds in `rooms` (all of its terminals, if none are there). A `one`
+/// placement uses it to keep a network's runs within its `limit`.
+pub(super) fn reach(
+    model: &Model,
+    inst: &Instance,
+    net: &Network,
+    placed: &[Placed],
+    elements: &[Element],
+    rooms: &[usize],
+    spots: &[Spot],
+) -> Vec<f64> {
+    let need = net.via.cavity.map_or(0.0, |c| c.0.to(model.units));
+    let runs = |face: &Face| {
+        let blocked = face
+            .wall
+            .and_then(|w| elements[w].wall.as_ref())
+            .is_some_and(|w| w.cross == crate::assembly::Cross::No.name());
+        face.cavity + 1e-9 >= need && !blocked
+    };
+    let all = nodes(model, inst, &net.to, placed, elements, &runs);
+    let here: Vec<&Node> = all.iter().filter(|n| n.in_room.is_some_and(|r| rooms.contains(&r))).collect();
+    let terminals: Vec<&Node> = if here.is_empty() { all.iter().collect() } else { here };
+    if terminals.is_empty() {
+        return vec![0.0; spots.len()];
+    }
+    let mut every: Vec<Spot> = spots.to_vec();
+    every.extend(terminals.iter().map(|n| n.spot()));
+    let route = Route::build(model, inst, &net.via, elements, &every);
+    let mut far = vec![0.0_f64; spots.len()];
+    for t in &route.spots[spots.len()..] {
+        let (dist, _) = route.shortest(&[*t]);
+        for (k, id) in route.spots[..spots.len()].iter().enumerate() {
+            far[k] = far[k].max(dist[*id]);
+        }
+    }
+    far
+}
+
+/// Where a fixture joins a network: the middle of its back, or, when that's on a wall the
+/// network can't run in, the nearest point of its outline that is on a wall it can. A sink whose
+/// counter backs on a plain partition drains into the plumbing wall its end stands against.
+fn joint(
+    room: &Room,
+    f: &Fixture,
+    outline: &[Point],
+    tol: f64,
+    runs: &dyn Fn(&Face) -> bool,
+) -> (Point, Option<usize>) {
+    let mid = Point::new((f.back.0.x + f.back.1.x) / 2.0, (f.back.0.y + f.back.1.y) / 2.0);
+    let on_mid = room
+        .faces
+        .iter()
+        .enumerate()
+        .filter(|(_, face)| face.walled)
+        .map(|(k, face)| (k, point_segment_distance(mid, face.a, face.b)))
+        .filter(|(_, d)| *d <= tol)
+        .min_by(|x, y| x.1.total_cmp(&y.1))
+        .map(|(k, _)| k);
+    if on_mid.is_none_or(|k| runs(&room.faces[k])) {
+        return (mid, on_mid);
+    }
+    // Each side of the outline along a wall the network runs in, at its point nearest the middle.
+    let n = outline.len();
+    let better = room
+        .faces
+        .iter()
+        .enumerate()
+        .filter(|(_, face)| face.walled && runs(face))
+        .flat_map(|(k, face)| {
+            (0..n).filter_map(move |i| {
+                let (s0, d0) = face.locate(outline[i]);
+                let (s1, d1) = face.locate(outline[(i + 1) % n]);
+                if d0.max(d1) > tol {
+                    return None;
+                }
+                let (lo, hi) = (s0.min(s1).max(0.0), s0.max(s1).min(face.len()));
+                (hi - lo > tol).then(|| {
+                    let p = face.point(face.locate(mid).0.clamp(lo, hi));
+                    (p.distance(mid), k, p)
+                })
+            })
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)));
+    match better {
+        Some((_, k, p)) => (p, Some(k)),
+        None => (mid, on_mid),
+    }
 }
 
 fn part_node(model: &Model, k: usize, p: &Placed) -> Node {
@@ -223,8 +311,8 @@ fn controls(model: &Model, instances: &[Instance], placed: &[Placed], elements: 
     let mut out = Vec::new();
     for (ii, inst) in instances.iter().enumerate() {
         for (ni, net) in inst.def.connect.iter().enumerate().filter(|(_, n)| n.role == Role::Control) {
-            let from = nodes(model, inst, &net.from, placed, elements);
-            let to = nodes(model, inst, &net.to, placed, elements);
+            let from = nodes(model, inst, &net.from, placed, elements, &|_| true);
+            let to = nodes(model, inst, &net.to, placed, elements, &|_| true);
             let mut rooms: Vec<&str> = to.iter().map(|n| n.room.as_str()).collect();
             rooms.dedup();
             let mut seen: Vec<&str> = Vec::new();
@@ -332,8 +420,9 @@ impl Job<'_> {
         let units = model.units;
         let m = 1000.0 / units.to_mm();
         let scope = inst.space.clone().unwrap_or_default();
-        let sources = nodes(model, inst, &net.from, placed, elements);
-        let terminals = nodes(model, inst, &net.to, placed, elements);
+        let runs = |face: &Face| self.runs_in(face, elements);
+        let sources = nodes(model, inst, &net.from, placed, elements, &runs);
+        let terminals = nodes(model, inst, &net.to, placed, elements, &runs);
         if terminals.is_empty() {
             return;
         }
@@ -752,14 +841,19 @@ impl Job<'_> {
 
     /// The cavity of the wall a part is on, if the network can't run in it.
     fn shallow_one(&self, t: &Node, elements: &[Element]) -> Option<f64> {
-        let need = self.net.via.cavity.map_or(0.0, |c| c.0.to(self.model.units));
         let (r, f) = t.face?;
         let face = &self.model.rooms[r].faces[f];
+        (!self.runs_in(face, elements)).then_some(face.cavity)
+    }
+
+    /// Can the network run in the wall behind a face?
+    fn runs_in(&self, face: &Face, elements: &[Element]) -> bool {
+        let need = self.net.via.cavity.map_or(0.0, |c| c.0.to(self.model.units));
         let blocked = face
             .wall
             .and_then(|w| elements[w].wall.as_ref())
             .is_some_and(|w| w.cross == crate::assembly::Cross::No.name());
-        (face.cavity + 1e-9 < need || blocked).then_some(face.cavity)
+        face.cavity + 1e-9 >= need && !blocked
     }
 
     /// A way through the route as pieces to draw: where it turns up a wall or passes through
@@ -966,9 +1060,67 @@ fn arc(a: Point, b: Point) -> Vec<Point> {
 mod tests {
     use std::collections::BTreeMap;
 
+    use super::{joint, Face, Fixture, Point, Room};
+
     use serde_json::json;
 
     use crate::solve::testkit::*;
+
+    /// A 4 × 3 room whose bottom wall a network runs in (a cavity of 0.14) and whose other walls
+    /// it can't (0.09), and a fixture `x0..x1 × y0..y1` with this back.
+    fn room_and(body: [f64; 4], back: (Point, Point)) -> (Room, Fixture, Vec<Point>) {
+        let corners =
+            [Point::new(0.0, 0.0), Point::new(4.0, 0.0), Point::new(4.0, 3.0), Point::new(0.0, 3.0)];
+        let inward =
+            [Point::new(0.0, 1.0), Point::new(-1.0, 0.0), Point::new(0.0, -1.0), Point::new(1.0, 0.0)];
+        let faces = (0..4)
+            .map(|k| Face {
+                a: corners[k],
+                b: corners[(k + 1) % 4],
+                wall: None,
+                walled: true,
+                roles: Vec::new(),
+                cavity: if k == 0 { 0.14 } else { 0.09 },
+                inward: inward[k],
+                at: (0, k as f64),
+            })
+            .collect();
+        let room = Room {
+            element: 0,
+            path: "room".into(),
+            name: "room".into(),
+            key: "room".into(),
+            kind: crate::plan::SpaceKind::Room,
+            tags: Vec::new(),
+            loops: vec![corners.to_vec()],
+            faces,
+            openings: Vec::new(),
+            fixtures: Vec::new(),
+            area: 12.0,
+        };
+        let [x0, y0, x1, y1] = body;
+        let outline = vec![Point::new(x0, y0), Point::new(x1, y0), Point::new(x1, y1), Point::new(x0, y1)];
+        (room, Fixture { element: 0, back, against: None }, outline)
+    }
+
+    #[test]
+    fn a_fixture_joins_where_it_meets_a_wall_the_network_runs_in() {
+        let runs = |f: &Face| f.cavity >= 0.12;
+        // Backed on the bottom wall: its back's middle.
+        let (room, f, outline) = room_and([1.0, 0.0, 3.0, 0.6], (Point::new(3.0, 0.0), Point::new(1.0, 0.0)));
+        let (at, face) = joint(&room, &f, &outline, 1e-3, &runs);
+        assert_eq!((at, face), (Point::new(2.0, 0.0), Some(0)));
+        // Backed on the left wall, its end on the bottom one: there, as near its back's middle as
+        // it gets.
+        let (room, f, outline) = room_and([0.0, 0.0, 0.6, 2.0], (Point::new(0.0, 2.0), Point::new(0.0, 0.0)));
+        let (at, face) = joint(&room, &f, &outline, 1e-3, &runs);
+        assert_eq!(face, Some(0));
+        assert!(at.distance(Point::new(0.0, 0.0)) < 1e-9, "{at:?}");
+        // Nowhere on a wall it runs in: its back's middle still (the network says it can't run).
+        let (room, f, outline) = room_and([0.0, 1.0, 0.6, 2.5], (Point::new(0.0, 2.5), Point::new(0.0, 1.0)));
+        let (at, face) = joint(&room, &f, &outline, 1e-3, &runs);
+        assert_eq!((at, face), (Point::new(0.0, 1.75), Some(3)));
+    }
 
     #[test]
     fn groups_hold_at_most_max_and_every_terminal_is_on_one() {

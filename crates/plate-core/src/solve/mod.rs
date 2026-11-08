@@ -25,6 +25,8 @@ pub mod fit;
 pub mod frame;
 mod grid;
 #[cfg(test)]
+mod network_tests;
+#[cfg(test)]
 mod open_tests;
 pub mod outline;
 pub mod ports;
@@ -92,6 +94,9 @@ pub const WORK_LIMIT: u64 = 6_000_000;
 
 /// Seeds a level is tried with, at most, while something in it isn't met.
 const ATTEMPTS: u64 = 4;
+
+/// The share of [`WORK_LIMIT`] one level's tries may take, its own plans' included.
+const LEVEL_SHARE: f64 = 0.5;
 
 impl Ctx<'_> {
     /// Is there effort left for another try?
@@ -993,10 +998,14 @@ impl Host {
         // (unmet, floor left over in thousandths), the attempt, and the typicals it used.
         type Attempt = ((usize, i64), Sub, HashMap<String, usize>);
         let mut best: Option<Attempt> = None;
+        let start = ctx.work.load(std::sync::atomic::Ordering::Relaxed);
         for attempt in 0..ATTEMPTS {
             let seed =
                 if attempt == 0 { ctx.seed } else { hash64(&[&ctx.seed.to_string(), &attempt.to_string()]) };
-            if attempt > 0 && !ctx.can_retry(0.5) {
+            // Another try while this level has spent under its share of the effort (so a level
+            // solved late isn't starved by those before it), and the whole solve under all of it.
+            let spent = ctx.work.load(std::sync::atomic::Ordering::Relaxed) - start;
+            if attempt > 0 && (spent as f64 >= WORK_LIMIT as f64 * LEVEL_SHARE || !ctx.can_retry(1.0)) {
                 break;
             }
             let try_ctx = Ctx {
