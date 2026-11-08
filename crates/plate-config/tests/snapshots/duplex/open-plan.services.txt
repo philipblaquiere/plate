@@ -1,3 +1,12 @@
+part heat.baseboard in bedroom × 1
+part heat.baseboard in dining × 1
+part heat.baseboard in living × 1
+part heat.baseboard in nook × 1
+part heat.thermostat in bath × 1
+part heat.thermostat in bedroom × 1
+part heat.thermostat in closet × 1
+part heat.thermostat in living × 1
+part heat.thermostat in nook × 1
 part lighting.light in bath × 1
 part lighting.light in bedroom × 1
 part lighting.light in closet × 1
@@ -9,8 +18,5 @@ part lighting.light in nook × 1
 part lighting.switch in bath × 1
 part lighting.switch in bedroom × 1
 part lighting.switch in closet × 1
-part lighting.switch in dining × 1
-part lighting.switch in entry × 1
-part lighting.switch in kitchen × 1
-part lighting.switch in living × 1
+part lighting.switch in living × 4
 part lighting.switch in nook × 1

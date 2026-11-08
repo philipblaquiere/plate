@@ -1883,7 +1883,7 @@
       ]
     },
     "PlaceOne": {
-      "description": "The best single place in each space, on its walls: as near as can be to `near`, away from `apart`.",
+      "description": "The best single place in each space, on its walls: as near as can be to `near`, away from `apart`. With `per = 'region`, one place per region (spaces with no wall between them) instead.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -1915,12 +1915,30 @@
         "wall": {
           "description": "What the wall it goes on must be.",
           "$ref": "#/$defs/Requirement"
+        },
+        "per": {
+          "description": "What one part is for: each selected space, or each region (the spaces joined by open edges, with no wall between them; circulation never joins one). A space that isn't open to another is a region of its own, so `[\"#room\", \"#zone\"]` with `per = 'region` gives one per walled room and one per open area.",
+          "enum": [
+            "space",
+            "region"
+          ],
+          "default": "space",
+          "x-enumDescriptions": {
+            "space": "One in each selected space.",
+            "region": "One in each region: the best place on any wall of its selected spaces."
+          }
+        },
+        "each": {
+          "description": "With `per = 'region`: one part for each selected space of the region, side by side at the region's one place (a switch for each space's lights in one box). Each serves its own space.",
+          "type": "boolean",
+          "default": false
         }
       },
       "x-docs": "services",
       "x-examples": [
         "plate.one \"panel\" \"#utility\" & { near = 'entrance },",
-        "plate.one \"thermostat\" \"#room\" & { near = 'door, apart = ['window, 'facade] },"
+        "plate.one \"thermostat\" \"#room\" & { near = 'door, apart = ['window, 'facade] },",
+        "plate.one \"switch\" \"#zone\" & { per = 'region, each = true, near = 'door },"
       ]
     },
     "Placement": {

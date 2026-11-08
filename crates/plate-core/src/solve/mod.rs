@@ -28,6 +28,7 @@ mod grid;
 mod open_tests;
 pub mod outline;
 pub mod ports;
+mod regions;
 pub mod route;
 mod spine;
 pub mod spread;
@@ -190,6 +191,32 @@ struct Sub {
     walls: Vec<SubWall>,
     /// The levels that declare services, for the passes that place and connect their parts.
     services: Vec<ServiceLevel>,
+    /// Spaces joined by open edges.
+    regions: Vec<SubRegion>,
+    /// What's built where two spaces meet, and why.
+    edges: Vec<SubEdge>,
+}
+
+#[derive(Debug, Clone)]
+struct SubEdge {
+    path: String,
+    a: Point,
+    b: Point,
+    info: crate::layout::EdgeInfo,
+}
+
+#[derive(Debug, Clone)]
+struct SubRegion {
+    /// Its spaces' paths joined by `+`.
+    path: String,
+    outer: Vec<Point>,
+    holes: Vec<Vec<Point>>,
+    info: crate::layout::RegionInfo,
+}
+
+/// A region's key with every space in it put under `prefix`.
+fn region_under(prefix: &str, key: &str) -> String {
+    key.split('+').map(|n| format!("{prefix}{n}")).collect::<Vec<_>>().join("+")
 }
 
 #[derive(Debug, Clone)]
@@ -866,6 +893,28 @@ impl Host {
             );
             elements.extend(symbol);
         }
+        for e in sub.edges {
+            let mut el = Element::new(
+                format!("edge:{}", e.path),
+                ElementKind::Edge,
+                vec![world.apply(e.a), world.apply(e.b)],
+                false,
+            );
+            el.edge = Some(e.info);
+            elements.push(el);
+        }
+        for r in sub.regions {
+            let mut e = Element::new(
+                format!("region:{}", r.path),
+                ElementKind::Region,
+                move_polygon(&r.outer, world),
+                true,
+            )
+            .with_holes(r.holes.iter().map(|h| move_polygon(h, world)).collect())
+            .with_label_point();
+            e.region = Some(r.info);
+            elements.push(e);
+        }
         let walls: Vec<(Point, Point, f64)> = sub
             .walls
             .iter()
@@ -1120,6 +1169,7 @@ impl Host {
                 tone: space.symbol.as_deref().filter(|_| space.fill).and_then(crate::symbols::tone),
                 tags: space.tags.clone(),
                 gross: None,
+                region: None,
             };
             let mut typical_key = None;
             let mut nested: Option<(Sub, Transform)> = None;
@@ -1226,6 +1276,7 @@ impl Host {
                     s.info.front = s.info.front.map(|f| move_front(f, &t));
                     s.info.depth += 1;
                     s.info.plan = under(&child_ptr, &s.info.plan);
+                    s.info.region = s.info.region.map(|r| region_under(&prefix, &r));
                     s.source = under(&child_ptr, &s.source);
                     sub.spaces.push(s);
                 }
@@ -1257,6 +1308,20 @@ impl Host {
                     l.prefix = format!("{prefix}{}", l.prefix);
                     sub.services.push(l);
                 }
+                for mut e in child.edges {
+                    e.path = format!("{prefix}{}", e.path);
+                    e.a = t.apply(e.a);
+                    e.b = t.apply(e.b);
+                    e.info.between = e.info.between.iter().map(|n| format!("{prefix}{n}")).collect();
+                    sub.edges.push(e);
+                }
+                for mut r in child.regions {
+                    r.path = region_under(&prefix, &r.path);
+                    r.outer = move_polygon(&r.outer, &t);
+                    r.holes = r.holes.iter().map(|h| move_polygon(h, &t)).collect();
+                    r.info.spaces = r.info.spaces.iter().map(|n| format!("{prefix}{n}")).collect();
+                    sub.regions.push(r);
+                }
                 for mut l in child.leftover {
                     l.path = format!("{prefix}{}", l.path);
                     l.polygon = move_polygon(&l.polygon, &t);
@@ -1275,8 +1340,158 @@ impl Host {
                 }
             }
         }
+        self.find_regions(plan, &level, &mut sub);
+        find_edges(plan, &level, &mut sub, ctx.plan_pointer);
         align_doors(&mut sub, own_openings, build::thickest(plan, self.units));
         sub
+    }
+
+    /// This level's regions: on its own spaces (`SpaceInfo.region`), and as outlines.
+    fn find_regions(&self, plan: &Plan, level: &LevelResult, sub: &mut Sub) {
+        let kind = |i: usize| plan.spaces.get(&level.placed[i].type_key).map_or(SpaceKind::Room, |s| s.kind);
+        let passage = common::DOOR_MM / self.units.to_mm();
+        for r in regions::find(&level.placed, kind, passage) {
+            let names: Vec<String> = r.members.iter().map(|&i| level.placed[i].name.clone()).collect();
+            let key = names.join("+");
+            let mut labels = Vec::new();
+            let mut area = 0.0;
+            for name in &names {
+                let Some(s) = sub.spaces.iter_mut().find(|s| &s.path == name) else { continue };
+                s.info.region = Some(key.clone());
+                labels.push(s.info.label.clone());
+                let (outer, holes) = s.clear.clone().unwrap_or((s.polygon.clone(), s.holes.clone()));
+                area += crate::geometry::signed_area(&outer).abs()
+                    - holes.iter().map(|h| crate::geometry::signed_area(h).abs()).sum::<f64>();
+            }
+            sub.regions.push(SubRegion {
+                path: key,
+                outer: r.outer,
+                holes: r.holes,
+                info: crate::layout::RegionInfo { label: labels.join(" / "), spaces: names, area },
+            });
+        }
+    }
+}
+
+/// What's built where each two spaces of a level meet, and why: from their ports (open or not),
+/// the openings between them, and the rule that decided it, if one did. Engine-agnostic.
+fn find_edges(plan: &Plan, level: &LevelResult, sub: &mut Sub, plan_pointer: &str) {
+    use crate::layout::EdgeInfo;
+    use crate::plan::Leaf;
+    let index = |n: &str| level.placed.iter().position(|p| p.name == n);
+    let kind = |i: usize| plan.spaces.get(&level.placed[i].type_key).map(|s| (s.kind, s.fill));
+    let absolute = |ptr: &str| {
+        let p = context::origin(plan, ptr);
+        match p.strip_prefix('@') {
+            Some(abs) => abs.to_owned(),
+            None => format!("{plan_pointer}{p}"),
+        }
+    };
+    // What a rule calls a space: its type, or its own name when its type has several.
+    let rule_name = |i: usize| {
+        let p = &level.placed[i];
+        let several = level.placed.iter().filter(|q| q.type_key == p.type_key).count() > 1;
+        if several {
+            p.name.clone()
+        } else {
+            p.type_key.clone()
+        }
+    };
+    let rules = plan.rules();
+    let matches = |sel: &crate::plan::Selector, i: usize| {
+        let p = &level.placed[i];
+        let tags = plan.spaces.get(&p.type_key).map(|s| (s.tags.clone(), s.kind));
+        tags.is_some_and(|(t, k)| sel.matches_tagged(&p.name, &p.type_key, &t, k))
+    };
+    let pair = |a: &crate::plan::Selector, b: &crate::plan::Selector, i: usize, j: usize| {
+        (matches(a, i) && matches(b, j)) || (matches(a, j) && matches(b, i))
+    };
+    let mut seen: Vec<(usize, usize)> = Vec::new();
+    for (i, p) in level.placed.iter().enumerate() {
+        if kind(i).is_none_or(|(k, _)| k == SpaceKind::Fixture) {
+            continue;
+        }
+        let to_level = p.rect.map(|(_, _, t)| t);
+        for (k, port) in p.ports.iter().enumerate() {
+            let Some(j) = port.other.as_deref().and_then(index) else { continue };
+            if kind(j).is_none_or(|(k, _)| k == SpaceKind::Fixture) || seen.contains(&(j, i)) {
+                continue;
+            }
+            if !seen.contains(&(i, j)) {
+                seen.push((i, j));
+            }
+            let (ni, nj) = (&p.name, &level.placed[j].name);
+            let between_ij =
+                |o: &Opening| o.between.len() == 2 && o.between.contains(ni) && o.between.contains(nj);
+            let opening = level.openings.iter().find(|o| o.kind == ElementKind::Door && between_ij(o));
+            let open = port.has(ports::OPEN);
+            let treatment = match (open, opening.map(|o| o.leaf)) {
+                (true, _) => "open",
+                (false, Some(Leaf::NoLeaf)) => "opening",
+                (false, Some(Leaf::Swing)) => "door",
+                (false, None) => "wall",
+            };
+            // The rule that decided it: a door rule on the pair, else a wall rule.
+            let door_rule = rules.iter().find(|(_, r)| match r {
+                Rule::Door { a, b: Some(b), .. } => pair(a, b, i, j),
+                _ => false,
+            });
+            let wall_rule = rules.iter().find(|(_, r)| match r {
+                Rule::Wall { a, b: Some(b), .. } => pair(a, b, i, j),
+                _ => false,
+            });
+            let (rule, why) = match (door_rule, wall_rule) {
+                (Some((ptr, Rule::Door { leaf, width, .. })), _) => {
+                    let helper = match (leaf, width) {
+                        (Leaf::Swing, _) => "plate.door",
+                        (_, Some(crate::plan::OpeningWidth::Full(_))) => "plate.open",
+                        _ => "plate.opening",
+                    };
+                    (Some(absolute(ptr)), format!("a rule: {helper}"))
+                }
+                (_, Some((ptr, _))) => (Some(absolute(ptr)), "a rule: plate.wall".to_owned()),
+                _ => {
+                    let what = |x: usize| match kind(x) {
+                        Some((SpaceKind::Zone, _)) => "a zone",
+                        Some((SpaceKind::Circulation, _)) => "circulation",
+                        Some((_, true)) => "the fill",
+                        Some((SpaceKind::Room, _)) => "a room",
+                        _ => "a space",
+                    };
+                    let why = if open {
+                        format!("{ni} is {} and {nj} is {}: open floor", what(i), what(j))
+                    } else {
+                        let walled = if what(i) == "a room" { ni } else { nj };
+                        format!("{walled} is {}: walled", if what(i) == "a room" { what(i) } else { what(j) })
+                    };
+                    (None, why)
+                }
+            };
+            let (a, b) = match to_level {
+                Some(t) => (t.apply(port.a), t.apply(port.b)),
+                None => (port.a, port.b),
+            };
+            // What they get with no rule: open where a zone meets a zone, circulation or the fill.
+            let ground = |x: usize| {
+                matches!(kind(x), Some((SpaceKind::Zone | SpaceKind::Circulation, _)) | Some((_, true)))
+            };
+            let zone = |x: usize| matches!(kind(x), Some((SpaceKind::Zone, _)));
+            let default = if (zone(i) && ground(j)) || (zone(j) && ground(i)) { "open" } else { "wall" };
+            sub.edges.push(SubEdge {
+                path: format!("{ni}|{nj}#{k}"),
+                a,
+                b,
+                info: EdgeInfo {
+                    between: vec![ni.clone(), nj.clone()],
+                    treatment: treatment.to_owned(),
+                    rule,
+                    why,
+                    default: default.to_owned(),
+                    plan: plan_pointer.to_owned(),
+                    names: vec![rule_name(i), rule_name(j)],
+                },
+            });
+        }
     }
 }
 

@@ -29,7 +29,9 @@ export type ElementKind =
   | "leftover"
   | "wall"
   | "part"
-  | "run";
+  | "run"
+  | "region"
+  | "edge";
 
 export type SpaceKind = "room" | "zone" | "circulation" | "void" | "vertical" | "fixture";
 
@@ -68,6 +70,9 @@ export interface SpaceInfo {
   /** Floor area to its walls' centrelines, when walls take some of it (`area` is then its clear
    * floor). */
   gross?: number;
+  /** The region it's in, when it's joined to others by open edges (a "region" element's id
+   * without its `region:` prefix). */
+  region?: string;
 }
 
 /** What a wall is built as (elements of kind "wall"). */
@@ -115,6 +120,34 @@ export interface PartInfo {
   load?: Load;
   /** Where it stands. */
   at: Point;
+  /** The spaces it's for, when that isn't only the space it's in: a switch in a region's box, a
+   * thermostat for a whole region. */
+  serves?: string[];
+}
+
+/** Spaces joined by open edges, with no wall between them (elements of kind "region"). */
+export interface RegionInfo {
+  /** Its spaces' labels, biggest first. */
+  label: string;
+  /** Its spaces (instance paths), biggest first. */
+  spaces: string[];
+  /** Their floor, added up. */
+  area: number;
+}
+
+/** What's built where two spaces meet, and why (elements of kind "edge"). */
+export interface EdgeInfo {
+  between: string[];
+  treatment: "wall" | "door" | "opening" | "open";
+  /** The rule that decided it (a JSON pointer), if one did. */
+  rule?: string;
+  why: string;
+  /** What these two get with no rule. */
+  default: "open" | "wall";
+  /** The plan that placed them: where a rule changing it goes. */
+  plan: string;
+  /** What a rule calls them. */
+  names: string[];
 }
 
 /** What a terminal asks of a service: for power, a current at a voltage. */
@@ -237,6 +270,8 @@ export interface Element {
   wall?: WallInfo;
   part?: PartInfo;
   run?: RunInfo;
+  region?: RegionInfo;
+  edge?: EdgeInfo;
 }
 
 export interface Layout {

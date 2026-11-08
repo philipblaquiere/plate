@@ -252,6 +252,198 @@
       }
     },
     {
+      "id": "edge:bath|hall#0",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 0.0,
+          "y": 6.0
+        },
+        {
+          "x": 3.5,
+          "y": 6.0
+        }
+      ],
+      "closed": false,
+      "length": 3.5,
+      "edge": {
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "treatment": "door",
+        "rule": "/rules/0",
+        "why": "a rule: plate.door",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "bath",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:bath|hall#1",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 3.5,
+          "y": 6.0
+        },
+        {
+          "x": 3.5,
+          "y": 8.0
+        }
+      ],
+      "closed": false,
+      "length": 2.0,
+      "edge": {
+        "between": [
+          "bath",
+          "hall"
+        ],
+        "treatment": "door",
+        "rule": "/rules/0",
+        "why": "a rule: plate.door",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "bath",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:bedroom|hall#2",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 12.0,
+          "y": 3.5
+        },
+        {
+          "x": 8.0,
+          "y": 3.5
+        }
+      ],
+      "closed": false,
+      "length": 4.0,
+      "edge": {
+        "between": [
+          "bedroom",
+          "hall"
+        ],
+        "treatment": "door",
+        "rule": "/rules/0",
+        "why": "a rule: plate.door",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "bedroom",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:bedroom|hall#3",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 8.0,
+          "y": 3.5
+        },
+        {
+          "x": 8.0,
+          "y": 0.0
+        }
+      ],
+      "closed": false,
+      "length": 3.5,
+      "edge": {
+        "between": [
+          "bedroom",
+          "hall"
+        ],
+        "treatment": "door",
+        "rule": "/rules/0",
+        "why": "a rule: plate.door",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "bedroom",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:living|hall#1",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 6.0,
+          "y": 0.0
+        },
+        {
+          "x": 6.0,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 4.5,
+      "edge": {
+        "between": [
+          "living",
+          "hall"
+        ],
+        "treatment": "door",
+        "rule": "/rules/0",
+        "why": "a rule: plate.door",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "living",
+          "hall"
+        ]
+      }
+    },
+    {
+      "id": "edge:living|hall#2",
+      "kind": "edge",
+      "layer": "PLATE-EDGE",
+      "points": [
+        {
+          "x": 6.0,
+          "y": 4.5
+        },
+        {
+          "x": 0.0,
+          "y": 4.5
+        }
+      ],
+      "closed": false,
+      "length": 6.0,
+      "edge": {
+        "between": [
+          "living",
+          "hall"
+        ],
+        "treatment": "door",
+        "rule": "/rules/0",
+        "why": "a rule: plate.door",
+        "default": "wall",
+        "plan": "",
+        "names": [
+          "living",
+          "hall"
+        ]
+      }
+    },
+    {
       "id": "wall:bath|hall#0",
       "kind": "wall",
       "layer": "PLATE-WALL",

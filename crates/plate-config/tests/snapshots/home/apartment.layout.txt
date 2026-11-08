@@ -20,6 +20,7 @@ space open_plan.lounge.sofa fixture 2.47 [3.30, 7.46 → 5.90, 8.41]
 space open_plan.lounge.tv fixture 0.81 [4.10, 4.25 → 5.90, 4.70]
 space store room 2.62 [5.25, 1.25 → 6.75, 3.00]
 space hall circulation 34.44 [0.00, 0.00 → 11.25, 9.00]
+region:open_plan.lounge+open_plan.kitchen 59.38
 Door door:hall|'facade
 Door door:bath|hall
 Door door:bedroom_1|hall

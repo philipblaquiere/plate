@@ -472,6 +472,18 @@ export class GeometryEdits {
     return { ok: true };
   }
 
+  /** Replace the array item at `pointer` (a rule, `/rules/3`) with `text`, where it's written. */
+  replaceItem(pointer: string, text: string): EditResult {
+    const cut = pointer.lastIndexOf("/");
+    const index = Number(pointer.slice(cut + 1));
+    const array = this.find(pointer.slice(0, cut));
+    if (!array || !this.use(array)) return { ok: false, reason: "Can't find that in the file." };
+    const item = this.arrayItems(pointer.slice(0, cut))?.[index];
+    if (!item) return { ok: false, reason: "Can't find that in the file." };
+    this.doc.editOffsets([{ start: item.start, end: item.end, text }]);
+    return { ok: true };
+  }
+
   // ---------------------------------------------------------------- fields of a record
 
   /**

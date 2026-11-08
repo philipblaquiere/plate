@@ -12,7 +12,7 @@ use crate::diagnostic::{Code, Diagnostic};
 use crate::geometry::{interior_point, point_segment_distance, signed_area, Point};
 use crate::layout::{Element, ElementKind, PartInfo, SymbolInfo};
 use crate::plan::{role_matches, tag_of, Count, Selector, SpaceKind};
-use crate::service::{Mount, OpeningKind, Part, Placement, Service, Side};
+use crate::service::{Mount, OpeningKind, Part, Per, Placement, Service, Side};
 use crate::units::Units;
 
 use super::spread::{self, Arrange, Ask};
@@ -133,6 +133,20 @@ pub struct Placed {
     pub load: Option<crate::service::Load>,
     /// Its part's label.
     pub label: String,
+    /// The spaces it's for (paths), when that isn't only `room`: a switch in a box for one
+    /// space of a region, a thermostat for a whole region.
+    pub serves: Vec<String>,
+}
+
+impl Placed {
+    /// The spaces it's for.
+    pub fn serving(&self) -> Vec<&str> {
+        if self.serves.is_empty() {
+            vec![self.room.as_str()]
+        } else {
+            self.serves.iter().map(String::as_str).collect()
+        }
+    }
 }
 
 /// The plate as the services see it.
@@ -644,12 +658,17 @@ fn place(model: &Model, instances: &[Instance], elements: &[Element], issues: &m
                     }
                 }
             }
-            Placement::One { spaces, near, apart, wall, .. } => {
-                for &r in &rooms {
-                    if model.rooms[r].selected_by(spaces) {
-                        let need = wall.map(|w| w.need(units));
-                        one(&mut ctx, &job, r, near.as_ref(), apart.as_ref(), need, elements);
-                    }
+            Placement::One { spaces, near, apart, wall, per, each, .. } => {
+                let need = wall.map(|w| w.need(units));
+                let chosen: Vec<usize> =
+                    rooms.iter().copied().filter(|&r| model.rooms[r].selected_by(spaces)).collect();
+                let groups = match per {
+                    Per::Space => chosen.iter().map(|&r| vec![r]).collect(),
+                    Per::Region => by_region(model, &chosen, elements),
+                };
+                for group in groups {
+                    let ask = OneAsk { near: near.as_ref(), apart: apart.as_ref(), need, each: *each };
+                    one(&mut ctx, &job, &group, &ask, elements);
                 }
             }
         }
@@ -776,6 +795,7 @@ impl Ctx<'_> {
             fed_by: None,
             load: job.part.load,
             label: job.label(),
+            serves: Vec::new(),
         });
         true
     }
@@ -834,12 +854,14 @@ impl Ctx<'_> {
             fed_by: None,
             load: job.part.load,
             label: job.label(),
+            serves: Vec::new(),
         });
     }
 }
 
-/// The room's walls as runs: its perimeter, cut at doorways and where there's no wall. Each run
-/// is a list of (face, from, to) pieces, in order.
+/// The room's walls as runs: its perimeter, cut at doorways, behind fixtures standing against
+/// it (a counter, a wardrobe: they take that wall, as electrical codes say) and where there's no
+/// wall. Each run is a list of (face, from, to) pieces, in order.
 fn runs(room: &Room) -> Vec<Vec<(usize, f64, f64)>> {
     const BREAK: usize = usize::MAX;
     let mut out = Vec::new();
@@ -853,6 +875,9 @@ fn runs(room: &Room) -> Vec<Vec<(usize, f64, f64)>> {
             }
             let mut cuts: Vec<(f64, f64)> =
                 room.openings.iter().filter(|o| o.face == f && o.door).map(|o| (o.s0, o.s1)).collect();
+            cuts.extend(
+                room.fixtures.iter().filter_map(|x| x.against).filter(|a| a.0 == f).map(|a| (a.1, a.2)),
+            );
             cuts.sort_by(|a, b| a.0.total_cmp(&b.0));
             let mut at = 0.0;
             for (a, b) in cuts {
@@ -1239,34 +1264,73 @@ fn distance_to(room: &Room, item: &str, p: Point, elements: &[Element]) -> Optio
     }
 }
 
-fn one(
-    ctx: &mut Ctx,
-    job: &Job,
-    r: usize,
-    near: Option<&Selector>,
-    apart: Option<&Selector>,
+/// The selected rooms of one region together (biggest first), and each other room alone.
+fn by_region(model: &Model, rooms: &[usize], elements: &[Element]) -> Vec<Vec<usize>> {
+    let mut groups: Vec<(Option<String>, Vec<usize>)> = Vec::new();
+    for &r in rooms {
+        let region = elements[model.rooms[r].element].space.as_ref().and_then(|s| s.region.clone());
+        match groups.iter_mut().find(|(k, _)| region.is_some() && *k == region) {
+            Some((_, g)) => g.push(r),
+            None => groups.push((region, vec![r])),
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(_, mut g)| {
+            g.sort_by(|&a, &b| model.rooms[b].area.total_cmp(&model.rooms[a].area).then(a.cmp(&b)));
+            g
+        })
+        .collect()
+}
+
+/// What a `one` placement asks for.
+struct OneAsk<'a> {
+    near: Option<&'a Selector>,
+    apart: Option<&'a Selector>,
     need: Option<crate::assembly::Need>,
-    elements: &[Element],
-) {
-    let room = &ctx.model.rooms[r];
-    let path = room.path.clone();
-    let mut how = "the best place in the room".to_owned();
+    /// A part for each room of the group, side by side.
+    each: bool,
+}
+
+/// The best single place for a part, on the walls of a group of rooms (one room, or the rooms
+/// of a region). With `each`, one part per room of the group, side by side there.
+fn one(ctx: &mut Ctx, job: &Job, group: &[usize], ask: &OneAsk, elements: &[Element]) {
+    let (near, apart, need) = (ask.near, ask.apart, ask.need);
+    let paths: Vec<String> = group.iter().map(|&r| ctx.model.rooms[r].path.clone()).collect();
+    let path = paths[0].clone();
+    let many = group.len() > 1;
+    let mut how = if many { "the best place in the region" } else { "the best place in the room" }.to_owned();
     if let Some(n) = near {
         how.push_str(&format!(", near {}", n.items().join(", ")));
     }
     if let Some(a) = apart {
         how.push_str(&format!(", away from {}", a.items().join(", ")));
     }
+    // What each part placed serves: its own room with `each`, else the group.
+    let serves = |k: usize| -> Vec<String> {
+        match (many, ask.each) {
+            (false, _) => Vec::new(),
+            (true, true) => vec![paths[k].clone()],
+            (true, false) => paths.clone(),
+        }
+    };
+    let count = if ask.each { group.len() } else { 1 };
     if !matches!(job.part.mount, Mount::Wall | Mount::Cavity) {
+        let room = &ctx.model.rooms[group[0]];
         let c = interior_point(&room.loops[0], &room.loops[1..]);
-        ctx.in_room(job, &how, r, c);
+        for k in 0..count {
+            ctx.in_room(job, &how, group[0], c);
+            ctx.out.last_mut().unwrap().serves = serves(k);
+        }
         return;
     }
     let (w, depth) = job.part.size(ctx.units);
+    // Side by side, the parts take one stretch of wall.
+    let wide = w * count as f64;
     let step = 0.1 * ctx.m;
     let keep_off = 0.6 * ctx.m;
     let inside = job.part.mount == Mount::Cavity;
-    let above = if inside { -1000.0 * ctx.m } else { job.part.above(ctx.units) };
+    let above = if inside { IN_WALL } else { job.part.above(ctx.units) };
     let band = BAND_MM / ctx.units.to_mm();
     // A part in the cavity needs one as deep as it is, whatever else is asked of the wall.
     let deep = |f: &Face| !inside || f.cavity + 1e-9 >= depth;
@@ -1285,60 +1349,96 @@ fn one(
         }
     };
     let special = |i: &str| tag_of(i).is_some() || matches!(i, "door" | "window" | "entrance");
-    let mut found: Vec<(f64, usize, f64)> = Vec::new();
-    for (f, face) in room.faces.iter().enumerate() {
-        if !face.walled || !wall_ok(face) || !deep(face) {
-            continue;
-        }
-        let off_limits = apart.is_some_and(|a| {
-            a.items().iter().any(|i| !special(i) && face.roles.iter().any(|r| role_matches(r, i)))
-        });
-        if off_limits {
-            continue;
-        }
-        let len = face.len();
-        let mut s = w / 2.0 + step;
-        while s + w / 2.0 + step <= len + 1e-9 {
-            let p = face.point(s);
-            let in_opening = room
-                .openings
-                .iter()
-                .any(|o| o.face == f && s + w / 2.0 > o.s0 - step && s - w / 2.0 < o.s1 + step);
-            let too_close = apart.is_some_and(|a| {
-                a.items()
-                    .iter()
-                    .any(|i| special(i) && distance_to(room, i, p, elements).is_some_and(|d| d < keep_off))
-            });
-            if !in_opening && !too_close && ctx.taken.free((r, f), s - w / 2.0, s + w / 2.0, above, band) {
-                let score: f64 = near.map_or(0.0, |n| {
-                    n.items().iter().map(|i| distance_to(room, i, p, elements).unwrap_or(1e6)).sum()
-                });
-                found.push((score, f, s));
+    // (score, room, face, along)
+    let mut found: Vec<(f64, usize, usize, f64)> = Vec::new();
+    for &r in group {
+        let room = &ctx.model.rooms[r];
+        for (f, face) in room.faces.iter().enumerate() {
+            if !face.walled || !wall_ok(face) || !deep(face) {
+                continue;
             }
-            s += step;
+            let off_limits = apart.is_some_and(|a| {
+                a.items().iter().any(|i| !special(i) && face.roles.iter().any(|r| role_matches(r, i)))
+            });
+            if off_limits {
+                continue;
+            }
+            let len = face.len();
+            let mut s = wide / 2.0 + step;
+            while s + wide / 2.0 + step <= len + 1e-9 {
+                let p = face.point(s);
+                let in_opening = room
+                    .openings
+                    .iter()
+                    .any(|o| o.face == f && s + wide / 2.0 > o.s0 - step && s - wide / 2.0 < o.s1 + step);
+                let too_close = apart.is_some_and(|a| {
+                    a.items().iter().any(|i| {
+                        special(i) && distance_to(room, i, p, elements).is_some_and(|d| d < keep_off)
+                    })
+                });
+                if !in_opening
+                    && !too_close
+                    && ctx.taken.free((r, f), s - wide / 2.0, s + wide / 2.0, above, band)
+                {
+                    let score: f64 = near.map_or(0.0, |n| {
+                        n.items().iter().map(|i| distance_to(room, i, p, elements).unwrap_or(1e6)).sum()
+                    });
+                    found.push((score, r, f, s));
+                }
+                s += step;
+            }
         }
     }
     // The best place that takes it (the wall may still turn it away: a fixture backed against
     // it, another part there).
-    found.sort_by(|a, b| a.0.total_cmp(&b.0));
-    let placed = found.into_iter().any(|(_, f, s)| ctx.on_wall(job, &how, r, f, s, None));
-    if !placed {
-        let mut need = need.unwrap_or_default();
-        if inside {
-            need.cavity = need.cavity.max(depth);
-        }
-        let what = if need == crate::assembly::Need::default() {
-            String::new()
+    found.sort_by(|a, b| {
+        a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)).then(a.3.total_cmp(&b.3))
+    });
+    let at = found.into_iter().find(|&(_, r, f, s)| ctx.on_wall(job, &how, r, f, s, Some(wide)));
+    if let Some((_, r, f, s)) = at {
+        let whole = ctx.out.pop().unwrap();
+        if count == 1 {
+            ctx.out.push(Placed { serves: serves(0), ..whole });
         } else {
-            format!(" that is {}", need.describe())
-        };
-        ctx.issues.add(
-            job.pointer,
-            format!("no wall{what} free for a {}", job.label()),
-            &path,
-            Some("Loosen what it's kept away from, or claim a wall for it in the service's claims (`plate.wall … & { length = … }`).".into()),
-        );
+            // One part per room, side by side across the stretch.
+            let face = &ctx.model.rooms[r].faces[f];
+            let n = if inside { Point::new(-face.inward.x, -face.inward.y) } else { face.inward };
+            let d = depth;
+            for k in 0..count {
+                let c = s - wide / 2.0 + w * (k as f64 + 0.5);
+                let (p0, p1) = (face.point(c - w / 2.0), face.point(c + w / 2.0));
+                let q = |p: Point| Point::new(p.x + n.x * d, p.y + n.y * d);
+                ctx.out.push(Placed {
+                    at: face.point(c),
+                    polygon: vec![p0, p1, q(p1), q(p0)],
+                    front: if inside { [p1, p0] } else { [q(p1), q(p0)] },
+                    serves: serves(k),
+                    ..whole.clone()
+                });
+            }
+        }
+        return;
     }
+    let mut need = need.unwrap_or_default();
+    if inside {
+        need.cavity = need.cavity.max(depth);
+    }
+    let what = if need == crate::assembly::Need::default() {
+        String::new()
+    } else {
+        format!(" that is {}", need.describe())
+    };
+    let message = match (many, count) {
+        (false, _) => format!("no wall{what} free for a {}", job.label()),
+        (true, 1) => format!("no wall{what} in the region free for a {}", job.label()),
+        (true, n) => format!("no wall{what} in the region free for {n} {}s side by side", job.label()),
+    };
+    ctx.issues.add(
+        job.pointer,
+        message,
+        &path,
+        Some("Loosen what it's kept away from, or claim a wall for it in the service's claims (`plate.wall … & { length = … }`).".into()),
+    );
 }
 
 fn part_element(k: usize, p: Placed, instances: &[Instance], units: Units) -> Element {
@@ -1371,6 +1471,7 @@ fn part_element(k: usize, p: Placed, instances: &[Instance], units: Units) -> El
         fed_by: p.fed_by,
         load: p.load,
         at: p.at,
+        serves: p.serves,
     });
     e
 }

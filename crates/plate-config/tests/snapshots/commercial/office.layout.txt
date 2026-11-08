@@ -144,6 +144,7 @@ space team_8.d_2 fixture 1.28 [42.40, 22.50 → 43.20, 24.10]
 space team_8.d_3 fixture 1.28 [42.40, 24.10 → 43.20, 25.70]
 space team_8.storage fixture 2.40 [39.70, 18.60 → 44.50, 19.10]
 space floor zone 799.68 [0.00, 0.00 → 45.20, 45.20]
+region:floor+team_3+team_8+team_5+team_1+team_2+team_4+team_6+team_7 1577.92
 Door door:core|floor
 Door door:comms|floor
 Door door:focus_1|floor

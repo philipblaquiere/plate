@@ -8,6 +8,9 @@
 # - `plate.opening`: a gap in a wall with no door. As wide as the wall allows within `width`,
 #   with `margin` of wall left at each end: the short walls either side of the nook's opening.
 # - a door rule into a zone (the closet's, the bedroom's) works as usual: the room has walls.
+# - regions: entry, living, dining and kitchen have no wall between them, so the services count
+#   them as one. Heat gives them one thermostat (`per = 'region`), lighting one box of switches
+#   by a door with a switch for each (`each = true`). Hover a zone to see its region.
 
 let kitchen_plan = {
   spaces = {
@@ -31,7 +34,10 @@ let kitchen_plan = {
   start = { mode = 'boundary, points = [[0, 0], [11, 0], [11, 8], [0, 8]] },
 
   assemblies = import "build/assemblies/basic.ncl",
-  services.lighting = import "build/services/lighting.ncl",
+  services = {
+    lighting = import "build/services/lighting.ncl",
+    heat = import "build/services/heat.ncl",
+  },
 
   spaces = {
     # The fill: the living room takes the floor the others leave.

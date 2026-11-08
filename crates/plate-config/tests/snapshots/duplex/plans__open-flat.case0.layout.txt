@@ -1,0 +1,24 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 15
+space bath room 51.42 [21.15, 15.13 → 28.70, 21.94]
+space bath.basin fixture 3.00 [26.55, 20.44 → 28.55, 21.94]
+space bath.shower fixture 9.00 [22.60, 18.94 → 25.60, 21.94]
+space bath.toilet fixture 3.11 [27.21, 15.13 → 28.55, 17.46]
+space bedroom_1 room 119.99 [0.00, 0.00 → 11.33, 10.59]
+space bedroom_2 room 135.99 [15.86, 0.00 → 28.70, 10.59]
+space dining zone 111.42 [0.00, 10.59 → 11.33, 20.43]
+space kitchen zone 145.70 [17.37, 21.94 → 28.70, 34.80]
+space kitchen.counter fixture 12.99 [20.04, 32.63 → 26.03, 34.80]
+space kitchen.fridge fixture 5.83 [26.12, 32.47 → 28.62, 34.80]
+space kitchen.range fixture 5.42 [17.45, 32.63 → 19.95, 34.80]
+space living zone 249.69 [0.00, 20.43 → 17.37, 34.80]
+space utility room 34.28 [21.15, 10.59 → 28.70, 15.13]
+space utility.dryer fixture 5.25 [26.37, 11.57 → 28.70, 13.82]
+space hall circulation 150.27 [11.33, 0.00 → 21.15, 21.94]
+region:living+kitchen+dining 506.81
+Door door:bath|hall
+Door door:bedroom_1|hall
+Door door:bedroom_2|hall
+Door door:utility|hall
+Window window:bedroom_1|'facade
+Window window:bedroom_2|'facade
+Window window:living|'facade

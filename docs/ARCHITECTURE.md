@@ -287,6 +287,19 @@ The file stays the single source of truth: the drawing never holds state the tex
   builds a wall, and an open edge a wall rule builds. An opening is a `Door` element with
   `OpeningInfo.leaf = none` (layer `PLATE-OPENING`): it cuts walls and breaks routing like a door,
   and gives both sides an `opening` port (no swing to keep clear).
+- **Regions** (`regions.rs`): after a level is placed, its spaces joined by `'open` ports at
+  least a door's width long (circulation and fixtures never join), by union-find. Each region of
+  two or more spaces becomes a `region` element (the union of their shapes, traced by
+  `outline.rs` on a grid of their own coordinates; `RegionInfo`: label, spaces, floor) and its
+  key goes on its spaces (`SpaceInfo.region`). Nothing in the engines reads them. `fit.rs`
+  groups a `one` placement's spaces by region (`per = 'region`), places one part per group, or
+  one per space side by side (`each`), and records what each part is for (`Placed::serves`);
+  `connect.rs` pairs a control network's switches with the lights of the spaces they serve.
+- **Edge elements** (`find_edges` in `mod.rs`, engine-agnostic): one view-only `edge` element per
+  stretch where two siblings meet, from their ports and openings: the treatment (`wall`, `door`,
+  `opening`, `open`), the rule that decided it (absolute pointer) or the default by kind, the
+  plan that placed them and what a rule calls them. Not exported. The viewer hovers the open
+  ones; `web/src/edges.ts` turns one into the rule text its menu adds, changes or removes.
 - **Fixtures** (`kind = 'fixture`) are the last level: no plan. In `grid` they carry a facing
   (which side of the rectangle is the front), a per-side clearance that other spaces can't stand
   in (unary and pair cost terms, so the incremental scoring still holds) and an `against`

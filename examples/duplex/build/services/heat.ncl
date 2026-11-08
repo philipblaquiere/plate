@@ -9,7 +9,9 @@
     thermostat = { above = "1500 mm", symbol = 'thermostat },
   },
   place = [
-    plate.beside "baseboard" 'window & { spaces = "#room" },
-    plate.one "thermostat" "#room" & { near = 'door, apart = ['window, 'facade] },
+    plate.beside "baseboard" 'window & { spaces = ["#room", "#zone"] },
+    # One per room, and one per region (spaces with no wall between them): an open living area
+    # is heated as one.
+    plate.one "thermostat" ["#room", "#zone"] & { per = 'region, near = 'door, apart = ['window, 'facade] },
   ],
 }

@@ -54,6 +54,21 @@ plate.opening "nook" "living" & { width = { min = 1.5 }, margin = 0.6 },
 
 `plate.wall "nook" "living"` builds a wall between two zones, or between a zone and circulation, that would otherwise be open. With an opening rule on the same pair you don't need it: the opening builds its wall.
 
+## Regions
+
+Spaces joined by open edges, at least 0.9 m (3 ft) of them, form a **region**: the floor you'd call one room. The solver finds them after a level is placed; they never change the layout. Circulation never joins a region, so a hall stays a hall even when it's open to the living room. Rooms joined by `plate.open` join, like zones.
+
+- Hover a space of a region to see the region outlined, with its spaces and their floor added up. It's exported as one closed polyline on `PLATE-REGION`.
+- Services can count by region: `plate.one … & { per = 'region }` (see _Services_).
+
+## Inspecting and changing an edge
+
+Hover where two spaces meet to see what's built there and why: "open: living is a zone and dining is a zone", "a rule: plate.opening". A wall's card says the same. Right-click it to change it:
+
+- With no rule deciding it: **Make open**, **Add an opening**, **Add a door** or **Build a wall** adds a rule to the plan that placed the two spaces. A door where the floor would be open adds the wall for it too.
+- With a rule that names just these two: the same entries change that rule, and **Remove the rule** goes back to what the two get by default.
+- With a rule that covers more spaces (a list, a tag), nothing is changed from here: **Show the rule** opens it.
+
 ## What isn't allowed
 
 - A door (`plate.door`) where there's no wall: two zones, say. Use `plate.opening` for a gap with no door, or add `plate.wall` to build a wall for the door.
