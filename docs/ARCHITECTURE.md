@@ -261,8 +261,10 @@ The file stays the single source of truth: the drawing never holds state the tex
   - Warnings carry a JSON pointer (`/spaces/room/plan/rules/3`); the editor maps it to text
     with the source map, and repeats across typicals are merged ("room_3 and 23 more like it").
   - Retries: a level whose layout (or a level inside it) breaks a requirement, or cuts floor off
-    from its fill, is solved again with derived seeds (`ATTEMPTS`, within the work budget); the
-    best attempt is kept.
+    from its fill, is solved again with derived seeds (`ATTEMPTS`); the best attempt is kept. A
+    level retries while its own tries (the plans inside included) have taken under
+    `LEVEL_SHARE` of `WORK_LIMIT` and the whole solve under all of it, so a level solved late (the
+    second flat of a plate) isn't starved by the ones before it.
   - Doors between two spaces with plans go mid-wall; once the plans inside are solved,
     `align_doors` merges a door with the one a plan put on that wall (its `'entrance`), or
     moves it to where circulation meets circulation.
@@ -303,7 +305,9 @@ The file stays the single source of truth: the drawing never holds state the tex
 - **Fixtures** (`kind = 'fixture`) are the last level: no plan. In `grid` they carry a facing
   (which side of the rectangle is the front), a per-side clearance that other spaces can't stand
   in (unary and pair cost terms, so the incremental scoring still holds) and an `against`
-  constraint on their back. Their cells are rounded up to hold their exact size, which is what's
+  constraint on their back. A fixture round the corner from another's end (in front of it at
+  one end, backed towards that end: an L of counter and range) may take that corner of its
+  clearance (`round_the_corner`). Their cells are rounded up to hold their exact size, which is what's
   drawn, back-aligned. A plan with fixtures gets the coarsest round grid (250, 200 or 100 mm)
   its fixtures' sizes and clearances fit (`plan_grid`). `row = true` places an exact count as
   one rectangle, split into pieces when drawn. `spine_stack`
@@ -362,10 +366,15 @@ Three more passes, around the solve above. Types are in `assembly.rs` and `servi
   behind them, openings on faces, fixtures and their backs), resolves each service's `scope`
   into instances (one per `"#dwelling"`), and places parts anchored first (`on`, `beside`,
   `one`, then `every`, `over`), keeping track of what each face holds by height band (a switch
-  can sit over a baseboard). `over` cuts a room into rectangles (`geometry::zones`: the
+  can sit over a baseboard). A `one` part that is the source of a network with a `limit` scores
+  each candidate place by the longest run to the terminals in its room (`connect::reach`, on
+  that network's route), and places over the limit come after every place within it; `near` a
+  tag means near the farthest fixture with it. `over` cuts a room into rectangles (`geometry::zones`: the
   biggest rectangle of free cells on a grid through its corners, repeatedly) and spreads parts
   over them (`spread.rs`: a grid per zone by spacing, or a count shared by area). `connect`
-  (`connect.rs`) takes a part on a fixture's `load` when it has none, then:
+  (`connect.rs`) takes a part on a fixture's `load` when it has none, then (a fixture joins a
+  network at the middle of its back, or where its outline meets a wall the network can run in,
+  `joint`):
   - **control** networks (`role = 'control`) find each room's switches and lights; the lights'
     load goes on the room's first switch.
   - **feed** networks order terminals room by room from the source and cut them into groups

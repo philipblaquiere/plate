@@ -12,9 +12,10 @@ use crate::diagnostic::{Code, Diagnostic};
 use crate::geometry::{interior_point, point_segment_distance, signed_area, Point};
 use crate::layout::{Element, ElementKind, PartInfo, SymbolInfo};
 use crate::plan::{role_matches, tag_of, Count, Selector, SpaceKind};
-use crate::service::{Mount, OpeningKind, Part, Per, Placement, Service, Side};
+use crate::service::{Mount, OpeningKind, Part, Per, Placement, Role, Service, Side};
 use crate::units::Units;
 
+use super::route::Spot;
 use super::spread::{self, Arrange, Ask};
 use super::{num, ServiceLevel};
 
@@ -51,7 +52,7 @@ impl Face {
     }
 
     /// Where `p` is along it, and how far off its line.
-    fn locate(&self, p: Point) -> (f64, f64) {
+    pub fn locate(&self, p: Point) -> (f64, f64) {
         let u = self.dir();
         let (dx, dy) = (p.x - self.a.x, p.y - self.a.y);
         (dx * u.x + dy * u.y, (dx * u.y - dy * u.x).abs())
@@ -1047,7 +1048,12 @@ fn beside(ctx: &mut Ctx, job: &Job, r: usize, kind: OpeningKind, side: Option<Si
         let placed = match side {
             Side::Under => {
                 let width = job.part.width.is_none().then_some(o.s1 - o.s0);
-                ctx.on_wall(job, &how, r, o.face, (o.s0 + o.s1) / 2.0, width)
+                let mid = (o.s0 + o.s1) / 2.0;
+                // Under it, or (a counter under the window) as near it as there's free wall.
+                ctx.on_wall(job, &how, r, o.face, mid, width) || {
+                    let at = ctx.model.rooms[r].faces[o.face].point(mid);
+                    nearest_free(ctx, job, &format!("as near each {what} as there's wall"), r, at, width)
+                }
             }
             _ => {
                 // A door's hinges are at the end nearer the corner it was put by.
@@ -1070,6 +1076,23 @@ fn beside(ctx: &mut Ctx, job: &Job, r: usize, kind: OpeningKind, side: Option<Si
             );
         }
     }
+}
+
+/// The free place on room `r`'s walls nearest `p` for a part (`width` wide, else its own width).
+fn nearest_free(ctx: &mut Ctx, job: &Job, how: &str, r: usize, p: Point, width: Option<f64>) -> bool {
+    let room = &ctx.model.rooms[r];
+    let w = width.unwrap_or(job.part.size(ctx.units).0);
+    let step = 0.1 * ctx.m;
+    let mut spots: Vec<(f64, usize, f64)> = Vec::new();
+    for (f, face) in room.faces.iter().enumerate().filter(|(_, f)| f.walled) {
+        let mut s = w / 2.0;
+        while s + w / 2.0 <= face.len() + 1e-9 {
+            spots.push((face.point(s).distance(p), f, s));
+            s += step;
+        }
+    }
+    spots.sort_by(|a, b| a.0.total_cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.total_cmp(&b.2)));
+    spots.into_iter().any(|(_, f, s)| ctx.on_wall(job, how, r, f, s, width))
 }
 
 /// A part beside a door with no room on its own wall (a closet's door fills its wall): on the
@@ -1264,6 +1287,25 @@ fn distance_to(room: &Room, item: &str, p: Point, elements: &[Element]) -> Optio
     }
 }
 
+/// How far `p` is from `item` for `near`: as `distance_to`, except that for a tag it's the
+/// farthest of the fixtures with it. A stack near `"#drain"` should be near every drain, not just
+/// the closest one: each must be reached within the network's `limit`.
+fn near_distance(room: &Room, item: &str, p: Point, elements: &[Element]) -> Option<f64> {
+    let Some(tag) = tag_of(item) else { return distance_to(room, item, p, elements) };
+    room.fixtures
+        .iter()
+        .filter(|f| {
+            elements[f.element].space.as_ref().is_some_and(|s| crate::plan::has_tag(&s.tags, s.kind, tag))
+        })
+        .map(|f| {
+            let pts = &elements[f.element].points;
+            (0..pts.len())
+                .map(|k| point_segment_distance(p, pts[k], pts[(k + 1) % pts.len()]))
+                .fold(f64::INFINITY, f64::min)
+        })
+        .max_by(f64::total_cmp)
+}
+
 /// The selected rooms of one region together (biggest first), and each other room alone.
 fn by_region(model: &Model, rooms: &[usize], elements: &[Element]) -> Vec<Vec<usize>> {
     let mut groups: Vec<(Option<String>, Vec<usize>)> = Vec::new();
@@ -1282,6 +1324,9 @@ fn by_region(model: &Model, rooms: &[usize], elements: &[Element]) -> Vec<Vec<us
         })
         .collect()
 }
+
+/// How much a length past a network's `limit` outweighs a length of `near`.
+const OVER_LIMIT: f64 = 1000.0;
 
 /// What a `one` placement asks for.
 struct OneAsk<'a> {
@@ -1381,11 +1426,40 @@ fn one(ctx: &mut Ctx, job: &Job, group: &[usize], ask: &OneAsk, elements: &[Elem
                     && ctx.taken.free((r, f), s - wide / 2.0, s + wide / 2.0, above, band)
                 {
                     let score: f64 = near.map_or(0.0, |n| {
-                        n.items().iter().map(|i| distance_to(room, i, p, elements).unwrap_or(1e6)).sum()
+                        n.items().iter().map(|i| near_distance(room, i, p, elements).unwrap_or(1e6)).sum()
                     });
                     found.push((score, r, f, s));
                 }
                 s += step;
+            }
+        }
+    }
+    // A source for a network with a `limit`: keep its runs within it. Places from which some
+    // terminal is too far come after every place from which none is.
+    if !found.is_empty() {
+        let mine = |i: &str| match i.split_once('.') {
+            Some((service, part)) => service == job.inst.service && part == job.name,
+            None => i == job.name,
+        };
+        let limited =
+            job.inst.def.connect.iter().filter(|n| {
+                n.role == Role::Feed && n.limit.is_some() && n.from.items().iter().any(|i| mine(i))
+            });
+        let spots: Vec<Spot> = found
+            .iter()
+            .map(|&(_, r, f, s)| Spot {
+                at: ctx.model.rooms[r].faces[f].point(s),
+                face: Some((r, f)),
+                room: Some(r),
+                above: (!inside).then_some(above),
+                ceiling: false,
+            })
+            .collect();
+        for net in limited {
+            let limit = net.limit.map_or(0.0, |l| l.0.to(ctx.units));
+            let far = super::connect::reach(ctx.model, job.inst, net, &ctx.out, elements, group, &spots);
+            for (spot, d) in found.iter_mut().zip(far) {
+                spot.0 += OVER_LIMIT * if d.is_finite() { (d - limit).max(0.0) } else { limit.max(1.0) };
             }
         }
     }

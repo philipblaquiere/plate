@@ -1729,14 +1729,44 @@ impl Problem<'_> {
     }
 
     /// Cells of `b`'s body standing in `a`'s clearance (fixture `ai` in `a`). A zone is open
-    /// floor: it may share a clearance.
+    /// floor: it may share a clearance. So may a fixture round the corner from `a`'s end (see
+    /// [`Self::round_the_corner`]).
     fn in_clearance(&self, ai: usize, a: &R, bi: usize, b: &R) -> i32 {
         if self.types[self.inst[bi].type_index].space.kind == SpaceKind::Zone {
+            return 0;
+        }
+        if self.fixture(bi).is_some() && Self::round_the_corner(a, b) {
             return 0;
         }
         match self.zone(ai, a) {
             Some(z) => Self::overlap_cells(&z, b) - Self::overlap_cells(a, b),
             None => 0,
+        }
+    }
+
+    /// Is fixture `b` round the corner from fixture `a`: in front of one end of `a`, against its
+    /// front, and backed towards that end (so against the wall `a` runs into)? That's an L, as
+    /// kitchens are built: a counter along one wall, the range on the next wall right after the
+    /// corner. `b` takes the corner of `a`'s clear floor, which nobody stands in anyway.
+    fn round_the_corner(a: &R, b: &R) -> bool {
+        let back = (b.f + 2) % 4;
+        match a.f {
+            // Front down or up: `b` touches that edge, within `a`'s width, at its left or right end.
+            0 | 2 => {
+                let touches = if a.f == 0 { b.y1() == a.y } else { b.y == a.y1() };
+                touches
+                    && b.x >= a.x
+                    && b.x1() <= a.x1()
+                    && ((b.x == a.x && back == 3) || (b.x1() == a.x1() && back == 1))
+            }
+            // Front right or left: within `a`'s height, at its bottom or top end.
+            _ => {
+                let touches = if a.f == 1 { b.x == a.x1() } else { b.x1() == a.x };
+                touches
+                    && b.y >= a.y
+                    && b.y1() <= a.y1()
+                    && ((b.y == a.y && back == 0) || (b.y1() == a.y1() && back == 2))
+            }
         }
     }
 
@@ -3898,6 +3928,26 @@ mod tests {
             v[k] = x.clone();
         }
         v
+    }
+
+    #[test]
+    fn round_the_corner_is_an_l() {
+        let r = |x, y, w, h, f| R { x, y, w, h, on: true, f };
+        // A counter along the bottom wall, facing up, cells 0..10 × 0..3.
+        let counter = r(0, 0, 10, 3, 2);
+        // The range on the left wall right after the corner, facing right: its back to the left.
+        assert!(Problem::round_the_corner(&counter, &r(0, 3, 3, 4, 1)));
+        // On the right wall, facing left.
+        assert!(Problem::round_the_corner(&counter, &r(7, 3, 3, 4, 3)));
+        // Facing up (backed on the counter): in front of it, not round the corner.
+        assert!(!Problem::round_the_corner(&counter, &r(0, 3, 3, 4, 2)));
+        // Away from the end, or not touching the counter's front.
+        assert!(!Problem::round_the_corner(&counter, &r(1, 3, 3, 4, 1)));
+        assert!(!Problem::round_the_corner(&counter, &r(0, 4, 3, 4, 1)));
+        // The same L turned: a counter up the left wall facing right, the range along the top.
+        let counter = r(0, 0, 3, 10, 1);
+        assert!(Problem::round_the_corner(&counter, &r(3, 7, 4, 3, 0)));
+        assert!(!Problem::round_the_corner(&counter, &r(3, 7, 4, 3, 2)));
     }
 
     #[test]
