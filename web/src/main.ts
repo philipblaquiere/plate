@@ -300,8 +300,12 @@ async function runSolve(): Promise<void> {
       return;
     }
     const files = store.files();
+    const versions = store.versions();
     mainFiles = importsOf(main, files);
     const evaluated = await configEngine.evaluate({ main, files });
+    // Drawing edits need the newest source map, even from a solve that's already superseded:
+    // spans are shifted through whatever was typed or dragged since.
+    if (evaluated.ok) geo.update({ sources: evaluated.sources, texts: files, versions }, main);
     if (seq !== solveSeq) return;
     if (!evaluated.ok) {
       showErrors(evaluated.diagnostics);
@@ -325,7 +329,7 @@ async function runSolve(): Promise<void> {
     if (seq !== solveSeq) return;
     if (res.ok) {
       lastLayout = res.layout;
-      geo.update(evaluated.sources, res.layout.units, main);
+      geo.setUnits(res.layout.units);
       // The solver says which value a finding is about; the source map says where that is.
       // Its findings (requirements unmet, preferences missed, floor left over) are problems;
       // other information is a note on the preview.

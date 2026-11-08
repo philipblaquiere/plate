@@ -283,6 +283,13 @@ export class WorkspaceStore {
     return out;
   }
 
+  /** The version of every file's text, to go with `files()`. */
+  versions(): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const [path, doc] of this.docs) out[path] = doc.text.version;
+    return out;
+  }
+
   async save(path: string): Promise<void> {
     const doc = this.docs.get(path);
     if (!doc) return;

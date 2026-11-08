@@ -64,6 +64,7 @@ needs to run in the browser.
 | `src/editor/schema.ts`        | Hover docs and completions, read from the JSON Schema                              |
 | `src/editor/templates.ts`     | The file written for a newly drawn boundary, spine or free origin                  |
 | `src/editor/geometryEdits.ts` | Drawing → text: rewrites dragged coordinates, inserts and removes points           |
+| `src/editor/shift.ts`         | Keeps a source map in step with the text: spans shifted through edits since        |
 | `src/engine/`                 | Runs `plate-wasm` in a Web Worker: `ConfigEngine.evaluate({ main, files })`        |
 | `src/viewer/viewer.ts`        | The drawing: pan/zoom, grid, dimensions, spaces, walls, parts, views, edits        |
 | `src/editor/sources.ts`       | Pointer → text lookups (for solver warnings and "show in file")                    |
@@ -200,6 +201,18 @@ The viewer reports edits in drawing units (point dragged, edge moved, point inse
 
 Edits go to the file the value is written in: a rule added to a plan imported from
 `hotel-room.ncl` lands in `hotel-room.ncl`.
+
+**The source map follows the text.** A drag writes the file at once, but the evaluation it
+starts comes back later, so the next drag may begin before there's a source map for the new
+text. Each `TextDoc` keeps a log of its edits (offsets, from Monaco's change events), and
+`GeometryEdits` keeps the text and version each file had when the map was made. Reading the map
+shifts every span through the edits made since (`web/src/editor/shift.ts`, pure and tested), the
+way the editor moves its markers. A file replaced whole (no edit log to follow) has its spans
+dropped until the next evaluation, so nothing is written to a place that may be wrong. The map is
+taken right after the browser's evaluation, not after the server's solve.
+
+Drags and drawing snap only to points written in the file (the starting geometry, preview slots),
+never to what the solver placed: rooms sit at wall faces and move with every solve.
 
 The file stays the single source of truth: the drawing never holds state the text doesn't.
 

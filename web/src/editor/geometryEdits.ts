@@ -3,6 +3,7 @@ import { feetInches } from "../viewer/format";
 import type { TextDoc } from "./editor";
 import { place } from "../reference/insert";
 import { formatNumber } from "./templates";
+import { shiftSources } from "./shift";
 
 /**
  * Writes edits made in the drawing back into the configuration text.
@@ -17,6 +18,13 @@ import { formatNumber } from "./templates";
 export type EditResult = { ok: true; note?: string } | { ok: false; reason: string };
 
 type Kind = SourceSpan["kind"];
+
+/** A source map, with the text and version of each file it was evaluated from. */
+export interface Evaluated {
+  sources: SourceSpan[];
+  texts: Record<string, string>;
+  versions: Record<string, number>;
+}
 
 interface Drag {
   doc: TextDoc;
@@ -40,7 +48,10 @@ interface EdgeMoveState {
 }
 
 export class GeometryEdits {
-  private sources: SourceSpan[] = [];
+  /** The last source map, and the text and version of each file it was made from. */
+  private base: Evaluated = { sources: [], texts: {}, versions: {} };
+  /** `base.sources` shifted to the text as it is now, and the versions that was for. */
+  private current: { sources: SourceSpan[]; versions: Record<string, number> } | null = null;
   private units: Units = "m";
   private drag: Drag | null = null;
   private edge: EdgeMoveState | null = null;
@@ -51,11 +62,49 @@ export class GeometryEdits {
   /** `docFor` gives the open document of a workspace file. */
   constructor(private readonly docFor: (file: string) => TextDoc | undefined) {}
 
-  /** The latest source map and units, from the last successful evaluation of plate `main`. */
-  update(sources: SourceSpan[], units: Units, main: string): void {
-    this.sources = sources;
-    this.units = units;
+  /**
+   * The source map of a successful evaluation of plate `main`, with the text and version of every
+   * file as it was evaluated. The text may have moved on since (a drag writes it before the
+   * evaluation it starts comes back): spans are shifted through the edits made in between, so
+   * edits from the drawing always land on the text as it is now.
+   */
+  update(evaluated: Evaluated, main: string): void {
+    this.base = evaluated;
+    this.current = null;
     this.main = main;
+  }
+
+  /** Units of plain numbers, from the last solve. */
+  setUnits(units: Units): void {
+    this.units = units;
+  }
+
+  /**
+   * The source map, shifted to the text as it is now. Spans in a file whose edits since the
+   * evaluation aren't known (it was replaced whole) are left out until the next evaluation, so
+   * nothing is written to a place that may be wrong.
+   */
+  private get sources(): SourceSpan[] {
+    const { sources, texts, versions } = this.base;
+    const now: Record<string, number> = {};
+    for (const file of Object.keys(versions)) now[file] = this.docFor(file)?.version ?? -1;
+    const c = this.current;
+    if (c && Object.keys(now).every((f) => c.versions[f] === now[f])) return c.sources;
+    const byFile = new Map<string, SourceSpan[]>();
+    for (const s of sources) {
+      const list = byFile.get(s.file);
+      if (list) list.push(s);
+      else byFile.set(s.file, [s]);
+    }
+    const out: SourceSpan[] = [];
+    for (const [file, list] of byFile) {
+      const doc = this.docFor(file);
+      const text = texts[file];
+      const changes = doc && text !== undefined ? doc.changesSince(versions[file]) : null;
+      if (changes) out.push(...shiftSources(list, text!, changes.length ? doc!.value : text!, changes));
+    }
+    this.current = { sources: out, versions: now };
+    return out;
   }
 
   /** Edit the file `s` is written in. False when that file isn't open (it was deleted). */

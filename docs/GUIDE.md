@@ -89,7 +89,8 @@ The drawing and the file stay in step both ways:
   it would be, with its dimensions, how far the edge moved and the new area; the file is only
   written when you let go, as one undo step. The edge stays parallel and its ends slide along the
   edges beside it, so on a rectangular plate it's a straight push or pull. `Shift` moves it
-  freely, `Alt` turns off snapping, `Esc` cancels. A drop that would make the outline cross
+  freely, `Alt` turns off snapping, `Esc` cancels. Edges and points snap to the grid and to the
+  plate's own points, not to rooms or walls (those move with every solve). A drop that would make the outline cross
   itself or turn inside out is refused.
 - **Double-click an edge** to add a point there; **right-click a point** (or hover it and press
   `Delete`) to remove it. The `points` list is edited in place.
