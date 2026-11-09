@@ -69,6 +69,23 @@
       "$ref": "#/$defs/Length",
       "x-docs": "lengths-and-units"
     },
+    "align": {
+      "description": "Which way the solver's grid runs. 'auto (the default) runs it square to the walls most of the outline runs along, so a building drawn at an angle gets rooms square to its walls. A number turns it to that angle, in degrees counter-clockwise from the x axis. Each plan decides for itself: a room's plan is solved square to the room. A plan with pinned spaces (`at`) stays square to the x axis under 'auto; with an angle, `at` is measured along the turned grid.",
+      "anyOf": [
+        {
+          "const": "auto"
+        },
+        {
+          "type": "number"
+        }
+      ],
+      "errorMessage": "expected 'auto or an angle in degrees",
+      "x-docs": "shapes",
+      "x-examples": [
+        "align = 'auto, # square to the outline's walls",
+        "align = 30,    # the grid turned 30° counter-clockwise"
+      ]
+    },
     "engine": {
       "$ref": "#/$defs/Engine"
     },
@@ -269,6 +286,23 @@
         "grid": {
           "description": "Grid the solver snaps spaces to. Defaults to the parent's.",
           "$ref": "#/$defs/Length"
+        },
+        "align": {
+          "description": "Which way the solver's grid runs. 'auto (the default) runs it square to the walls most of the outline runs along, so a building drawn at an angle gets rooms square to its walls. A number turns it to that angle, in degrees counter-clockwise from the x axis. Each plan decides for itself: a room's plan is solved square to the room. A plan with pinned spaces (`at`) stays square to the x axis under 'auto; with an angle, `at` is measured along the turned grid.",
+          "anyOf": [
+            {
+              "const": "auto"
+            },
+            {
+              "type": "number"
+            }
+          ],
+          "errorMessage": "expected 'auto or an angle in degrees",
+          "x-docs": "shapes",
+          "x-examples": [
+            "align = 'auto, # square to the outline's walls",
+            "align = 30,    # the grid turned 30° counter-clockwise"
+          ]
         },
         "needs": {
           "$ref": "#/$defs/Needs"

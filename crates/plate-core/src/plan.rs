@@ -36,6 +36,10 @@ pub struct Plan {
     pub engine: Option<Engine>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub grid: Option<LengthSer>,
+    /// Which way the grid runs: square to the outline's walls (`'auto`, the default), or at an
+    /// angle in degrees. Each plan decides for itself; it isn't passed down.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub align: Option<Align>,
     #[serde(default)]
     pub needs: Needs,
     #[serde(default)]
@@ -490,6 +494,23 @@ impl Leaf {
     pub fn is_swing(&self) -> bool {
         *self == Leaf::Swing
     }
+}
+
+/// `align = 'auto`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Auto {
+    Auto,
+}
+
+/// Which way a plan's grid runs (`align`).
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+#[serde(untagged)]
+pub enum Align {
+    /// Square to the walls most of the outline runs along.
+    Auto(Auto),
+    /// At this angle, in degrees counter-clockwise from the plan's x axis.
+    Degrees(f64),
 }
 
 /// `width = 'full` on a door rule.

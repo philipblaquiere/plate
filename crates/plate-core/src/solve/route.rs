@@ -322,11 +322,16 @@ impl Route {
                 let around: Vec<usize> = (0..g.nodes.len())
                     .filter(|&i| g.nodes[i].level == 1 && near_room(g.nodes[i].at))
                     .collect();
-                // The room's axes: along its longest side, and across.
+                // The room's axes: along its longest side, and across. Of the sides running the way
+                // most of its walls do: a slanted wall that cut it doesn't turn its ceiling runs.
                 let outer = &room.loops[0];
+                let main = crate::geometry::wall_directions(outer).first().map_or(0.0, |d| d.0);
                 let (mut u, mut best) = (Point::new(1.0, 0.0), 0.0);
                 for k in 0..outer.len() {
                     let (a, b) = (outer[k], outer[(k + 1) % outer.len()]);
+                    if !crate::geometry::runs_along(a, b, main) {
+                        continue;
+                    }
                     let l = a.distance(b);
                     if l > best {
                         best = l;

@@ -177,16 +177,22 @@ impl Zone {
 /// A shape cut into rectangles, biggest first: a rectangle is one zone, an L two (its body and
 /// its arm). Each zone is the biggest rectangle left in the shape; cutting stops at pieces
 /// narrower than `min_side` or smaller than a tenth of the shape. Rectangles line up with the
-/// shape's longest edge, so a turned room is cut along its own walls.
+/// shape's longest edge among those running the way most of its walls do, so a turned room is
+/// cut along its own walls, and a room cut by a slanted wall along its square ones.
 pub fn zones(outer: &[Point], holes: &[Vec<Point>], min_side: f64) -> Vec<Zone> {
     let n = outer.len();
     if n < 3 {
         return Vec::new();
     }
-    // The frame: along the longest edge.
+    // The frame: along the longest edge that runs the way most of its walls do (a room cut by a
+    // slanted wall is still cut square to its other walls).
+    let main = wall_directions(outer).first().map_or(0.0, |d| d.0);
     let (mut best, mut u) = (0.0, Point::new(1.0, 0.0));
     for k in 0..n {
         let (a, b) = (outer[k], outer[(k + 1) % n]);
+        if !runs_along(a, b, main) {
+            continue;
+        }
         let l = a.distance(b);
         if l > best + 1e-9 {
             best = l;
@@ -603,5 +609,95 @@ mod clip_tests {
         let sq = vec![Point::new(0.0, 0.0), Point::new(2.0, 0.0), Point::new(2.0, 2.0), Point::new(0.0, 2.0)];
         let f = segment_inside(Point::new(-1.0, 1.0), Point::new(3.0, 1.0), &sq, &[]);
         assert!((f - 0.5).abs() < 1e-12, "{f}");
+    }
+}
+
+/// Two directions closer than this (in radians, folded into a quarter turn) count as one.
+const SAME_DIRECTION: f64 = 0.5 * std::f64::consts::PI / 180.0;
+
+/// The directions a loop's edges run in, folded into a quarter turn (an edge and one square to
+/// it run the same way), heaviest first: (angle in radians in `[0, π/2)`, total length). Each
+/// direction's angle is its longest edge's.
+pub fn wall_directions(l: &[Point]) -> Vec<(f64, f64)> {
+    let quarter = std::f64::consts::FRAC_PI_2;
+    let fold = |a: f64| a.rem_euclid(quarter);
+    let apart = |a: f64, b: f64| {
+        let d = (a - b).abs();
+        d.min(quarter - d)
+    };
+    // (angle, total length, longest edge's length)
+    let mut bins: Vec<(f64, f64, f64)> = Vec::new();
+    for k in 0..l.len() {
+        let (a, b) = (l[k], l[(k + 1) % l.len()]);
+        let len = a.distance(b);
+        if len <= 0.0 {
+            continue;
+        }
+        let angle = fold((b.y - a.y).atan2(b.x - a.x));
+        match bins.iter_mut().find(|bin| apart(bin.0, angle) < SAME_DIRECTION) {
+            Some(bin) => {
+                bin.1 += len;
+                if len > bin.2 {
+                    bin.0 = angle;
+                    bin.2 = len;
+                }
+            }
+            None => bins.push((angle, len, len)),
+        }
+    }
+    let mut out: Vec<(f64, f64)> = bins.into_iter().map(|(a, w, _)| (a, w)).collect();
+    out.sort_by(|x, y| y.1.total_cmp(&x.1));
+    out
+}
+
+/// Does the edge `a`–`b` run along `angle` or square to it (see [`wall_directions`])?
+pub fn runs_along(a: Point, b: Point, angle: f64) -> bool {
+    let quarter = std::f64::consts::FRAC_PI_2;
+    let e = (b.y - a.y).atan2(b.x - a.x).rem_euclid(quarter);
+    let d = (e - angle.rem_euclid(quarter)).abs();
+    d.min(quarter - d) < SAME_DIRECTION
+}
+
+#[cfg(test)]
+mod direction_tests {
+    use super::*;
+
+    #[test]
+    fn a_turned_rectangle_with_a_cut_corner_runs_at_its_turn() {
+        let t = 30f64.to_radians();
+        let (c, s) = (t.cos(), t.sin());
+        let at = |x: f64, y: f64| Point::new(x * c - y * s, x * s + y * c);
+        // 10 × 6, its top right corner cut from (10, 4) to (8, 6).
+        let l = vec![at(0.0, 0.0), at(10.0, 0.0), at(10.0, 4.0), at(8.0, 6.0), at(0.0, 6.0)];
+        let dirs = wall_directions(&l);
+        assert_eq!(dirs.len(), 2);
+        assert!((dirs[0].0 - t).abs() < 1e-9, "{dirs:?}");
+        assert!((dirs[0].1 - 28.0).abs() < 1e-9);
+        assert!(runs_along(l[1], l[2], t) && !runs_along(l[2], l[3], t));
+        // An axis-aligned loop runs at 0.
+        let sq = vec![Point::new(0.0, 0.0), Point::new(2.0, 0.0), Point::new(2.0, 1.0), Point::new(0.0, 1.0)];
+        assert_eq!(wall_directions(&sq), vec![(0.0, 6.0)]);
+    }
+}
+
+#[cfg(test)]
+mod zone_frame_tests {
+    use super::*;
+
+    #[test]
+    fn a_room_cut_by_a_long_slanted_wall_is_zoned_square_to_its_other_walls() {
+        // 6 × 6 with a corner cut from (6, 1) to (1, 6): that wall (7.07) is the longest.
+        let room = vec![
+            Point::new(0.0, 0.0),
+            Point::new(6.0, 0.0),
+            Point::new(6.0, 1.0),
+            Point::new(1.0, 6.0),
+            Point::new(0.0, 6.0),
+        ];
+        let z = zones(&room, &[], 0.6);
+        assert!(!z.is_empty());
+        for zone in &z {
+            assert!(runs_along(Point::new(0.0, 0.0), zone.u, 0.0), "{zone:?}");
+        }
     }
 }

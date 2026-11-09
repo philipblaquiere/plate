@@ -1,0 +1,28 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 16
+space bath room 7.50 [6.85, 5.70 → 10.70, 9.90]
+space bath.basin fixture 0.27 [9.78, 6.90 → 10.50, 7.65]
+space bath.shower fixture 0.81 [7.47, 7.16 → 8.73, 8.42]
+space bath.toilet fixture 0.28 [9.28, 7.31 → 10.08, 8.05]
+space bedroom_1 room 16.63 [0.00, 9.20 → 7.30, 13.80]
+space bedroom_1.bed fixture 3.28 [2.15, 10.16 → 4.66, 12.76]
+space bedroom_1.wardrobe fixture 1.44 [-0.00, 10.08 → 1.92, 12.36]
+space bedroom_2 room 17.50 [4.05, 2.60 → 9.85, 8.70]
+space bedroom_2.bed fixture 3.28 [6.71, 4.19 → 9.31, 6.70]
+space bedroom_2.wardrobe fixture 1.44 [4.77, 3.72 → 6.69, 6.00]
+space bedroom_3 room 17.88 [7.05, -0.00 → 13.40, 5.90]
+space bedroom_3.bed fixture 3.28 [7.61, 1.38 → 10.12, 3.98]
+space bedroom_3.wardrobe fixture 1.44 [11.12, 1.86 → 13.40, 3.78]
+space living room 50.62 [8.70, 4.50 → 21.00, 12.90]
+space store room 4.00 [4.70, 9.55 → 7.50, 12.35]
+space hall circulation 38.87 [2.10, 3.30 → 15.00, 13.10]
+Door door:hall|'entrance
+Door door:bath|hall
+Door door:bedroom_1|hall
+Door door:bedroom_2|hall
+Door door:bedroom_3|hall
+Door door:living|hall
+Door door:store|hall
+Window window:bedroom_1|'facade
+Window window:bedroom_2|'facade
+Window window:bedroom_3|'facade
+Window window:living|'facade

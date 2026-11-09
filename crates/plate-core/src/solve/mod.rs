@@ -15,6 +15,8 @@
 //! - **Diagnostics.** Rules and sizes that can't be met come back as warnings that point at the
 //!   rule or space in the file (a JSON pointer, mapped to the text by the editor).
 
+#[cfg(test)]
+mod align_tests;
 pub mod build;
 #[cfg(test)]
 mod built_tests;
@@ -50,12 +52,14 @@ use serde::Deserialize;
 use self::context::{origin, resolved, under, Within};
 use crate::config::{Config, Start};
 use crate::diagnostic::{Code, Diagnostic};
-use crate::geometry::Point;
+use crate::geometry::{self, Point};
 use crate::layout::{
     Element, ElementKind, LayerInfo, Layout, OpeningInfo, PortInfo, Report, SlotInfo, SpaceInfo, Status,
     SymbolInfo, WallInfo,
 };
-use crate::plan::{bounds, role_matches, Engine, Plan, PortNeed, Previews, Rule, SidePorts, SpaceKind};
+use crate::plan::{
+    bounds, role_matches, Align, Engine, Plan, PortNeed, Previews, Rule, SidePorts, SpaceKind,
+};
 use crate::service::Service;
 use crate::units::{System, Units};
 
@@ -135,6 +139,123 @@ impl Placed {
             .into_iter()
             .zip(&self.polygon)
             .all(|(c, p)| t.apply(c).distance(*p) <= tol)
+    }
+}
+
+/// The root's frame (see `Plan::align`): the angle its grid runs at, in radians, the edge it
+/// starts from, and whether the angle was written.
+///
+/// Square to the walls most of the outline runs along; with pinned spaces (`at`, written in the
+/// plate's coordinates), square to the x axis. The angle is the longest edge's that runs that
+/// way, so a plate whose longest edge is one of its walls is framed as it always was.
+fn root_frame(plan: &Plan, points: &[Point]) -> (f64, usize, bool) {
+    let n = points.len();
+    let edge = |k: usize| (points[k], points[(k + 1) % n]);
+    let len = |k: usize| edge(k).0.distance(edge(k).1);
+    let longest_along = |angle: Option<f64>| {
+        (0..n)
+            .filter(|&k| angle.is_none_or(|a| geometry::runs_along(edge(k).0, edge(k).1, a)))
+            .max_by(|&a, &b| len(a).total_cmp(&len(b)))
+    };
+    if let Some(Align::Degrees(d)) = plan.align {
+        let angle = d.to_radians();
+        return (angle, longest_along(Some(angle)).or(longest_along(None)).unwrap_or(0), true);
+    }
+    let pinned = plan.spaces.values().any(|s| s.at.is_some());
+    let main = if pinned { 0.0 } else { geometry::wall_directions(points).first().map_or(0.0, |d| d.0) };
+    let k = longest_along(Some(main)).or(longest_along(None)).unwrap_or(0);
+    let (a, b) = edge(k);
+    let angle = (b.y - a.y).atan2(b.x - a.x);
+    // Turn by a multiple of 90° less if the edge is already axis-aligned.
+    let snapped = (angle / std::f64::consts::FRAC_PI_2).round() * std::f64::consts::FRAC_PI_2;
+    let angle = if (angle - snapped).abs() < 1e-9 { 0.0 } else { angle };
+    (angle, k, false)
+}
+
+/// The angle a level is solved at, in radians (see `Plan::align`), and why it isn't turned when
+/// it was asked to be. 0 for a level whose walls run along its axes: almost every level.
+fn turn_of(plan: &Plan, slot: &Slot) -> (f64, Option<Issue>) {
+    let Some(boundary) = slot.boundary.as_ref().filter(|_| slot.spine.is_none()) else { return (0.0, None) };
+    let pinned = plan.spaces.values().any(|s| s.at.is_some());
+    let angle = match plan.align {
+        Some(Align::Degrees(d)) => d.to_radians().rem_euclid(std::f64::consts::TAU),
+        _ if pinned => return (0.0, None),
+        _ => {
+            // Square to the walls most of the outline runs along, unless as much runs along the
+            // axes.
+            let dirs = geometry::wall_directions(boundary);
+            let Some(&(angle, most)) = dirs.first() else { return (0.0, None) };
+            let along_axes = dirs
+                .iter()
+                .find(|(a, _)| geometry::runs_along(Point::new(0.0, 0.0), Point::new(a.cos(), a.sin()), 0.0))
+                .map_or(0.0, |d| d.1);
+            if along_axes >= 0.99 * most {
+                return (0.0, None);
+            }
+            angle
+        }
+    };
+    if angle.abs() < 1e-12 || (std::f64::consts::TAU - angle).abs() < 1e-12 {
+        return (0.0, None);
+    }
+    // Pinned spaces are measured along the turned grid: they must stay square to it.
+    let pin = turned_slot(slot, angle).pin;
+    let square = (pin.b.abs() < 1e-9 && pin.c.abs() < 1e-9) || (pin.a.abs() < 1e-9 && pin.d.abs() < 1e-9);
+    if !square {
+        let issue = Issue::preferred(
+            "/align",
+            "The grid can't turn here: the spaces pinned with `at` would end up askew",
+        )
+        .with_hint("Leave out `align` in this plan, or pin its spaces in the plan's own frame.");
+        return (0.0, Some(issue));
+    }
+    (angle, None)
+}
+
+/// `slot` turned by `-angle` about the origin, so walls at `angle` run along the axes. Pinned
+/// spaces are measured along the turned grid.
+fn turned_slot(slot: &Slot, angle: f64) -> Slot {
+    let to = Transform::rotate(-angle);
+    let turn = |l: &Vec<Point>| l.iter().map(|p| to.apply(*p)).collect::<Vec<_>>();
+    Slot {
+        boundary: slot.boundary.as_ref().map(turn),
+        ports: slot.ports.iter().map(|p| p.transformed(&to)).collect(),
+        spine: slot.spine.as_ref().map(turn),
+        pin: to.then_after(&slot.pin).then_after(&Transform::rotate(angle)),
+        holes: slot.holes.iter().map(turn).collect(),
+    }
+}
+
+/// A level solved in a turned slot, put back in the slot's own frame by `back`.
+fn turn_level(level: &LevelResult, back: &Transform) -> LevelResult {
+    let turn = |l: &[Point]| l.iter().map(|p| back.apply(*p)).collect::<Vec<_>>();
+    LevelResult {
+        placed: level
+            .placed
+            .iter()
+            .map(|p| Placed {
+                name: p.name.clone(),
+                type_key: p.type_key.clone(),
+                polygon: turn(&p.polygon),
+                rect: p.rect.map(|(w, h, t)| (w, h, back.then_after(&t))),
+                // A rectangle's ports are in its own frame; the fill's in the level's.
+                ports: match p.rect {
+                    Some(_) => p.ports.clone(),
+                    None => p.ports.iter().map(|s| s.transformed(back)).collect(),
+                },
+                fixture: p.fixture.as_ref().map(|f| FixtureOut {
+                    front: (back.apply(f.front.0), back.apply(f.front.1)),
+                    clearance: f.clearance.as_deref().map(turn),
+                }),
+                holes: p.holes.iter().map(|h| turn(h)).collect(),
+            })
+            .collect(),
+        openings: level
+            .openings
+            .iter()
+            .map(|o| Opening { a: back.apply(o.a), b: back.apply(o.b), ..o.clone() })
+            .collect(),
+        issues: level.issues.clone(),
     }
 }
 
@@ -436,21 +557,13 @@ fn solve_plate(config: &Config, start: &Start) -> Solution {
     let plan = config.plan();
     if !plan.spaces.is_empty() {
         let grid = plan_grid(&plan, units, None);
-        // The root slot, in a frame where the boundary's longest edge is horizontal.
+        // The root slot, in a frame square to the boundary's walls (`align`): from the start of
+        // its longest edge that runs that way.
         let (slot, world) = match start {
             Start::Boundary { .. } => {
                 let n = points.len();
-                let longest = (0..n).max_by(|&a, &b| {
-                    points[a]
-                        .distance(points[(a + 1) % n])
-                        .total_cmp(&points[b].distance(points[(b + 1) % n]))
-                });
-                let k = longest.unwrap_or(0);
-                let (a, b) = (points[k], points[(k + 1) % n]);
-                let angle = (b.y - a.y).atan2(b.x - a.x);
-                // Turn by a multiple of 90° less if the edge is already axis-aligned.
-                let snapped = (angle / std::f64::consts::FRAC_PI_2).round() * std::f64::consts::FRAC_PI_2;
-                let angle = if (angle - snapped).abs() < 1e-9 { 0.0 } else { angle };
+                let (angle, k, written) = root_frame(&plan, &points);
+                let a = points[k];
                 let world = Transform::translate(a.x, a.y).then_after(&Transform::rotate(angle));
                 let local = world.inverse();
                 let boundary: Vec<Point> = points.iter().map(|p| local.apply(*p)).collect();
@@ -458,8 +571,10 @@ fn solve_plate(config: &Config, start: &Start) -> Solution {
                 let ports = (0..n)
                     .map(|i| PortSeg::new(roles[i].clone(), boundary[i], boundary[(i + 1) % n]))
                     .collect();
-                // `at` corners are written in the plate's coordinates.
-                (Slot { boundary: Some(boundary), ports, spine: None, pin: local, holes: Vec::new() }, world)
+                // `at` corners are written in the plate's coordinates; with an angle written in
+                // `align`, along the turned grid.
+                let pin = if written { local.then_after(&Transform::rotate(angle)) } else { local };
+                (Slot { boundary: Some(boundary), ports, spine: None, pin, holes: Vec::new() }, world)
             }
             Start::Spine { .. } => {
                 let slot = Slot {
@@ -1059,13 +1174,29 @@ impl Host {
             Some(s) if s.len() >= 2 => Engine::SpineStack,
             _ => Engine::Grid,
         });
-        let level = match engine {
-            Engine::Grid => grid::solve(plan, slot, ctx),
-            Engine::SpineStack => spine::solve(plan, slot, ctx),
+        // A level whose walls run at an angle is solved square to them (`align`), then turned
+        // back: the engine only ever sees a grid along its axes.
+        // The root is framed square to its walls already (`root_frame`).
+        let (turn, turn_issue) =
+            if engine == Engine::Grid && !ctx.root { turn_of(plan, slot) } else { (0.0, None) };
+        let turned = (turn != 0.0).then(|| {
+            let slot = turned_slot(slot, turn);
+            let level = grid::solve(plan, &slot, ctx);
+            (slot, level)
+        });
+        let level = match (&turned, engine) {
+            (Some((_, level)), _) => turn_level(level, &Transform::rotate(turn)),
+            (None, Engine::Grid) => grid::solve(plan, slot, ctx),
+            (None, Engine::SpineStack) => spine::solve(plan, slot, ctx),
         };
         let built = build::build(plan, slot, &level, self.units, ctx.root);
         let mut sub = Sub::default();
-        for issue in needs_conflicts(plan, self.units).iter().chain(&level.issues).chain(&built.issues) {
+        for issue in needs_conflicts(plan, self.units)
+            .iter()
+            .chain(&turn_issue)
+            .chain(&level.issues)
+            .chain(&built.issues)
+        {
             let mut i = SubIssue::from(issue);
             i.pointer = origin(plan, &i.pointer);
             push_issue(&mut sub.issues, i);
@@ -1074,7 +1205,21 @@ impl Host {
             // Floor left over: only where a plan divides its space into spaces. A plan that places
             // fixtures leaves the rest as the room's own floor.
             if !plan.spaces.is_empty() && plan.spaces.values().all(|s| !s.is_fixture()) {
-                leftover(plan, boundary, &slot.holes, &level, ctx, &mut sub);
+                match &turned {
+                    // Measured square to the level's walls, and turned back.
+                    Some((slot, level)) => {
+                        let boundary = slot.boundary.as_deref().unwrap_or_default();
+                        leftover(plan, boundary, &slot.holes, level, ctx, &mut sub);
+                        let back = Transform::rotate(turn);
+                        for l in &mut sub.leftover {
+                            l.polygon = l.polygon.iter().map(|p| back.apply(*p)).collect();
+                            for h in &mut l.holes {
+                                *h = h.iter().map(|p| back.apply(*p)).collect();
+                            }
+                        }
+                    }
+                    None => leftover(plan, boundary, &slot.holes, &level, ctx, &mut sub),
+                }
             }
         }
         // Services declared here (the top level, or a plan with its own): where they apply.
