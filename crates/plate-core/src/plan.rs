@@ -231,6 +231,20 @@ pub struct Space {
     /// the plan is solved: left out of the fingerprint, like `symbol`.
     #[serde(default, skip_serializing)]
     pub load: BTreeMap<String, crate::service::Load>,
+    /// How its floor may differ from a rectangle: cut by the outline (`'fit`, the default for
+    /// everything but fixtures) or never (`'rect`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub shape: Option<SpaceShape>,
+}
+
+/// How a space's floor may differ from its rectangle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SpaceShape {
+    /// Always a rectangle: where the outline is slanted or off the grid, it stops short.
+    Rect,
+    /// A rectangle cut by the outline: it reaches across a slanted edge and its floor ends there.
+    Fit,
 }
 
 fn yes() -> bool {

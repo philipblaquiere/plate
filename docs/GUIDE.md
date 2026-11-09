@@ -181,6 +181,7 @@ own copy to change. Between them they use every field, rule and kind of space (a
 | ------------ | ----------------- | ------------------------------------------------------------------------------- |
 | `home`       | `studio.ncl`      | The basics: an outline, three spaces, a door and a window                       |
 |              | `apartment.ncl`   | Edge roles, a fill hall, `count` and typicals, zones, furnished plans, previews |
+|              | `condo.ncl`       | An outline with angled walls and a step: rooms cut by it, `shape = 'rect`       |
 |              | `villa.ncl`       | A villa on its plot: terrace, pool, parking and a garden that takes the rest    |
 | `commercial` | `hotel.ncl`       | A whole ground floor, five plans deep: `spine_stack`, typicals, a café, a lobby |
 |              | `annex.ncl`       | Grown from a `spine` instead of an outline, reusing the hotel's guest room      |

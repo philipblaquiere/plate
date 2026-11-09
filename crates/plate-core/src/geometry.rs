@@ -1,3 +1,5 @@
+pub mod boolean;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Default, Serialize, Deserialize)]
@@ -455,5 +457,151 @@ mod tests {
         assert_eq!(z.len(), 1, "{z:?}");
         assert!((z[0].w - 8.0).abs() < 1e-6 && (z[0].h - 1.5).abs() < 1e-6, "{z:?}");
         assert!(inside_all(&z[0], &r));
+    }
+}
+
+/// `polygon` cut to the box `[x0, x1] × [y0, y1]` (Sutherland–Hodgman). Exact for any polygon,
+/// convex or not, since the box is convex; where the result is in two pieces they're joined by
+/// edges of no width, which add no area.
+pub fn clip_to_box(polygon: &[Point], x0: f64, y0: f64, x1: f64, y1: f64) -> Vec<Point> {
+    let mut out = polygon.to_vec();
+    // Each side of the box: keep points where `inside` holds.
+    let sides: [(usize, f64, bool); 4] = [(0, x0, true), (0, x1, false), (1, y0, true), (1, y1, false)];
+    for (axis, at, low) in sides {
+        if out.is_empty() {
+            break;
+        }
+        let v = |p: &Point| if axis == 0 { p.x } else { p.y };
+        let inside = |p: &Point| if low { v(p) >= at } else { v(p) <= at };
+        let cross = |a: &Point, b: &Point| {
+            let t = (at - v(a)) / (v(b) - v(a));
+            Point::new(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t)
+        };
+        let input = std::mem::take(&mut out);
+        let n = input.len();
+        for k in 0..n {
+            let (a, b) = (&input[(k + n - 1) % n], &input[k]);
+            match (inside(a), inside(b)) {
+                (true, true) => out.push(*b),
+                (true, false) => out.push(cross(a, b)),
+                (false, true) => {
+                    out.push(cross(a, b));
+                    out.push(*b);
+                }
+                (false, false) => {}
+            }
+        }
+    }
+    out
+}
+
+/// The part of segment `a`–`b` inside the box `[x0, x1] × [y0, y1]` (box edges included), as
+/// parameters along it (Liang–Barsky).
+pub fn segment_in_box(a: Point, b: Point, x0: f64, y0: f64, x1: f64, y1: f64) -> Option<(f64, f64)> {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let (mut t0, mut t1) = (0.0f64, 1.0f64);
+    for (p, q) in [(-dx, a.x - x0), (dx, x1 - a.x), (-dy, a.y - y0), (dy, y1 - a.y)] {
+        if p == 0.0 {
+            if q < 0.0 {
+                return None;
+            }
+        } else {
+            let r = q / p;
+            if p < 0.0 {
+                t0 = t0.max(r);
+            } else {
+                t1 = t1.min(r);
+            }
+        }
+    }
+    (t0 <= t1).then_some((t0, t1))
+}
+
+/// Shortest distance between segment `a`–`b` and the box `[x0, x1] × [y0, y1]` (0 if they meet).
+pub fn segment_box_distance(a: Point, b: Point, x0: f64, y0: f64, x1: f64, y1: f64) -> f64 {
+    if segment_in_box(a, b, x0, y0, x1, y1).is_some() {
+        return 0.0;
+    }
+    let to_box = |p: Point| {
+        let dx = (x0 - p.x).max(p.x - x1).max(0.0);
+        let dy = (y0 - p.y).max(p.y - y1).max(0.0);
+        dx.hypot(dy)
+    };
+    let corners = [Point::new(x0, y0), Point::new(x1, y0), Point::new(x1, y1), Point::new(x0, y1)];
+    corners
+        .iter()
+        .map(|&c| point_segment_distance(c, a, b))
+        .chain([to_box(a), to_box(b)])
+        .fold(f64::INFINITY, f64::min)
+}
+
+/// How much of segment `a`–`b` lies inside `outer` and outside every hole, from 0 to 1.
+pub fn segment_inside(a: Point, b: Point, outer: &[Point], holes: &[Vec<Point>]) -> f64 {
+    let (dx, dy) = (b.x - a.x, b.y - a.y);
+    let mut cuts = vec![0.0, 1.0];
+    for l in std::iter::once(outer).chain(holes.iter().map(Vec::as_slice)) {
+        let n = l.len();
+        for k in 0..n {
+            let (c, d) = (l[k], l[(k + 1) % n]);
+            let (ex, ey) = (d.x - c.x, d.y - c.y);
+            let den = dx * ey - dy * ex;
+            if den.abs() < 1e-15 {
+                continue;
+            }
+            let t = ((c.x - a.x) * ey - (c.y - a.y) * ex) / den;
+            let u = ((c.x - a.x) * dy - (c.y - a.y) * dx) / den;
+            if (0.0..=1.0).contains(&t) && (-1e-12..=1.0 + 1e-12).contains(&u) {
+                cuts.push(t);
+            }
+        }
+    }
+    cuts.sort_by(f64::total_cmp);
+    let mut inside = 0.0;
+    for w in cuts.windows(2) {
+        if w[1] - w[0] <= 1e-12 {
+            continue;
+        }
+        let t = (w[0] + w[1]) / 2.0;
+        let p = Point::new(a.x + dx * t, a.y + dy * t);
+        if contains(outer, p) && !holes.iter().any(|h| contains(h, p)) {
+            inside += w[1] - w[0];
+        }
+    }
+    inside
+}
+
+#[cfg(test)]
+mod clip_tests {
+    use super::*;
+
+    #[test]
+    fn a_concave_polygon_cut_to_a_box_has_the_right_area() {
+        // A U: the box covers both arms and the gap between them.
+        let u = vec![
+            Point::new(0.0, 0.0),
+            Point::new(6.0, 0.0),
+            Point::new(6.0, 4.0),
+            Point::new(4.0, 4.0),
+            Point::new(4.0, 2.0),
+            Point::new(2.0, 2.0),
+            Point::new(2.0, 4.0),
+            Point::new(0.0, 4.0),
+        ];
+        let c = clip_to_box(&u, 1.0, 1.0, 5.0, 3.0);
+        assert!((signed_area(&c).abs() - (8.0 - 2.0)).abs() < 1e-9, "{}", signed_area(&c));
+        let tri = vec![Point::new(0.0, 0.0), Point::new(2.0, 0.0), Point::new(0.0, 2.0)];
+        assert!((signed_area(&clip_to_box(&tri, 1.0, 0.0, 2.0, 1.0)).abs() - 0.5).abs() < 1e-9);
+    }
+
+    #[test]
+    fn segments_against_boxes_and_polygons() {
+        let (a, b) = (Point::new(0.0, 0.0), Point::new(4.0, 4.0));
+        let (t0, t1) = segment_in_box(a, b, 1.0, 1.0, 2.0, 5.0).unwrap();
+        assert!((t0 - 0.25).abs() < 1e-12 && (t1 - 0.5).abs() < 1e-12);
+        assert!(segment_in_box(a, b, 3.0, 0.0, 4.0, 1.0).is_none());
+        assert!((segment_box_distance(a, b, 3.0, 0.0, 4.0, 1.0) - (2.0f64).sqrt()).abs() < 1e-9);
+        let sq = vec![Point::new(0.0, 0.0), Point::new(2.0, 0.0), Point::new(2.0, 2.0), Point::new(0.0, 2.0)];
+        let f = segment_inside(Point::new(-1.0, 1.0), Point::new(3.0, 1.0), &sq, &[]);
+        assert!((f - 0.5).abs() < 1e-12, "{f}");
     }
 }

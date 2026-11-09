@@ -1,0 +1,42 @@
+status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 27
+space bath_1 room 8.59 [5.36, 0.00 → 9.29, 3.76]
+space bath_1.basin fixture 0.27 [8.84, 2.03 → 9.29, 2.63]
+space bath_1.shower fixture 0.81 [5.67, 2.86 → 6.57, 3.76]
+space bath_1.toilet fixture 0.28 [8.59, 2.72 → 9.29, 3.12]
+space bath_2 room 8.49 [10.79, 6.77 → 13.05, 10.53]
+space bath_2.basin fixture 0.27 [11.82, 10.08 → 12.42, 10.53]
+space bath_2.shower fixture 0.81 [10.79, 9.29 → 11.69, 10.19]
+space bath_2.toilet fixture 0.28 [10.79, 6.81 → 11.49, 7.21]
+space bedroom_1 room 22.02 [11.55, 0.00 → 17.82, 3.51]
+space bedroom_1.bed fixture 3.28 [14.58, 1.46 → 16.18, 3.51]
+space bedroom_1.wardrobe fixture 1.44 [11.55, 0.81 → 12.15, 3.21]
+space bedroom_2 room 22.02 [17.82, 0.00 → 24.10, 3.51]
+space bedroom_2.bed fixture 3.28 [21.16, 1.46 → 22.76, 3.51]
+space bedroom_2.wardrobe fixture 1.44 [17.82, 0.00 → 18.42, 2.40]
+space den room 21.71 [10.79, 9.52 → 15.82, 17.05]
+space kitchen zone 25.93 [0.75, 3.76 → 9.29, 7.77]
+space kitchen.counter fixture 1.96 [5.37, 3.76 → 8.38, 4.41]
+space kitchen.fridge fixture 0.49 [8.39, 3.76 → 9.09, 4.46]
+space living zone 120.63 [0.00, 7.36 → 10.79, 19.55]
+space living.armchair_1 fixture 0.72 [5.52, 13.76 → 6.37, 14.61]
+space living.sofa fixture 2.47 [6.10, 11.01 → 7.05, 13.61]
+space living.tv fixture 0.81 [10.34, 11.61 → 10.79, 13.41]
+space primary room 30.22 [15.82, 5.01 → 24.10, 9.75]
+space primary.bed fixture 3.28 [16.76, 7.70 → 18.36, 9.75]
+space primary.wardrobe fixture 1.44 [20.45, 5.01 → 22.85, 5.61]
+space store room 3.96 [12.05, 3.51 → 14.31, 5.26]
+space hall circulation 53.99 [5.52, 0.00 → 24.10, 10.53]
+region:living+kitchen 146.56
+Door door:hall|'entrance
+Door door:bath_1|hall
+Door door:bath_2|hall
+Door door:bedroom_1|hall
+Door door:bedroom_2|hall
+Door door:den|hall
+Door door:primary|hall
+Door door:store|hall
+Window window:bedroom_1|'facade
+Window window:bedroom_2|'facade
+Window window:den|'facade
+Window window:living|'facade
+Window window:primary|'facade

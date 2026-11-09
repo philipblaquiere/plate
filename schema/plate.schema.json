@@ -359,6 +359,22 @@
             "garden = { fill = true, symbol = 'lawn },"
           ]
         },
+        "shape": {
+          "description": "How the space's floor may differ from a rectangle. With 'fit (the default for everything but fixtures), a space is placed as a rectangle and cut by the outline where that is slanted or off the grid: a room against an angled facade takes the floor up to it. With 'rect, it stays a rectangle and stops short. Fixtures are always rectangles.",
+          "enum": [
+            "rect",
+            "fit"
+          ],
+          "x-enumDescriptions": {
+            "rect": "Always a rectangle. Where the outline is slanted or off the grid, the space stops short of it.",
+            "fit": "A rectangle cut by the outline: it reaches across a slanted edge, and its floor ends at the edge. Its width, depth, side and aspect are measured on the rectangle, its area on the floor it has. It keeps at least half its rectangle."
+          },
+          "x-docs": "shapes",
+          "x-examples": [
+            "bedroom = { area = { min = 11, max = 16 }, side.min = 3 }, # cut by an angled wall if it reaches one",
+            "lift = { kind = 'vertical, width = 2.4, depth = 2.4, shape = 'rect },"
+          ]
+        },
         "at": {
           "description": "Fixes the space in place: the corner nearest the origin (its lower left), or one corner per instance. In a plate, in the plate's coordinates; in a plan, from the lower-left corner of its slot with the entrance along the bottom (as its preview shows it). Needs an exact `width` (along x) and `depth` (along y). For what's already there: a core, a stair, columns.",
           "anyOf": [

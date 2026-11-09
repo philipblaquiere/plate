@@ -420,13 +420,13 @@ pub fn build(plan: &Plan, slot: &Slot, level: &LevelResult, units: Units, root: 
                 .fold(0.0, f64::max)
         };
         match &p.rect {
-            Some((w, h, t)) => {
+            Some((w, h, t)) if p.is_rect() => {
                 let c = Rect::new(0.0, 0.0, *w, *h).corners();
                 for side in 0..4 {
                     out.insets[i][side] = depth_on(t.apply(c[side]), t.apply(c[(side + 1) % 4]));
                 }
             }
-            None => {
+            _ => {
                 let inset = |l: &[Point]| -> Vec<Point> {
                     let d: Vec<f64> = (0..l.len()).map(|k| depth_on(l[k], l[(k + 1) % l.len()])).collect();
                     inset_polygon(l, &d)

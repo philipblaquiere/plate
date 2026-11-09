@@ -13,6 +13,7 @@
 //! back, and its exact size is drawn inside its cells, back against the cells' back edge.
 
 use super::build::Foresight;
+use super::cells::{Cells, GridSpec};
 use super::common::{names_instances, num, select, Edge, Gap, Named, Rng, SpaceType};
 use super::frame::{Rect, Transform};
 use super::outline;
@@ -22,7 +23,7 @@ use super::ports::{
 use super::{Ctx, FixtureOut, Issue, Level, LevelResult, Opening, Placed, Slot};
 use crate::geometry::Point;
 use crate::layout::ElementKind;
-use crate::plan::{Bounds1, Leaf, Plan, Rule, Selector, SpaceKind, ANY_WALL};
+use crate::plan::{Bounds1, Leaf, Plan, Rule, Selector, SpaceKind, SpaceShape, ANY_WALL};
 
 /// Weight of a hard violation, relative to goals.
 const HARD: f64 = 20.0;
@@ -93,6 +94,10 @@ struct Grid {
     inside_cells: i32,
     /// Each cell: inside the slot?
     mask: Vec<bool>,
+    /// Where spaces may be cut by the outline (`shape = 'fit`) and the outline is slanted or off
+    /// the grid: how much of each cell is floor. `None` otherwise, and the engine works on whole
+    /// cells only, as it always did.
+    cut: Option<Cells>,
 }
 
 impl Grid {
@@ -136,7 +141,38 @@ impl Grid {
                 mask[(j * nx + i) as usize] = prefix[a] - prefix[a - 1] - prefix[a - stride] + prefix[b] > 0;
             }
         }
-        Grid { ox: min_x, oy: min_y, gx, gy, nx, ny, prefix, inside_cells, mask }
+        Grid { ox: min_x, oy: min_y, gx, gy, nx, ny, prefix, inside_cells, mask, cut: None }
+    }
+
+    /// Work out how much of each cell is floor, if some cells are partly inside the slot.
+    fn cut_by(&mut self, polygon: &[Point], holes: &[Vec<Point>]) {
+        let area = crate::geometry::signed_area(polygon).abs()
+            - holes.iter().map(|h| crate::geometry::signed_area(h).abs()).sum::<f64>();
+        let whole = self.inside_cells as f64 * self.gx * self.gy;
+        if area - whole <= 1e-9 * area.max(1e-12) {
+            return;
+        }
+        let spec = GridSpec {
+            ox: self.ox,
+            oy: self.oy,
+            gx: self.gx,
+            gy: self.gy,
+            nx: self.nx,
+            ny: self.ny,
+            mask: &self.mask,
+        };
+        let cells = Cells::new(polygon, holes, &spec);
+        if cells.any_partial() {
+            self.cut = Some(cells);
+        }
+    }
+
+    /// All the floor there is: whole cells, and with cut spaces the parts of cells too.
+    fn floor_area(&self) -> f64 {
+        match &self.cut {
+            Some(c) => c.floor_total * self.gx * self.gy,
+            None => self.inside_cells as f64 * self.gx * self.gy,
+        }
     }
 
     fn inside(&self, r: &R) -> i32 {
@@ -191,6 +227,26 @@ struct PortLine {
     from: f64,
     to: f64,
     seg: PortSeg,
+}
+
+/// A slanted port (or edge) of the slot, its ends in cells. Only spaces cut by the outline reach
+/// one; whole rectangles can't.
+#[derive(Debug, Clone)]
+struct Slant {
+    a: Point,
+    b: Point,
+    seg: PortSeg,
+}
+
+impl PortLine {
+    /// Its ends, in cells.
+    fn ends(&self) -> (Point, Point) {
+        if self.horizontal {
+            (Point::new(self.from, self.at), Point::new(self.to, self.at))
+        } else {
+            (Point::new(self.at, self.from), Point::new(self.at, self.to))
+        }
+    }
 }
 
 /// What a fixture type adds to a space type.
@@ -392,14 +448,21 @@ impl Occ {
             *gen = 1;
         }
         let g0 = *gen;
+        // Look at every piece; the last main piece first.
+        let mut best = (0, usize::MAX);
         if *seed < seen.len() && open(*seed) {
             let size = fill_from(*seed, seen, g0, stack);
             if size * 2 > self.free {
                 return self.free - size;
             }
+            // That piece is still a candidate. Levels whose cells are all whole have always
+            // skipped it (and so may count one piece too few as the fill when there are three or
+            // more, none of them most of the floor): their solutions are kept as they are until
+            // the examples are tuned again.
+            if g.cut.is_some() {
+                best = (size, *seed);
+            }
         }
-        // Look at every piece.
-        let mut best = (0, usize::MAX);
         for k in 0..seen.len() {
             if seen[k] != g0 && open(k) {
                 let size = fill_from(k, seen, g0, stack);
@@ -514,6 +577,8 @@ enum C {
         a: Vec<usize>,
         role: String,
         lines: Vec<PortLine>,
+        /// Slanted ones, where spaces may be cut by the outline.
+        slants: Vec<Slant>,
         wall: bool,
         d: f64,
         w: f64,
@@ -661,6 +726,11 @@ struct Problem<'a> {
     ports: Vec<PortLine>,
     /// The slot's own edges, as grid lines (what a port is "on" for `apart … & { wall = true }`).
     edges: Vec<PortLine>,
+    /// Slanted ports and edges, where spaces may be cut by the outline.
+    slants: Vec<Slant>,
+    slant_edges: Vec<Slant>,
+    /// Per type: may it be cut by the outline (`shape = 'fit`, and the grid has partial cells)?
+    fit: Vec<bool>,
     rules: Vec<C>,
     /// Types whose instances are named individually in rules: keep them numbered by position.
     ordered: Vec<bool>,
@@ -736,13 +806,25 @@ fn setup<'a>(
         }
     };
     let holes = if slot.boundary.is_some() { slot.holes.clone() } else { Vec::new() };
-    let grid = Grid::new(&polygon, &holes, ctx.grid, max_cells(&types, ctx));
+    let mut grid = Grid::new(&polygon, &holes, ctx.grid, max_cells(&types, ctx));
+    if slot.boundary.is_some() && types.iter().any(SpaceType::fits) {
+        grid.cut_by(&polygon, &holes);
+    }
     if grid.inside_cells == 0 {
         issues.push(Issue::new("/spaces", "the space is too small for the grid to place anything"));
         return None;
     }
     let cell = grid.gx * grid.gy;
-    let inside_area = grid.inside_cells as f64 * cell;
+    let inside_area = if grid.cut.is_some() { grid.floor_area() } else { grid.inside_cells as f64 * cell };
+    for t in types.iter().filter(|t| t.space.is_fixture() && t.space.shape == Some(SpaceShape::Fit)) {
+        issues.push(
+            Issue::preferred(
+                format!("/spaces/{}/shape", t.key),
+                format!("{} is a fixture: always a rectangle", t.key),
+            )
+            .with_hint("A fixture is never cut by the outline. Leave out `shape`, or make it a room."),
+        );
+    }
 
     // The fill space isn't placed: it's whatever the rectangles leave.
     let fill_ti = types.iter().position(|t| t.space.fill);
@@ -843,6 +925,12 @@ fn setup<'a>(
         .flat_map(|l| (0..l.len()).map(move |i| PortSeg::new(Vec::new(), l[i], l[(i + 1) % l.len()])))
         .collect();
     let edges = port_lines(&edge_segs, &grid);
+    let (slants, slant_edges) = if grid.cut.is_some() {
+        (slant_lines(&slot_ports, &grid), slant_lines(&edge_segs, &grid))
+    } else {
+        (Vec::new(), Vec::new())
+    };
+    let fit = types.iter().map(|t| grid.cut.is_some() && t.fits()).collect();
     let swings = door_swings(&ports, &grid);
     let mm = ctx.units.to_mm();
     let l0 = 3000.0 / mm;
@@ -901,6 +989,9 @@ fn setup<'a>(
         fill,
         ports,
         edges,
+        slants,
+        slant_edges,
+        fit,
         rules: Vec::new(),
         ordered: Vec::new(),
         l0,
@@ -937,6 +1028,17 @@ fn port_lines(ports: &[PortSeg], grid: &Grid) -> Vec<PortLine> {
         // Diagonal ports can't be reached by rectangles on this grid.
     }
     out
+}
+
+/// The slanted ports of the slot, in cells.
+fn slant_lines(ports: &[PortSeg], grid: &Grid) -> Vec<Slant> {
+    let tol = 1e-6 * (grid.gx + grid.gy);
+    let cell = |p: Point| Point::new((p.x - grid.ox) / grid.gx, (p.y - grid.oy) / grid.gy);
+    ports
+        .iter()
+        .filter(|s| (s.a.y - s.b.y).abs() >= tol && (s.a.x - s.b.x).abs() >= tol)
+        .map(|s| Slant { a: cell(s.a), b: cell(s.b), seg: s.clone() })
+        .collect()
 }
 
 /// The square each `door` port of the slot sweeps on the inside, in cells.
@@ -1059,6 +1161,9 @@ impl Problem<'_> {
                                         (l.to - l.from)
                                             * if l.horizontal { self.grid.gx } else { self.grid.gy }
                                     })
+                                    .chain(
+                                        self.slants.iter().filter(|l| l.seg.has(role)).map(|l| l.seg.len()),
+                                    )
                                     .fold(0.0, f64::max);
                                 if longest > 0.0 {
                                     need.min(longest)
@@ -1105,6 +1210,7 @@ impl Problem<'_> {
                             a: pick(a),
                             role: role.clone(),
                             lines: self.apart_lines(role, *wall),
+                            slants: self.apart_slants(role, *wall),
                             wall: *wall,
                             d,
                             w,
@@ -1251,10 +1357,30 @@ impl Problem<'_> {
 
     fn shared(&self, a: &R, b: &R) -> f64 {
         let g = &self.grid;
+        if g.cut.is_some() {
+            return self.shared_cut(a, b);
+        }
         if a.x1() == b.x || b.x1() == a.x {
             overlap(a.y as f64, a.y1() as f64, b.y as f64, b.y1() as f64) * g.gy
         } else if a.y1() == b.y || b.y1() == a.y {
             overlap(a.x as f64, a.x1() as f64, b.x as f64, b.x1() as f64) * g.gx
+        } else {
+            0.0
+        }
+    }
+
+    /// [`Self::shared`] where the outline may cut spaces: only where both sides are floor, so a
+    /// wall the outline cuts short is shorter.
+    #[inline(never)]
+    fn shared_cut(&self, a: &R, b: &R) -> f64 {
+        let g = &self.grid;
+        let Some(c) = &g.cut else { return 0.0 };
+        if a.x1() == b.x || b.x1() == a.x {
+            let x = if a.x1() == b.x { a.x1() } else { a.x };
+            c.vline(x, a.y.max(b.y), a.y1().min(b.y1())) * g.gy
+        } else if a.y1() == b.y || b.y1() == a.y {
+            let y = if a.y1() == b.y { a.y1() } else { a.y };
+            c.hline(y, a.x.max(b.x), a.x1().min(b.x1())) * g.gx
         } else {
             0.0
         }
@@ -1286,14 +1412,71 @@ impl Problem<'_> {
         None
     }
 
+    /// Where two rectangles overlap, when one may be cut by the outline: only floor counts, since
+    /// both may reach past the outline.
+    #[inline(never)]
+    fn overlap_cut(&self, a: &R, b: &R, hard: f64) -> f64 {
+        let g = &self.grid;
+        let Some(cut) = &g.cut else { return 0.0 };
+        let (x0, y0) = (a.x.max(b.x), a.y.max(b.y));
+        let (x1, y1) = (a.x1().min(b.x1()), a.y1().min(b.y1()));
+        if x1 <= x0 || y1 <= y0 {
+            return 0.0;
+        }
+        let cell = g.gx * g.gy;
+        hard * cut.solid(x0, y0, x1, y1) as f64 * cell / self.a0
+            + self.utilization * cut.floor(x0, y0, x1, y1) * cell / self.a0
+    }
+
     fn overlap_cells(a: &R, b: &R) -> i32 {
         let w = (a.x1().min(b.x1()) - a.x.max(b.x)).max(0);
         let h = (a.y1().min(b.y1()) - a.y.max(b.y)).max(0);
         w * h
     }
 
-    /// The longest stretch of `r`'s walls on a port with `role`: (length, segment).
-    fn on_port(&self, r: &R, role: &str) -> (f64, Option<(Point, Point)>) {
+    /// Is instance `i` cut by the outline (`shape = 'fit` on a grid with partial cells)?
+    #[inline]
+    fn fits(&self, i: usize) -> bool {
+        self.grid.cut.is_some() && self.fit[self.inst[i].type_index]
+    }
+
+    /// The longest stretch of instance `i`'s walls (at `r`) on a port with `role`: (length,
+    /// segment).
+    fn on_port(&self, i: usize, r: &R, role: &str) -> (f64, Option<(Point, Point)>) {
+        if !self.fits(i) {
+            return self.on_port_cells(r, role);
+        }
+        // Cut by the outline, its floor runs along every port its rectangle reaches, slanted or
+        // not, and wherever the port is between grid lines.
+        let mut best = (0.0, None);
+        let lines = self.ports.iter().filter(|p| p.seg.has(role)).map(PortLine::ends);
+        let slants = self.slants.iter().filter(|p| p.seg.has(role)).map(|p| (p.a, p.b));
+        for (a, b) in lines.chain(slants) {
+            if let Some(seg) = self.in_rect(r, a, b) {
+                let len = seg.0.distance(seg.1);
+                if len > best.0 {
+                    best = (len, Some(seg));
+                }
+            }
+        }
+        best
+    }
+
+    /// The part of the segment `a`–`b` (in cells) inside rectangle `r`, edges included, in the
+    /// level's coordinates.
+    fn in_rect(&self, r: &R, a: Point, b: Point) -> Option<(Point, Point)> {
+        let g = &self.grid;
+        let e = 1e-6;
+        let (x0, y0, x1, y1) = (r.x as f64 - e, r.y as f64 - e, r.x1() as f64 + e, r.y1() as f64 + e);
+        let (t0, t1) = crate::geometry::segment_in_box(a, b, x0, y0, x1, y1)?;
+        let at =
+            |t: f64| Point::new(g.ox + (a.x + (b.x - a.x) * t) * g.gx, g.oy + (a.y + (b.y - a.y) * t) * g.gy);
+        let (p, q) = (at(t0), at(t1));
+        (p.distance(q) > 1e-9 * (g.gx + g.gy)).then_some((p, q))
+    }
+
+    /// The longest stretch of `r`'s walls on a port with `role`, on whole cells.
+    fn on_port_cells(&self, r: &R, role: &str) -> (f64, Option<(Point, Point)>) {
         let g = &self.grid;
         let tol = 0.6;
         let mut best = (0.0, None);
@@ -1354,6 +1537,29 @@ impl Problem<'_> {
         out
     }
 
+    /// The slanted ports `apart` keeps away from: the ports, or with `wall`, the slot's edges they
+    /// lie on.
+    fn apart_slants(&self, role: &str, wall: bool) -> Vec<Slant> {
+        let mut out: Vec<Slant> = Vec::new();
+        for p in self.slants.iter().filter(|p| p.seg.has(role)) {
+            let line = if wall {
+                self.slant_edges
+                    .iter()
+                    .find(|e| {
+                        super::ports::collinear_overlap(e.seg.a, e.seg.b, p.seg.a, p.seg.b, 1e-6).is_some()
+                    })
+                    .map(|e| Slant { seg: p.seg.clone(), ..e.clone() })
+                    .unwrap_or_else(|| p.clone())
+            } else {
+                p.clone()
+            };
+            if !out.iter().any(|o| o.a == line.a && o.b == line.b) {
+                out.push(line);
+            }
+        }
+        out
+    }
+
     /// Length of `r`'s walls on the line `l`.
     fn line_shared(&self, r: &R, l: &PortLine) -> f64 {
         let g = &self.grid;
@@ -1383,9 +1589,69 @@ impl Problem<'_> {
         ((off * across).powi(2) + (by * along).powi(2)).sqrt()
     }
 
-    /// How far `r` is from keeping `d` (and no shared wall) from every line in `lines`.
-    fn too_close_to_lines(&self, r: &R, lines: &[PortLine], d: f64) -> f64 {
-        lines.iter().map(|l| self.line_shared(r, l) + (d - self.line_gap(r, l)).max(0.0)).sum()
+    /// How far instance `i` at `r` is from keeping `d` (and no shared wall) from every line in
+    /// `lines` and `slants`.
+    fn too_close_to_lines(&self, i: usize, r: &R, lines: &[PortLine], slants: &[Slant], d: f64) -> f64 {
+        if self.grid.cut.is_none() {
+            return lines.iter().map(|l| self.line_shared(r, l) + (d - self.line_gap(r, l)).max(0.0)).sum();
+        }
+        let fit = self.fits(i);
+        let mut c: f64 = lines
+            .iter()
+            .map(|l| {
+                let (shared, gap) = if fit {
+                    let (a, b) = l.ends();
+                    (self.in_rect(r, a, b).map_or(0.0, |s| s.0.distance(s.1)), self.slant_gap(r, a, b))
+                } else {
+                    (self.line_shared(r, l), self.line_gap(r, l))
+                };
+                shared + (d - gap).max(0.0)
+            })
+            .sum();
+        for l in slants {
+            let shared = self.in_rect(r, l.a, l.b).map_or(0.0, |s| s.0.distance(s.1));
+            c += shared + (d - self.slant_gap(r, l.a, l.b)).max(0.0);
+        }
+        c
+    }
+
+    /// Does instance `i` at `r` share a wall with any of these lines, and how far is it from the
+    /// nearest? For messages.
+    fn line_contact(&self, i: usize, r: &R, lines: &[PortLine], slants: &[Slant]) -> (bool, f64) {
+        let tol = 1e-6;
+        let fit = self.fits(i);
+        let mut touching = false;
+        let mut gap = f64::INFINITY;
+        for l in lines {
+            let (s, g) = if fit {
+                let (a, b) = l.ends();
+                (self.in_rect(r, a, b).map_or(0.0, |s| s.0.distance(s.1)), self.slant_gap(r, a, b))
+            } else {
+                (self.line_shared(r, l), self.line_gap(r, l))
+            };
+            touching |= s > tol;
+            gap = gap.min(g);
+        }
+        for l in slants {
+            touching |= self.in_rect(r, l.a, l.b).is_some();
+            gap = gap.min(self.slant_gap(r, l.a, l.b));
+        }
+        (touching, gap)
+    }
+
+    /// The gap between rectangle `r` and the segment `a`–`b` (in cells), in the level's units.
+    fn slant_gap(&self, r: &R, a: Point, b: Point) -> f64 {
+        let g = &self.grid;
+        // Measured in the level's units: scale the cells first.
+        let s = |p: Point| Point::new(p.x * g.gx, p.y * g.gy);
+        crate::geometry::segment_box_distance(
+            s(a),
+            s(b),
+            r.x as f64 * g.gx,
+            r.y as f64 * g.gy,
+            r.x1() as f64 * g.gx,
+            r.y1() as f64 * g.gy,
+        )
     }
 
     /// How far `a` and `b` are from keeping `d` apart (and no shared wall).
@@ -1452,18 +1718,21 @@ impl Problem<'_> {
                 continue;
             }
             let mid = (from + to) / 2;
+            let inside =
+                |row: i32| if p.horizontal { g.cell_inside(mid, row) } else { g.cell_inside(row, mid) };
             // The row (or column) of cells on the inside of the port.
-            let row = if p.horizontal {
-                if g.cell_inside(mid, at) {
-                    at
-                } else {
-                    at - 1
-                }
-            } else if g.cell_inside(at, mid) {
+            let row = if inside(at) {
                 at
-            } else {
+            } else if g.cut.is_none() {
                 at - 1
+            } else {
+                // A port between grid lines has a row of partial cells along it, which the fill
+                // doesn't take; the floor between it and the port is the fill's all the same.
+                let (lo, hi) = (p.at.floor() as i32, p.at.ceil() as i32);
+                [at - 1, lo - 1, hi].into_iter().find(|&r| inside(r)).unwrap_or(at - 1)
             };
+            // Where the port is: on the grid line, or between grid lines where the outline is.
+            let at = if g.cut.is_some() { p.at } else { at as f64 };
             let mut start = None;
             for k in from..=to {
                 let free = k < to && if p.horizontal { ok(k, row) } else { ok(row, k) };
@@ -1474,10 +1743,10 @@ impl Problem<'_> {
                         let len = (b - a).max(0.0) * if p.horizontal { g.gx } else { g.gy };
                         if len > best.0 {
                             let seg = if p.horizontal {
-                                let y = g.oy + at as f64 * g.gy;
+                                let y = g.oy + at * g.gy;
                                 (Point::new(g.ox + a * g.gx, y), Point::new(g.ox + b * g.gx, y))
                             } else {
-                                let x = g.ox + at as f64 * g.gx;
+                                let x = g.ox + at * g.gx;
                                 (Point::new(x, g.oy + a * g.gy), Point::new(x, g.oy + b * g.gy))
                             };
                             best = (len, Some(seg));
@@ -1486,6 +1755,67 @@ impl Problem<'_> {
                     }
                     _ => {}
                 }
+            }
+        }
+        if self.grid.cut.is_some() {
+            for p in self.slants.iter().filter(|p| p.seg.has(role)) {
+                let (len, seg) = self.slant_run(p, ok);
+                if len > best.0 {
+                    best = (len, seg);
+                }
+            }
+        }
+        best
+    }
+
+    /// The longest run of cells `ok` says are free along the inside of a slanted port: (length,
+    /// segment). The floor between those cells and the port is theirs (see `settle`).
+    fn slant_run(&self, p: &Slant, ok: &dyn Fn(i32, i32) -> bool) -> (f64, Option<(Point, Point)>) {
+        let g = &self.grid;
+        let Some(cut) = &g.cut else { return (0.0, None) };
+        let (dx, dy) = (p.b.x - p.a.x, p.b.y - p.a.y);
+        let len = dx.hypot(dy);
+        if len <= 1e-9 {
+            return (0.0, None);
+        }
+        let floor_at = |x: f64, y: f64| {
+            let (i, j) = (x.floor() as i32, y.floor() as i32);
+            let k = (i >= 0 && j >= 0 && i < g.nx && j < g.ny).then(|| cut.kind[(j * g.nx + i) as usize]);
+            matches!(k, Some(super::cells::INSIDE | super::cells::PARTIAL))
+        };
+        // The inside: the side of the port's middle with floor on it.
+        let (nx, ny) = (-dy / len, dx / len);
+        let (mx, my) = (p.a.x + dx / 2.0, p.a.y + dy / 2.0);
+        let side =
+            |s: f64| [0.5, 1.0, 1.5].iter().filter(|d| floor_at(mx + nx * s * *d, my + ny * s * *d)).count();
+        let s = if side(1.0) >= side(-1.0) { 1.0 } else { -1.0 };
+        let (nx, ny) = (nx * s, ny * s);
+        // Every half cell along it: is a free whole cell right inside?
+        let steps = (len * 2.0).ceil().max(1.0) as i32;
+        let free = |t: f64| {
+            let (x, y) = (p.a.x + dx * t, p.a.y + dy * t);
+            [0.75, 1.25, 1.75].iter().any(|d| {
+                let (cx, cy) = (x + nx * d, y + ny * d);
+                let (i, j) = (cx.floor() as i32, cy.floor() as i32);
+                g.cell_inside(i, j) && ok(i, j)
+            })
+        };
+        let world = |t: f64| Point::new(g.ox + (p.a.x + dx * t) * g.gx, g.oy + (p.a.y + dy * t) * g.gy);
+        let mut best: (f64, Option<(Point, Point)>) = (0.0, None);
+        let mut start: Option<i32> = None;
+        for k in 0..=steps {
+            let here = k < steps && free((k as f64 + 0.5) / steps as f64);
+            match (here, start) {
+                (true, None) => start = Some(k),
+                (false, Some(k0)) => {
+                    let (a, b) = (world(k0 as f64 / steps as f64), world(k as f64 / steps as f64));
+                    let l = a.distance(b);
+                    if l > best.0 {
+                        best = (l, Some((a, b)));
+                    }
+                    start = None;
+                }
+                _ => {}
             }
         }
         best
@@ -1842,12 +2172,13 @@ impl Problem<'_> {
             })
             .sum::<f64>()
             + self.fill.as_ref().map_or(0.0, |f| f.area.min);
-        let short = required_area > g.inside_cells as f64 * cell * 0.97;
+        let here = if g.cut.is_some() { g.floor_area() } else { g.inside_cells as f64 * cell };
+        let short = required_area > here * 0.97;
         let crowded = if short {
             format!(
                 "The spaces need {} {sym}² and there's {} {sym}² here: make some smaller or the outline bigger.",
                 num(required_area),
-                num(g.inside_cells as f64 * cell)
+                num(here)
             )
         } else {
             "Loosen its sizes (or its neighbours'), or try another seed.".to_owned()
@@ -1872,7 +2203,11 @@ impl Problem<'_> {
             let t = &self.types[self.inst[i].type_index];
             let name = &self.inst[i].name;
             let ptr = || format!("/spaces/{}", t.key);
-            let inside = g.inside(r);
+            let cut = g.cut.as_ref().filter(|_| self.fits(i));
+            let inside = match cut {
+                Some(c) => c.usable(r.x, r.y, r.x1(), r.y1()),
+                None => g.inside(r),
+            };
             if r.w * r.h > inside {
                 say(
                     ptr(),
@@ -1882,7 +2217,25 @@ impl Problem<'_> {
             }
             let shape = self.shape(i, r);
             let (dw, dh) = (shape.w, shape.h);
-            let area = dw * dh;
+            let area = match cut {
+                Some(c) => c.floor(r.x, r.y, r.x1(), r.y1()) * cell,
+                None => dw * dh,
+            };
+            if let Some(c) = cut {
+                if c.pieces(r.x, r.y, r.x1(), r.y1()) > 1 {
+                    say(
+                        ptr(),
+                        format!("{name} is cut in two by the outline"),
+                        "It reaches across a corner of the outline. Loosen its sizes so it can sit to one side, or give it shape = 'rect.".into(),
+                    );
+                } else if area < 0.5 * dw * dh - slack(area) {
+                    say(
+                        ptr(),
+                        format!("{name} keeps only {} {sym}² of its {} × {}", num(area), num(dw), num(dh)),
+                        "The outline cuts off more than half of it. Loosen its sizes so it can sit where the outline is squarer, or give it shape = 'rect.".into(),
+                    );
+                }
+            }
             let (_, _, limit) = t.gross_limits();
             if limit.miss(area) > slack(area) {
                 if area < limit.min {
@@ -2046,7 +2399,7 @@ impl Problem<'_> {
                         };
                         let best = match b {
                             Target::Spaces(bs) => near(bs),
-                            Target::Port(role) => self.on_port(&rects[ai], role).0,
+                            Target::Port(role) => self.on_port(ai, &rects[ai], role).0,
                             Target::Fill(bs) => near(bs).max(self.free_run(&rects[ai], &in_fill).0),
                         };
                         if need - best > tol {
@@ -2083,7 +2436,7 @@ impl Problem<'_> {
                 }
                 C::Window { a, role, need, w, ptr, .. } => {
                     for &ai in a.iter().filter(on) {
-                        if need - self.on_port(&rects[ai], role).0 > tol {
+                        if need - self.on_port(ai, &rects[ai], role).0 > tol {
                             tell(
                                 *w,
                                 ptr,
@@ -2141,14 +2494,13 @@ impl Problem<'_> {
                         }
                     }
                 }
-                C::ApartPort { a, role, lines, wall, d, w, ptr } => {
+                C::ApartPort { a, role, lines, slants, wall, d, w, ptr } => {
                     let what = if *wall { format!("a wall with a '{role}") } else { format!("its '{role}") };
                     for &ai in a.iter().filter(on) {
                         let r = &rects[ai];
-                        if self.too_close_to_lines(r, lines, *d) > tol {
+                        if self.too_close_to_lines(ai, r, lines, slants, *d) > tol {
                             let name = &self.inst[ai].name;
-                            let touching = lines.iter().any(|l| self.line_shared(r, l) > tol);
-                            let gap = lines.iter().map(|l| self.line_gap(r, l)).fold(f64::INFINITY, f64::min);
+                            let (touching, gap) = self.line_contact(ai, r, lines, slants);
                             let msg = if touching || *d <= 0.0 {
                                 format!("{name} touches {what}")
                             } else {
@@ -2744,6 +3096,47 @@ impl Problem<'_> {
         let fill_name = self.fill.as_ref().map_or(String::new(), |f| f.name.clone());
         let name_of = |i: usize| if i == n { fill_name.clone() } else { self.inst[i].name.clone() };
         let len = |s: &(Point, Point)| s.0.distance(s.1);
+        // The fill space's outline: its main piece (the rest is left over).
+        let fill_shape = fill_on.then(|| {
+            let region = outline::regions(g.nx, g.ny, in_fill).into_iter().max_by_key(|r| r.cells);
+            region.map(|r| {
+                let to = |l: &[(i32, i32)]| l.iter().map(|&(i, j)| g.point(i, j)).collect::<Vec<Point>>();
+                (to(&r.outer), r.holes.iter().map(|h| to(h)).collect::<Vec<_>>())
+            })
+        });
+        let fill_shape = fill_shape.flatten();
+        // Each space's floor: its rectangle, cut by the outline where it reaches past it.
+        let mut floors: Vec<(Vec<Point>, Vec<Vec<Point>>)> =
+            rects.iter().enumerate().map(|(i, r)| self.floor_of(i, r, slot)).collect();
+        let mut fill_shape = fill_shape;
+        self.settle(&rects, &mut floors, &mut fill_shape, slot);
+        let edges_of = |(outer, holes): &(Vec<Point>, Vec<Vec<Point>>)| -> Vec<(Point, Point)> {
+            std::iter::once(outer)
+                .chain(holes.iter())
+                .flat_map(|l| (0..l.len()).map(move |k| (l[k], l[(k + 1) % l.len()])))
+                .collect()
+        };
+        let walls: Vec<Vec<(Point, Point)>> = floors.iter().map(edges_of).collect();
+        let tol = 1e-6 * (g.gx + g.gy);
+        // The wall two spaces share: on their floors when either is cut by the outline.
+        let shared_wall = |a: usize, b: usize| -> Option<(Point, Point)> {
+            if !(self.fits(a) || self.fits(b)) {
+                return self.shared_segment(&rects[a], &rects[b]);
+            }
+            let mut best: Option<(Point, Point)> = None;
+            for &(p, q) in &walls[a] {
+                for &(r, s) in &walls[b] {
+                    if let Some((t0, t1)) = super::ports::collinear_overlap(p, q, r, s, tol) {
+                        let at = |t: f64| Point::new(p.x + (q.x - p.x) * t, p.y + (q.y - p.y) * t);
+                        let seg = (at(t0), at(t1));
+                        if best.is_none_or(|b| len(&b) < len(&seg)) {
+                            best = Some(seg);
+                        }
+                    }
+                }
+            }
+            best
+        };
         let mut openings = Vec::new();
         // (i, j) pairs with a door or an opening between them; `n` stands for the fill space.
         let mut doors: Vec<(usize, usize)> = Vec::new();
@@ -2763,7 +3156,7 @@ impl Problem<'_> {
                                 let mut best = bs
                                     .iter()
                                     .filter(|&&bi| bi != ai && !has_door(&doors, ai, bi))
-                                    .filter_map(|&bi| self.shared_segment(ra, &rects[bi]).map(|s| (bi, s)))
+                                    .filter_map(|&bi| shared_wall(ai, bi).map(|s| (bi, s)))
                                     .max_by(|x, y| len(&x.1).total_cmp(&len(&y.1)));
                                 if matches!(b, Target::Fill(_)) && !has_door(&doors, ai, n) {
                                     if let (_, Some(seg)) = self.free_run(ra, &in_fill) {
@@ -2773,7 +3166,7 @@ impl Problem<'_> {
                                     }
                                 }
                                 if let Some((bi, seg)) = best {
-                                    let corners = g.rect(ra).corners();
+                                    let corners = floors[ai].0.clone();
                                     // A room's door goes by a corner, leaving it wall to furnish; a
                                     // door between spaces with plans of their own (wings, flats)
                                     // goes mid-wall, where both plans can best meet it.
@@ -2812,7 +3205,7 @@ impl Problem<'_> {
                             }
                             Target::Port(_) if gap.full => {}
                             Target::Port(role) => {
-                                if let (_, Some(seg)) = self.on_port(ra, role) {
+                                if let (_, Some(seg)) = self.on_port(ai, ra, role) {
                                     if let Some((p, q)) = centred(seg, gap.width_on(len(&seg)), gap.margin) {
                                         openings.push(Opening {
                                             kind: ElementKind::Door,
@@ -2870,7 +3263,7 @@ impl Problem<'_> {
                 },
                 C::Window { a, role, width, .. } => {
                     for &ai in a {
-                        if let (_, Some(seg)) = self.on_port(&rects[ai], role) {
+                        if let (_, Some(seg)) = self.on_port(ai, &rects[ai], role) {
                             if let Some((p, q)) = centred(seg, *width, 300.0 / mm) {
                                 openings.push(Opening {
                                     kind: ElementKind::Window,
@@ -2900,23 +3293,12 @@ impl Problem<'_> {
             }
         }
 
-        // The fill space's outline: its main piece (the rest is left over).
-        let fill_shape = fill_on.then(|| {
-            let region = outline::regions(g.nx, g.ny, in_fill).into_iter().max_by_key(|r| r.cells);
-            region.map(|r| {
-                let to = |l: &[(i32, i32)]| l.iter().map(|&(i, j)| g.point(i, j)).collect::<Vec<Point>>();
-                (to(&r.outer), r.holes.iter().map(|h| to(h)).collect::<Vec<_>>())
-            })
-        });
-        let fill_shape = fill_shape.flatten();
         let fill_walls: Vec<(Point, Point)> = fill_shape
             .iter()
             .flat_map(|(outer, holes)| std::iter::once(outer).chain(holes.iter()))
             .flat_map(|l| (0..l.len()).map(move |k| (l[k], l[(k + 1) % l.len()])))
             .collect();
 
-        let tol = 1e-6 * (g.gx + g.gy);
-        let walls: Vec<Vec<(Point, Point)>> = rects.iter().map(|r| g.rect(r).edges().to_vec()).collect();
         let fixed: Vec<bool> = (0..n).map(|i| self.fixture(i).is_some()).collect();
         let door_segs: Vec<(Point, Point)> = openings
             .iter()
@@ -3013,11 +3395,11 @@ impl Problem<'_> {
             placed.push(Placed {
                 name: self.inst[i].name.clone(),
                 type_key: t.key.clone(),
-                polygon: rect.corners(),
+                polygon: floors[i].0.clone(),
                 rect: Some((rect.w(), rect.h(), to_level)),
                 ports: ports.iter().map(|p| p.transformed(&back)).collect(),
                 fixture: None,
-                holes: Vec::new(),
+                holes: floors[i].1.clone(),
             });
         }
         if let (Some(fill), Some((outer, holes))) = (&self.fill, fill_shape) {
@@ -3059,6 +3441,128 @@ impl Problem<'_> {
             });
         }
         LevelResult { placed, openings, issues }
+    }
+
+    /// The floor of instance `i` at `r`: its rectangle, or for a space the outline cuts, the part
+    /// of its rectangle inside the slot (its biggest piece, should the outline split it).
+    fn floor_of(&self, i: usize, r: &R, slot: &Slot) -> (Vec<Point>, Vec<Vec<Point>>) {
+        let g = &self.grid;
+        let rect = g.rect(r).corners();
+        let Some(boundary) = slot.boundary.as_ref().filter(|_| r.on && self.fits(i)) else {
+            return (rect, Vec::new());
+        };
+        if g.inside(r) == r.w * r.h {
+            return (rect, Vec::new());
+        }
+        let shape = crate::geometry::boolean::shape(boundary, &slot.holes);
+        let tidy = |l: Vec<Point>| tidy_loop(l, g, &shape);
+        match crate::geometry::boolean::intersect(std::slice::from_ref(&rect), &shape).into_iter().next() {
+            Some(piece) => (tidy(piece.outer), piece.holes.into_iter().map(tidy).collect()),
+            None => (rect, Vec::new()),
+        }
+    }
+
+    /// Floor thinner than a cell that nothing covers, between a space cut by the outline (or the
+    /// fill) and the outline: it goes to the space beside it. That's where the outline isn't on
+    /// the grid (a notch at 15'-6 5/16" on a 3' grid), or runs at a slant past the fill's cells.
+    fn settle(
+        &self,
+        rects: &[R],
+        floors: &mut [(Vec<Point>, Vec<Vec<Point>>)],
+        fill: &mut Option<(Vec<Point>, Vec<Vec<Point>>)>,
+        slot: &Slot,
+    ) {
+        use crate::geometry::boolean;
+        let g = &self.grid;
+        let (Some(boundary), Some(cut)) = (slot.boundary.as_ref(), g.cut.as_ref()) else { return };
+        let slot_shape = boolean::shape(boundary, &slot.holes);
+        let mut taken: Vec<Vec<Vec<Point>>> =
+            floors.iter().zip(rects).filter(|(_, r)| r.on).map(|(f, _)| boolean::shape(&f.0, &f.1)).collect();
+        if let Some(f) = fill.as_ref() {
+            taken.push(boolean::shape(&f.0, &f.1));
+        }
+        let covered: Vec<Vec<Point>> = boolean::union(&taken)
+            .into_iter()
+            .flat_map(|p| std::iter::once(p.outer).chain(p.holes))
+            .collect();
+        let rest = boolean::difference(&slot_shape, &covered);
+        let cell = g.gx * g.gy;
+        let tol = 1e-6 * (g.gx + g.gy);
+        let edges = |outer: &[Point], holes: &[Vec<Point>]| -> Vec<(Point, Point)> {
+            std::iter::once(outer)
+                .chain(holes.iter().map(Vec::as_slice))
+                .flat_map(|l| (0..l.len()).map(move |k| (l[k], l[(k + 1) % l.len()])))
+                .collect()
+        };
+        let shared = |a: &[(Point, Point)], b: &[(Point, Point)]| -> f64 {
+            let mut s = 0.0;
+            for &(p, q) in a {
+                for &(r, t) in b {
+                    if let Some((t0, t1)) = super::ports::collinear_overlap(p, q, r, t, tol) {
+                        s += (t1 - t0) * p.distance(q);
+                    }
+                }
+            }
+            s
+        };
+        let tidy = |l: Vec<Point>| tidy_loop(l, g, &slot_shape);
+        for piece in rest {
+            // Back on the grid lines and corners it came from: polygon operations round, and a
+            // hair's gap would keep it apart from the floor it joins.
+            let piece = boolean::Piece {
+                outer: tidy(piece.outer),
+                holes: piece.holes.into_iter().map(tidy).collect(),
+            };
+            if piece.outer.len() < 3 {
+                continue;
+            }
+            // Only floor between whole cells and the outline: a whole cell left over is floor the
+            // spaces didn't take, and stays left over.
+            let b = crate::geometry::Bounds::from_points(&piece.outer);
+            let (i0, i1) =
+                (((b.min_x - g.ox) / g.gx).floor() as i32, ((b.max_x - g.ox) / g.gx).ceil() as i32);
+            let (j0, j1) =
+                (((b.min_y - g.oy) / g.gy).floor() as i32, ((b.max_y - g.oy) / g.gy).ceil() as i32);
+            let mut whole = 0.0;
+            for j in j0.max(0)..j1.min(g.ny) {
+                for i in i0.max(0)..i1.min(g.nx) {
+                    if cut.kind[(j * g.nx + i) as usize] == super::cells::INSIDE {
+                        let (x0, y0) = (g.ox + i as f64 * g.gx, g.oy + j as f64 * g.gy);
+                        let c = crate::geometry::clip_to_box(&piece.outer, x0, y0, x0 + g.gx, y0 + g.gy);
+                        whole += crate::geometry::signed_area(&c).abs();
+                    }
+                }
+            }
+            if whole > 1e-3 * cell {
+                continue;
+            }
+            let mine = edges(&piece.outer, &piece.holes);
+            let mut best: Option<(usize, f64)> = None;
+            for (i, f) in floors.iter().enumerate() {
+                if !rects[i].on || !self.fits(i) {
+                    continue;
+                }
+                let s = shared(&mine, &edges(&f.0, &f.1));
+                if s > tol && best.is_none_or(|(_, b)| s > b + tol) {
+                    best = Some((i, s));
+                }
+            }
+            if let Some(f) = fill.as_ref() {
+                let s = shared(&mine, &edges(&f.0, &f.1));
+                if s > tol && best.is_none_or(|(_, b)| s > b + tol) {
+                    best = Some((usize::MAX, s));
+                }
+            }
+            let Some((k, _)) = best else { continue };
+            let target = if k == usize::MAX { fill.as_mut().unwrap() } else { &mut floors[k] };
+            let joined = boolean::union(&[
+                boolean::shape(&target.0, &target.1),
+                boolean::shape(&piece.outer, &piece.holes),
+            ]);
+            if let Some(p) = joined.into_iter().next() {
+                *target = (tidy(p.outer), p.holes.into_iter().map(tidy).collect());
+            }
+        }
     }
 
     /// A fixture at its own size inside its cells: back against the cells' back edge, centred
@@ -3121,6 +3625,52 @@ impl Problem<'_> {
             })
             .collect()
     }
+}
+
+/// A loop from polygon operations, its points put back exactly on the grid lines, slot corners
+/// and slot edges they were computed from (the operations round), and points in line dropped.
+fn tidy_loop(l: Vec<Point>, g: &Grid, slot: &[Vec<Point>]) -> Vec<Point> {
+    let near = 1e-6 * (g.gx + g.gy);
+    let snap = |v: f64, o: f64, s: f64| {
+        let on = o + ((v - o) / s).round() * s;
+        ((v - on).abs() <= 1e-7 * s).then_some(on)
+    };
+    let edges: Vec<(Point, Point)> =
+        slot.iter().flat_map(|l| (0..l.len()).map(move |k| (l[k], l[(k + 1) % l.len()]))).collect();
+    let tidy = |p: Point| -> Point {
+        if let Some(c) = slot.iter().flatten().find(|c| c.distance(p) <= near) {
+            return *c;
+        }
+        let (sx, sy) = (snap(p.x, g.ox, g.gx), snap(p.y, g.oy, g.gy));
+        let mut q = Point::new(sx.unwrap_or(p.x), sy.unwrap_or(p.y));
+        // On an edge of the slot: exactly on it, keeping the grid line it's on.
+        if let Some(&(a, b)) =
+            edges.iter().find(|(a, b)| crate::geometry::point_segment_distance(q, *a, *b) <= near)
+        {
+            let (dx, dy) = (b.x - a.x, b.y - a.y);
+            if sx.is_some() && dx.abs() > near {
+                q.y = a.y + (q.x - a.x) * dy / dx;
+            } else if sy.is_some() && dy.abs() > near {
+                q.x = a.x + (q.y - a.y) * dx / dy;
+            } else {
+                let t = ((q.x - a.x) * dx + (q.y - a.y) * dy) / (dx * dx + dy * dy);
+                q = Point::new(a.x + dx * t, a.y + dy * t);
+            }
+        }
+        q
+    };
+    let pts: Vec<Point> = l.into_iter().map(tidy).collect();
+    let n = pts.len();
+    let mut out: Vec<Point> = Vec::with_capacity(n);
+    for k in 0..n {
+        let (a, b, c) = (pts[(k + n - 1) % n], pts[k], pts[(k + 1) % n]);
+        let cross = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+        let scale = a.distance(b).max(b.distance(c)).max(1e-12);
+        if b.distance(a) > 1e-9 * scale && cross.abs() > 1e-9 * scale * scale {
+            out.push(b);
+        }
+    }
+    out
 }
 
 /// Which instances each rule concerns, for incremental evaluation.
@@ -3332,6 +3882,11 @@ impl Problem<'_> {
         let cell = g.gx * g.gy;
         let t = &self.types[self.inst[i].type_index];
         let (l0, a0) = (self.l0, self.a0);
+        if let Some(cut) = &g.cut {
+            if self.fits(i) {
+                return self.unary_cut(i, r, hard, cut);
+            }
+        }
         let inside = g.inside(r);
         let mut c = hard * ((r.w * r.h - inside) as f64 * cell) / a0;
         c -= self.utilization * inside as f64 * cell / a0;
@@ -3357,6 +3912,60 @@ impl Problem<'_> {
             c += hard * self.edge_sliver(r, f.k) as f64 * cell / a0;
         }
         c
+    }
+
+    /// [`Self::unary`] for a space the outline may cut: its rectangle may reach across slanted or
+    /// off-grid edges (but not across a notch), its area is the floor it gets, and it must keep
+    /// at least half its rectangle and hug its floor (no row or column of it without floor).
+    #[inline(never)]
+    fn unary_cut(&self, i: usize, r: &R, hard: f64, cut: &Cells) -> f64 {
+        let g = &self.grid;
+        let cell = g.gx * g.gy;
+        let t = &self.types[self.inst[i].type_index];
+        let (l0, a0) = (self.l0, self.a0);
+        let (x0, y0, x1, y1) = (r.x, r.y, r.x1(), r.y1());
+        let usable = cut.usable(x0, y0, x1, y1);
+        let floor = cut.floor(x0, y0, x1, y1) * cell;
+        let mut c = hard * ((r.w * r.h - usable) as f64 * cell) / a0;
+        c -= self.utilization * floor / a0;
+        let shape = self.shape(i, r);
+        let (dw, dh) = (shape.w, shape.h);
+        c += hard * t.gross_limits().2.miss(floor) / a0;
+        c += hard * (t.side.miss(dw) + t.side.miss(dh)) / l0;
+        c += hard * shape.miss / l0;
+        let ratio = dw.max(dh) / dw.min(dh);
+        if ratio > t.aspect {
+            c += hard * (ratio - t.aspect) * 0.5;
+        }
+        let p = 2.0 * (dw + dh);
+        c += self.compactness * (p * p / (16.0 * floor.max(cell * 0.25)) - 1.0);
+        c += hard * self.cut_misses(r, floor, cut) / a0;
+        if let Some(f) = &self.fill {
+            c += hard * self.edge_sliver(r, f.k) as f64 * cell / a0;
+        }
+        c
+    }
+
+    /// What a cut space's rectangle owes, as area: the rows and columns at its edges with no floor
+    /// (it should end where its floor does), and how far its floor is short of half of it.
+    fn cut_misses(&self, r: &R, floor: f64, cut: &Cells) -> f64 {
+        let g = &self.grid;
+        let cell = g.gx * g.gy;
+        let (x0, y0, x1, y1) = (r.x, r.y, r.x1(), r.y1());
+        let mut empty = 0;
+        if cut.solid(x0, y0, x1, y0 + 1) == 0 {
+            empty += r.w;
+        }
+        if r.h > 1 && cut.solid(x0, y1 - 1, x1, y1) == 0 {
+            empty += r.w;
+        }
+        if cut.solid(x0, y0, x0 + 1, y1) == 0 {
+            empty += r.h;
+        }
+        if r.w > 1 && cut.solid(x1 - 1, y0, x1, y1) == 0 {
+            empty += r.h;
+        }
+        empty as f64 * cell + (0.5 * (r.w * r.h) as f64 * cell - floor).max(0.0)
     }
 
     /// Fill between `r` and the slot's edge that is thinner than `k` cells, if nothing else
@@ -3439,9 +4048,13 @@ impl Problem<'_> {
         }
         let g = &self.grid;
         let mut c = 0.0;
-        let ov = Self::overlap_cells(ri, rj);
-        if ov > 0 {
-            c += (hard + self.utilization) * ov as f64 * g.gx * g.gy / self.a0;
+        if g.cut.is_some() && (self.fits(i) || self.fits(j)) {
+            c += self.overlap_cut(ri, rj, hard);
+        } else {
+            let ov = Self::overlap_cells(ri, rj);
+            if ov > 0 {
+                c += (hard + self.utilization) * ov as f64 * g.gx * g.gy / self.a0;
+            }
         }
         let blocked = self.in_clearance(i, ri, j, rj) + self.in_clearance(j, rj, i, ri);
         if blocked > 0 {
@@ -3478,13 +4091,17 @@ impl Problem<'_> {
                         .filter(|&&bi| bi != a && rects[bi].on)
                         .map(|&bi| self.shared(ra, &rects[bi]))
                         .fold(0.0, f64::max),
-                    Target::Port(role) => self.on_port(ra, role).0,
+                    Target::Port(role) => self.on_port(a, ra, role).0,
                     Target::Fill(_) => return 0.0,
                 };
                 wh(*w) * (need - best).max(0.0) / self.l0
             }
-            C::Window { role, need, w, .. } => wh(*w) * (need - self.on_port(ra, role).0).max(0.0) / self.l0,
-            C::ApartPort { lines, d, w, .. } => wh(*w) * self.too_close_to_lines(ra, lines, *d) / self.l0,
+            C::Window { role, need, w, .. } => {
+                wh(*w) * (need - self.on_port(a, ra, role).0).max(0.0) / self.l0
+            }
+            C::ApartPort { lines, slants, d, w, .. } => {
+                wh(*w) * self.too_close_to_lines(a, ra, lines, slants, *d) / self.l0
+            }
             C::Near { b, d, w, .. } => {
                 let best = b
                     .iter()
@@ -3567,7 +4184,7 @@ impl Problem<'_> {
     fn total(&self, rects: &[R], hs: f64) -> f64 {
         let hard = HARD * hs;
         let g = &self.grid;
-        let mut c = self.utilization * g.inside_cells as f64 * g.gx * g.gy / self.a0;
+        let mut c = self.utilization * g.floor_area() / self.a0;
         for (i, r) in rects.iter().enumerate() {
             c += self.unary(i, r, hard);
             for (j, s) in rects.iter().enumerate().skip(i + 1) {
@@ -3609,6 +4226,15 @@ impl Problem<'_> {
     /// polishing and choosing between runs.
     fn exact(&self, rects: &[R], hs: f64) -> f64 {
         let mut c = self.total(rects, hs);
+        // A rectangle across an inward corner of the outline is in two pieces: never wanted, and
+        // too costly to look for move by move.
+        if let Some(cut) = &self.grid.cut {
+            for (i, r) in rects.iter().enumerate() {
+                if r.on && self.fits(i) && cut.pieces(r.x, r.y, r.x1(), r.y1()) > 1 {
+                    c += HARD * hs;
+                }
+            }
+        }
         if self.fill.is_some() {
             c -= FillState::new(self, rects, hs, false).total();
             c += FillState::new(self, rects, hs, true).total();
@@ -3975,6 +4601,170 @@ mod tests {
             6,
             400,
         );
+    }
+
+    /// A plate with a slanted corner and an edge off the grid: a 14 × 9.3 rectangle with its top
+    /// right corner cut from (14, 5) to (9, 9.3).
+    fn slanted(rest: Value) -> Value {
+        let mut v = json!({
+            "start": {
+                "mode": "boundary",
+                "points": [[0, 0], [14, 0], [14, 5], [9, 9.3], [0, 9.3]],
+                "ports": ["facade", "party", "facade", "facade", "party"],
+            },
+        });
+        for (k, x) in rest.as_object().unwrap() {
+            v[k] = x.clone();
+        }
+        v
+    }
+
+    #[test]
+    fn spaces_cut_by_the_outline() {
+        let spaces = json!({
+            "spaces": {
+                "hall": { "kind": "circulation", "fill": true, "area": { "min": 8, "max": 40 }, "side": { "min": 1.2 } },
+                "living": { "area": { "min": 25, "max": 45 }, "side": { "min": 4 } },
+                "bedroom": { "count": 2, "area": { "min": 11, "max": 18 }, "side": { "min": 3 } },
+                "store": { "area": { "min": 2, "max": 4 }, "shape": "rect" },
+            },
+            "rules": [
+                { "rule": "door", "a": ["bedroom", "living", "store"], "b": "hall" },
+                { "rule": "window", "a": ["living", "bedroom"] },
+                { "rule": "apart", "a": "store", "port": "facade", "distance": 1 },
+                { "rule": "touch", "a": "living", "port": "facade", "length": 4 },
+            ],
+        });
+        let (plan, slot, units, grid) = level(slanted(spaces.clone()));
+        let ctx = ctx(units, grid);
+        let (p, _) = setup(&plan, &slot, &ctx, &mut Vec::new()).unwrap();
+        assert!(p.grid.cut.is_some(), "a slanted outline gives partial cells");
+        assert!(!p.slants.is_empty(), "and a slanted port");
+        assert!(p.fits(0) && !p.fit[p.types.iter().position(|t| t.key == "store").unwrap()]);
+        running_cost_never_drifts(slanted(spaces), 6, 400);
+    }
+
+    /// Floor cut off from the fill in three pieces, the biggest less than half: measured again
+    /// from the last main piece, it must still count the biggest as the fill.
+    #[test]
+    fn cut_off_floor_is_the_same_measured_again() {
+        let v = json!({
+            "start": { "mode": "boundary", "points": [[0, 0], [10, 0], [10, 8], [8, 10], [0, 10]] },
+            "spaces": {
+                "hall": { "kind": "circulation", "fill": true },
+                "wall": { "count": 2, "width": 0.5, "depth": 10, "at": [[3, 0], [7.5, 0]] },
+            },
+        });
+        let (plan, slot, units, grid) = level(v);
+        let ctx = ctx(units, grid);
+        let (p, rects) = setup(&plan, &slot, &ctx, &mut Vec::new()).unwrap();
+        assert!(p.grid.cut.is_some());
+        let occ = Occ::build(&p.grid, &rects);
+        // Pieces 3, 4 and 2 m wide: the middle one (40 m²) is the fill, the rest is cut off.
+        let first = occ.cut(&p.grid);
+        assert_eq!(first, occ.cut(&p.grid));
+        let cell = p.grid.gx * p.grid.gy;
+        assert!(((occ.free - first) as f64 * cell - 40.0).abs() < 1e-6, "{first}");
+    }
+
+    /// Solve a level and give back each space's floor polygon by name.
+    fn floors(v: Value) -> Vec<(String, Vec<Point>)> {
+        let (plan, slot, units, grid) = level(v);
+        let ctx = ctx(units, grid);
+        solve(&plan, &slot, &ctx).placed.into_iter().map(|p| (p.name, p.polygon)).collect()
+    }
+
+    fn slanted_edge(poly: &[Point]) -> bool {
+        (0..poly.len()).any(|k| {
+            let (a, b) = (poly[k], poly[(k + 1) % poly.len()]);
+            (a.x - b.x).abs() > 1e-6 && (a.y - b.y).abs() > 1e-6
+        })
+    }
+
+    #[test]
+    fn a_room_in_the_corner_is_cut_by_the_slant_and_a_rect_stops_short() {
+        // One room as big as the whole plate: it can only be all of it, cut by the slant.
+        let whole = 14.0 * 9.3 - 5.0 * 4.3 / 2.0;
+        let fl = floors(slanted(json!({ "spaces": { "room": { "area": { "min": whole - 1.0 } } } })));
+        let room = &fl[0].1;
+        assert!(slanted_edge(room), "{room:?}");
+        let area = crate::geometry::signed_area(room).abs();
+        assert!((area - whole).abs() < 1e-6, "{area} vs {whole}");
+        // As a rectangle it can't take the corner or the strip above the last grid line.
+        let fl = floors(slanted(json!({ "spaces": { "room": { "area": { "min": 60 }, "shape": "rect" } } })));
+        assert_eq!(fl[0].1.len(), 4);
+        assert!(!slanted_edge(&fl[0].1));
+    }
+
+    #[test]
+    fn a_window_on_a_slanted_facade() {
+        // The only facade the room can have a window on is the slant: the others are party walls.
+        let v = json!({
+            "start": {
+                "mode": "boundary",
+                "points": [[0, 0], [12, 0], [12, 4], [8, 8], [0, 8]],
+                "ports": ["party", "party", "facade", "party", "party"],
+            },
+            "spaces": {
+                "hall": { "kind": "circulation", "fill": true, "area": { "min": 5 }, "side": { "min": 1.2 } },
+                "bedroom": { "area": { "min": 12, "max": 20 }, "side": { "min": 3 } },
+            },
+            "rules": [
+                { "rule": "window", "a": "bedroom" },
+                { "rule": "door", "a": "bedroom", "b": "hall" },
+            ],
+        });
+        let (plan, slot, units, grid) = level(v);
+        let mut met = 0;
+        for seed in 1..=4 {
+            let ctx = Ctx { seed, ..ctx(units, grid) };
+            let out = solve(&plan, &slot, &ctx);
+            if out.issues.iter().all(|i| i.level != Level::Required) {
+                met += 1;
+                let w = out.openings.iter().find(|o| o.kind == ElementKind::Window).expect("a window");
+                assert!((w.a.x - w.b.x).abs() > 1e-6 && (w.a.y - w.b.y).abs() > 1e-6, "on the slant: {w:?}");
+            }
+        }
+        assert!(met >= 3, "met at {met} of 4 seeds");
+    }
+
+    #[test]
+    fn the_fill_has_a_door_on_a_slanted_entrance() {
+        let v = json!({
+            "start": {
+                "mode": "boundary",
+                "points": [[0, 0], [12, 0], [12, 4], [8, 8], [0, 8]],
+                "ports": ["facade", "party", "entrance", "party", "party"],
+            },
+            "spaces": {
+                "hall": { "kind": "circulation", "fill": true, "area": { "min": 5 }, "side": { "min": 1.2 } },
+                "room": { "count": 2, "area": { "min": 14, "max": 30 }, "side": { "min": 3 } },
+            },
+            "rules": [
+                { "rule": "door", "a": "hall", "port": "entrance" },
+                { "rule": "door", "a": "room", "b": "hall" },
+                { "rule": "window", "a": "room" },
+            ],
+        });
+        let (plan, slot, units, grid) = level(v);
+        let mut met = 0;
+        for seed in 1..=4 {
+            let ctx = Ctx { seed, ..ctx(units, grid) };
+            let out = solve(&plan, &slot, &ctx);
+            if out.issues.iter().all(|i| i.level != Level::Required) {
+                met += 1;
+                let door = out
+                    .openings
+                    .iter()
+                    .find(|o| o.between.iter().any(|b| b == "'entrance"))
+                    .expect("a front door");
+                // On the slant x + y = 16.
+                for p in [door.a, door.b] {
+                    assert!((p.x + p.y - 16.0).abs() < 1e-6, "{door:?}");
+                }
+            }
+        }
+        assert!(met >= 3, "met at {met} of 4 seeds");
     }
 
     #[test]

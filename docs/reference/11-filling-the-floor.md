@@ -19,6 +19,7 @@ rules = [
 ```
 
 - At most one fill per plan.
+- Where the outline is slanted or off the grid, it takes the floor right up to it (see _Shapes_).
 - Its `area` still counts: the others grow (up to their `area.max`) so it doesn't get too big, and stop so it isn't too small.
 - `side.min` is its narrowest passage. A hall with `side.min = 1.2` never narrows below 1.2 m, also where two rooms' corners come close.
 - Rules name it like any space: `plate.door "bedroom" "hall"` is a door wherever the hall meets the bedroom, `plate.window "hall"` a window where it reaches a facade.
