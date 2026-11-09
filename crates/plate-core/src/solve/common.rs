@@ -189,6 +189,13 @@ impl Clear {
 }
 
 impl SpaceType {
+    /// May the outline cut it (`shape = 'fit`)? Everything but fixtures, unless it says `'rect`.
+    pub fn fits(&self) -> bool {
+        !self.space.is_fixture() && self.space.shape != Some(crate::plan::SpaceShape::Rect)
+    }
+}
+
+impl SpaceType {
     pub fn all(plan: &Plan, units: Units) -> Vec<SpaceType> {
         plan.spaces
             .iter()

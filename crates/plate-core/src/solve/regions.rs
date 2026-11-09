@@ -79,8 +79,24 @@ pub fn find(placed: &[Placed], kind: impl Fn(usize) -> SpaceKind, passage: f64) 
         .collect()
 }
 
-/// The outline of the union of some spaces' shapes, on a grid of their own coordinates.
+/// The outline of the union of some spaces' shapes, on a grid of their own coordinates; with
+/// polygon operations where an outline cut a shape at a slant.
 fn union<'a>(spaces: impl Iterator<Item = &'a Placed> + Clone) -> (Vec<Point>, Vec<Vec<Point>>) {
+    let slanted = |l: &[Point]| {
+        (0..l.len()).any(|k| {
+            let (a, b) = (l[k], l[(k + 1) % l.len()]);
+            let tol = 1e-9 * (1.0 + a.x.abs() + a.y.abs());
+            (a.x - b.x).abs() > tol && (a.y - b.y).abs() > tol
+        })
+    };
+    if spaces.clone().any(|p| slanted(&p.polygon) || p.holes.iter().any(|h| slanted(h))) {
+        use crate::geometry::boolean;
+        let shapes: Vec<Vec<Vec<Point>>> = spaces.map(|p| boolean::shape(&p.polygon, &p.holes)).collect();
+        return match boolean::union(&shapes).into_iter().next() {
+            Some(piece) => (piece.outer, piece.holes),
+            None => (Vec::new(), Vec::new()),
+        };
+    }
     let mut xs: Vec<f64> = Vec::new();
     let mut ys: Vec<f64> = Vec::new();
     for p in spaces.clone() {
@@ -163,6 +179,26 @@ mod tests {
         let area = crate::geometry::signed_area(&found[0].outer).abs();
         assert!((area - 28.0).abs() < 1e-9, "{area}");
         assert_eq!(found[0].outer.len(), 4, "one rectangle: {:?}", found[0].outer);
+    }
+
+    #[test]
+    fn spaces_cut_at_a_slant_join_into_one_outline() {
+        // a: a 4 × 4 square with its top right corner cut off; b: beside it, cut on the same line.
+        let mut a = rect("a", 0.0, 0.0, 4.0, 4.0, &[("b", (4.0, 0.0), (4.0, 2.0))]);
+        a.polygon = vec![
+            Point::new(0.0, 0.0),
+            Point::new(4.0, 0.0),
+            Point::new(4.0, 2.0),
+            Point::new(2.0, 4.0),
+            Point::new(0.0, 4.0),
+        ];
+        let mut b = rect("b", 4.0, 0.0, 6.0, 4.0, &[("a", (0.0, 0.0), (0.0, 2.0))]);
+        b.polygon = vec![Point::new(4.0, 0.0), Point::new(6.0, 0.0), Point::new(4.0, 2.0)];
+        let found = find(&[a, b], |_| SpaceKind::Zone, 0.9);
+        assert_eq!(found.len(), 1);
+        let area = crate::geometry::signed_area(&found[0].outer).abs();
+        assert!((area - (14.0 + 2.0)).abs() < 1e-6, "{area}");
+        assert_eq!(found[0].outer.len(), 4, "{:?}", found[0].outer);
     }
 
     #[test]

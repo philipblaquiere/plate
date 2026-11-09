@@ -18,6 +18,7 @@
 pub mod build;
 #[cfg(test)]
 mod built_tests;
+mod cells;
 mod common;
 pub mod connect;
 pub mod context;
@@ -119,6 +120,22 @@ pub struct Placed {
     pub fixture: Option<FixtureOut>,
     /// Holes in `polygon` (clockwise), for a fill space that surrounds others.
     pub holes: Vec<Vec<Point>>,
+}
+
+impl Placed {
+    /// Is its floor its whole rectangle? Not for the fill, nor for a space the outline cuts.
+    pub fn is_rect(&self) -> bool {
+        let Some((w, h, t)) = &self.rect else { return false };
+        if !self.holes.is_empty() || self.polygon.len() != 4 {
+            return false;
+        }
+        let tol = 1e-9 * (1.0 + w + h);
+        Rect::new(0.0, 0.0, *w, *h)
+            .corners()
+            .into_iter()
+            .zip(&self.polygon)
+            .all(|(c, p)| t.apply(c).distance(*p) <= tol)
+    }
 }
 
 /// Where a placed fixture faces, and the floor it keeps clear, in the level's frame.
@@ -1152,9 +1169,11 @@ impl Host {
                     let r = Rect::new(insets[3], insets[0], w - insets[1], h - insets[2]);
                     Some((r.corners().into_iter().map(|p| t.apply(p)).collect(), Vec::new()))
                 }
-                (None, Some(shape)) if shape.0 != placed.polygon => Some(shape),
+                (_, Some(shape)) if shape.0 != placed.polygon => Some(shape),
                 _ => None,
             };
+            // Cut by the outline: its plan is solved in its own shape, like the fill's.
+            let shaped = placed.rect.is_some() && !placed.is_rect() && placed.fixture.is_none();
             let mut info = SpaceInfo {
                 name: placed.name.clone(),
                 type_key: placed.type_key.clone(),
@@ -1194,9 +1213,12 @@ impl Host {
                 );
             }
             let child_plan = child_plan.filter(|_| !space.is_fixture());
-            if let (Some(child), None, true) = (child_plan.as_ref(), placed.rect, space.fill) {
+            if let (Some(child), true) =
+                (child_plan.as_ref(), (placed.rect.is_none() && space.fill) || shaped)
+            {
                 // A fill space's plan is solved in its own shape, in this level's frame: it's one
-                // of a kind, so there's no typical to share.
+                // of a kind, so there's no typical to share. So is the plan of a space the outline
+                // cuts.
                 let grid = plan_grid(child, self.units, Some(ctx.grid));
                 let (outer, holes) =
                     clear.clone().unwrap_or_else(|| (placed.polygon.clone(), placed.holes.clone()));
@@ -1204,7 +1226,14 @@ impl Host {
                 loops.extend(holes.iter().cloned());
                 let fill_slot = Slot {
                     boundary: Some(outer),
-                    ports: own_ports.iter().map(|p| snap_port(p, &loops)).collect(),
+                    // In this level's frame: a cut space's ports are in its rectangle's.
+                    ports: own_ports
+                        .iter()
+                        .map(|p| match &placed.rect {
+                            Some((_, _, t)) => snap_port(&p.transformed(t), &loops),
+                            None => snap_port(p, &loops),
+                        })
+                        .collect(),
                     spine: None,
                     pin: slot.pin,
                     holes,
@@ -1212,7 +1241,11 @@ impl Host {
                 let child_ctx = Ctx {
                     units: self.units,
                     grid,
-                    seed: hash64(&[&ctx.seed.to_string(), &placed.name, "fill"]),
+                    seed: hash64(&[
+                        &ctx.seed.to_string(),
+                        &placed.name,
+                        if shaped { "shape" } else { "fill" },
+                    ]),
                     work: self.work.clone(),
                     moves: self.moves.clone(),
                     plan_pointer: &child_abs,

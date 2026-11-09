@@ -233,6 +233,15 @@ waits for the solve, and writes one PNG per view (Plan, then each service) to `s
   1..6. A plan that fails at most seeds is over-constrained; the notes say which limit binds. Pair
   proxies (gap slivers) must not penalise gaps that a third space covers: they did once, and a
   flat with a store between two rooms became unsolvable.
+- **Cut levels and the rest.** Everything about spaces cut by the outline (`shape = 'fit`) runs
+  only when `Grid::cut` is `Some` (the slot has partial cells and a space may be cut). Keep it
+  that way: a level with whole cells only must make the same moves with the same random numbers,
+  or every example's layout moves. `Occ::cut` is the one place the two differ on purpose: on
+  whole-cell levels it still skips the last main piece when that's under half the floor (a known
+  slip, kept until the examples are tuned again); on cut levels it counts it.
+- **Polygon operations round.** `geometry::boolean` (`i_overlay`) works in integers, so its
+  points are off by about 1e-8. Put them back with `tidy_loop` (grid lines, slot corners and
+  edges) before comparing edges or uniting shapes, or a hair's gap keeps two floors apart.
 - **Debug builds.** `plate-core` is built with `opt-level = 3` even in dev (Cargo.toml): the
   tests solve every example.
 

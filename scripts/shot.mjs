@@ -197,8 +197,10 @@ for (const label of wanted) {
     problems.push(`no view "${label}" (there are: ${labels.join(", ")})`);
     continue;
   }
-  if (chips.length) {
-    await page.locator("#views-bar .view-chip").nth(i).click();
+  // A plate with no services has a hidden views bar: its plan is all there is to see.
+  const chip = page.locator("#views-bar .view-chip").nth(i);
+  if (chips.length && (await chip.isVisible())) {
+    await chip.click();
     await page.waitForTimeout(150);
   }
   const png = join(out, `${stem}-${labels[i].toLowerCase().replace(/\W+/g, "-")}.png`);

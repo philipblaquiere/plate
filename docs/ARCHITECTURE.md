@@ -246,11 +246,25 @@ The file stays the single source of truth: the drawing never holds state the tex
     included).
   - A level of big rooms only (no fixtures, no pins, every side ≥ 2 m) is solved on a coarser
     grid when its slot is large (`max_cells`).
+  - **Spaces cut by the outline** (`shape = 'fit`, the default for all but fixtures). Where the
+    slot is slanted or off the grid, `Grid::cut_by` works out each cell's floor (`cells.rs`):
+    inside, partial, _shadow_ (outside, in the corner triangle a slanted edge cuts off its
+    bounding box) or outside, with prefix sums for usable cells, floor cells, floor area and
+    floor along each grid line. A cut space's rectangle may cover partial and shadow cells; its
+    area is its floor; it must keep half its rectangle and end where its floor does
+    (`unary_cut`); overlaps and shared walls count floor only; slanted ports are reached by
+    clipping (`on_port`, `slant_run`). A rectangle split in two by an inward corner is caught
+    when runs are compared (`exact`), not per move. `result` cuts each floor out with
+    `geometry::boolean` (`i_overlay`), then `settle` gives floor thinner than a cell, between
+    whole cells and the outline, to the cut space or fill beside it. A level with no partial
+    cells, or no space that may be cut, has `Grid::cut = None` and runs exactly as before:
+    same terms, same moves, same random numbers.
   - `spine_stack` places a corridor along the spine (mitred at bends) and fills bays on each
     side: fixed counts first, then open-ended ones at grid-snapped widths, ends for stairs.
 - **The host** (`mod.rs`) does the rest:
   - Recursion: a placed space with a `plan` becomes a rectangular slot with the ports the
-    parent gave it, and its plan is solved inside.
+    parent gave it, and its plan is solved inside. A space the outline cut (`Placed::is_rect`
+    false) has its plan solved in its own shape, like the fill's: no typical.
   - Canonical frames: the slot is turned (and mirrored, unless `mirror = false`) so its
     entrance is at the bottom and its description (size + ports) is smallest. Equal
     descriptions are interchangeable, so they're solved once: a typical. Solutions are cached

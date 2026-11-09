@@ -1234,3 +1234,57 @@ fn a_wall_that_lets_nothing_through_carries_nothing() {
         }
     }
 }
+
+/// The pinned flat with its top right corner cut at an angle, from (12, 5) to (9, 8), and the
+/// bedroom pinned up into that corner (8..12 × 3.5..8): the outline cuts it.
+fn angled_flat(services: Value) -> Value {
+    let mut v = super::testkit::pinned_flat(json!({ "services": services }));
+    v["start"]["points"] = json!([[0, 0], [12, 0], [12, 5], [9, 8], [0, 8]]);
+    v["start"]["ports"] = json!(["facade", "blank", "facade", "facade", "blank"]);
+    v["spaces"]["bedroom"]["at"] = json!([8, 3.5]);
+    v["spaces"]["bedroom"]["depth"] = json!(4.5);
+    v
+}
+
+#[test]
+fn a_room_cut_by_the_outline_is_walled_wired_and_lit() {
+    use super::testkit::{assert_met, lighting, power};
+    let s = run(angled_flat(json!({ "power": power(), "lighting": lighting() })));
+    assert_met(&s);
+    assert_eq!(s.moves, 0);
+    let slanted = |a: Point, b: Point| (a.x - b.x).abs() > 1e-6 && (a.y - b.y).abs() > 1e-6;
+    // Its floor is its rectangle less the corner beyond x + y = 17, drawn to its walls' faces.
+    let room = &element(&s, "bedroom").points;
+    assert!((0..room.len()).any(|k| slanted(room[k], room[(k + 1) % room.len()])), "{room:?}");
+    let gross = s.layout.elements.iter().find(|e| e.id == "bedroom").unwrap();
+    let floor = crate::geometry::signed_area(&gross.points).abs();
+    assert!(floor < 18.0 - 4.5 && floor > 10.0, "{floor}");
+    // A wall on the slant, between it and the outside.
+    let on_slant = of_kind(&s, ElementKind::Wall).into_iter().any(|w| {
+        let info = w.wall.as_ref().unwrap();
+        let [a, b] = info.line;
+        slanted(a, b) && info.between.iter().any(|n| n == "bedroom")
+    });
+    assert!(on_slant, "no wall on the slant");
+    // Outlets along its walls, the slanted one too; a light over its floor.
+    let outlets = in_space(&parts(&s, "outlet"), "bedroom");
+    let near_slant = |p: Point| (p.x + p.y - 17.0).abs() / 2f64.sqrt() < 0.5;
+    assert!(
+        outlets.iter().any(|o| near_slant(o.points[0])),
+        "{:?}",
+        outlets.iter().map(|o| o.points[0]).collect::<Vec<_>>()
+    );
+    let lights = in_space(&parts(&s, "light"), "bedroom");
+    assert_eq!(lights.len(), 1);
+    assert!(crate::geometry::contains(room, lights[0].points[0]));
+    // Its window can be on the slant or the right-hand facade; either way it's on its floor's edge.
+    let window = of_kind(&s, ElementKind::Window)
+        .into_iter()
+        .find(|w| w.opening.as_ref().is_some_and(|o| o.between.iter().any(|n| n == "bedroom")))
+        .expect("a window");
+    let mid = Point::new(
+        (window.points[0].x + window.points[1].x) / 2.0,
+        (window.points[0].y + window.points[1].y) / 2.0,
+    );
+    assert!(near_slant(mid) || (mid.x - 12.0).abs() < 1e-6, "{mid:?}");
+}
