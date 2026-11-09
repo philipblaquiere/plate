@@ -236,9 +236,17 @@ waits for the solve, and writes one PNG per view (Plan, then each service) to `s
 - **Cut levels and the rest.** Everything about spaces cut by the outline (`shape = 'fit`) runs
   only when `Grid::cut` is `Some` (the slot has partial cells and a space may be cut). Keep it
   that way: a level with whole cells only must make the same moves with the same random numbers,
-  or every example's layout moves. `Occ::cut` is the one place the two differ on purpose: on
-  whole-cell levels it still skips the last main piece when that's under half the floor (a known
-  slip, kept until the examples are tuned again); on cut levels it counts it.
+  or every example's layout moves.
+- **Measuring cut-off floor.** `Occ::cut` starts from the last main piece. When that piece holds
+  under half the free floor it must stay a candidate for the biggest: it once didn't, so with
+  three or more pieces the second biggest was taken for the fill and the running cost drifted
+  (`cut_off_floor_is_the_same_measured_again`).
+- **The shared solve cache keys on rounded sizes.** A child plan's cache key has its slot's size
+  to the millimetre, but it's solved at the exact size, and a size that differs in the last
+  digits can anneal differently. Two plates whose children share a key (a plan and a plan merged
+  from it, at the same seed) then get whichever was solved first: test order decides. After
+  tuning a seed, run the related example tests together a few times
+  (`cargo test -p plate-config -- examples::duplex_plans_flat examples::duplex_open_flat`).
 - **Polygon operations round.** `geometry::boolean` (`i_overlay`) works in integers, so its
   points are off by about 1e-8. Put them back with `tidy_loop` (grid lines, slot corners and
   edges) before comparing edges or uniting shapes, or a hair's gap keeps two floors apart.

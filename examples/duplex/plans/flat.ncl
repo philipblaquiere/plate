@@ -99,6 +99,7 @@ let bath_plan = {
   # door in the middle of the bottom side.
   preview = {
     system = 'imperial,
+    seed = 3,
     width = 28.7,
     depth = 34.8,
     ports = { bottom = ['facade, 'door], right = 'party, top = 'facade, left = 'party },

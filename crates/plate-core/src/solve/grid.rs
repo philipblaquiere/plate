@@ -455,13 +455,9 @@ impl Occ {
             if size * 2 > self.free {
                 return self.free - size;
             }
-            // That piece is still a candidate. Levels whose cells are all whole have always
-            // skipped it (and so may count one piece too few as the fill when there are three or
-            // more, none of them most of the floor): their solutions are kept as they are until
-            // the examples are tuned again.
-            if g.cut.is_some() {
-                best = (size, *seed);
-            }
+            // That piece is still a candidate: with three or more pieces, none of them most of
+            // the floor, it may well be the biggest.
+            best = (size, *seed);
         }
         for k in 0..seen.len() {
             if seen[k] != g0 && open(k) {
@@ -4645,26 +4641,32 @@ mod tests {
     }
 
     /// Floor cut off from the fill in three pieces, the biggest less than half: measured again
-    /// from the last main piece, it must still count the biggest as the fill.
+    /// from the last main piece, it must still count the biggest as the fill. On whole cells
+    /// and where the outline cuts cells alike.
     #[test]
     fn cut_off_floor_is_the_same_measured_again() {
-        let v = json!({
-            "start": { "mode": "boundary", "points": [[0, 0], [10, 0], [10, 8], [8, 10], [0, 10]] },
-            "spaces": {
-                "hall": { "kind": "circulation", "fill": true },
-                "wall": { "count": 2, "width": 0.5, "depth": 10, "at": [[3, 0], [7.5, 0]] },
-            },
-        });
-        let (plan, slot, units, grid) = level(v);
-        let ctx = ctx(units, grid);
-        let (p, rects) = setup(&plan, &slot, &ctx, &mut Vec::new()).unwrap();
-        assert!(p.grid.cut.is_some());
-        let occ = Occ::build(&p.grid, &rects);
-        // Pieces 3, 4 and 2 m wide: the middle one (40 m²) is the fill, the rest is cut off.
-        let first = occ.cut(&p.grid);
-        assert_eq!(first, occ.cut(&p.grid));
-        let cell = p.grid.gx * p.grid.gy;
-        assert!(((occ.free - first) as f64 * cell - 40.0).abs() < 1e-6, "{first}");
+        for (points, cut) in [
+            (json!([[0, 0], [10, 0], [10, 10], [0, 10]]), false),
+            (json!([[0, 0], [10, 0], [10, 8], [8, 10], [0, 10]]), true),
+        ] {
+            let v = json!({
+                "start": { "mode": "boundary", "points": points },
+                "spaces": {
+                    "hall": { "kind": "circulation", "fill": true },
+                    "wall": { "count": 2, "width": 0.5, "depth": 10, "at": [[3, 0], [7.5, 0]] },
+                },
+            });
+            let (plan, slot, units, grid) = level(v);
+            let ctx = ctx(units, grid);
+            let (p, rects) = setup(&plan, &slot, &ctx, &mut Vec::new()).unwrap();
+            assert_eq!(p.grid.cut.is_some(), cut);
+            let occ = Occ::build(&p.grid, &rects);
+            // Pieces 3, 4 and 2 m wide: the middle one (40 m²) is the fill, the rest is cut off.
+            let first = occ.cut(&p.grid);
+            assert_eq!(first, occ.cut(&p.grid));
+            let cell = p.grid.gx * p.grid.gy;
+            assert!(((occ.free - first) as f64 * cell - 40.0).abs() < 1e-6, "{first}");
+        }
     }
 
     /// Solve a level and give back each space's floor polygon by name.

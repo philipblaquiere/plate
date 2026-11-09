@@ -1198,6 +1198,10 @@ impl Host {
                 tags: space.tags.clone(),
                 gross: None,
                 region: None,
+                extent: match &placed.rect {
+                    Some((w, h, _)) if placed.fixture.is_none() && !placed.is_rect() => Some([*w, *h]),
+                    _ => None,
+                },
             };
             let mut typical_key = None;
             let mut nested: Option<(Sub, Transform)> = None;

@@ -44,6 +44,6 @@ A room the outline cuts that has a `plan` (a bedroom's furniture, a kitchen's co
 
 ## Reading the result
 
-- A room cut by the outline shows its floor: its area is the floor it has, not its rectangle's.
+- A room cut by the outline shows its floor: its area is the floor it has, not its rectangle's. Hover it to see the rectangle it was placed as and how much of it it kept.
 - "keeps only 9 m² of its 4 × 5" means the outline cuts off more than half of it. Loosen its sizes so it can sit where the outline is squarer, or give it `shape = 'rect`.
 - "cut in two by the outline": a rectangle across an inward corner. The solver avoids it; if you see it, loosen sizes nearby.

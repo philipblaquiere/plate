@@ -2413,8 +2413,16 @@ export class Viewer {
           "Floor",
           `${L.area(h.element.area ?? 0)} clear, ${L.area(info.gross)} to the walls' centres`,
         ]);
+      if (info.extent) {
+        // Placed as a rectangle and cut by the outline: its sizes are the rectangle's.
+        const [w, d] = info.extent;
+        const kept = info.gross ?? h.element.area ?? 0;
+        const share = w * d > 0 ? Math.round((100 * kept) / (w * d)) : 100;
+        rows[0] = ["Size", `${L.length(w)} × ${L.length(d)}, cut by the outline`];
+        rows.push(["Kept", `${L.area(kept)} of its ${L.area(w * d)} rectangle (${share} %)`]);
+      }
       if (info.tags?.length) rows.push(["Tags", info.tags.map((t) => `#${t}`).join(" ")]);
-      if (info.front) {
+      if (info.front && !info.extent) {
         // Width along its front, depth front to back.
         const [a, f] = info.front;
         const width = Math.hypot(f.x - a.x, f.y - a.y);
