@@ -746,6 +746,7 @@ base & { name = "Override", start.points = base.start.points @ [[10, 0]] }
         duplex_plans_flat => "duplex", "plans/flat.ncl";
         home_apartment => "home", "apartment.ncl";
         home_condo => "home", "condo.ncl";
+        home_cottage => "home", "cottage.ncl";
         home_plans_bathroom => "home", "plans/bathroom.ncl";
         home_plans_bedroom => "home", "plans/bedroom.ncl";
         home_plans_house => "home", "plans/house.ncl";

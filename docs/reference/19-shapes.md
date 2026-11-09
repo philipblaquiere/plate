@@ -38,6 +38,19 @@ Fixtures are always rectangles: a bed doesn't get a corner cut off. Inside a cut
 
 Everything that works on a wall of the outline works on a slanted one: `plate.window` puts a window on it, `plate.touches "living" 'facade` counts it, `plate.apart "bath" 'facade` keeps away from it, `plate.door "hall" 'entrance` opens onto it.
 
+## Which way the grid runs: `align`
+
+The solver lays rooms out on a grid, and the grid runs square to the walls most of the outline runs along. A house drawn on its site plan at 36.87° to the drawing gets rooms at 36.87°; a house with one long wall at 45° to the others gets rooms square to the others, and the long wall cuts the ones against it.
+
+```nickel
+align = 'auto, # the default: square to most of the walls
+align = 30,    # the grid turned 30° counter-clockwise from the x axis
+```
+
+- **Each plan decides for itself.** A room's plan is solved square to the room, so a bed lines up with its walls whichever way the house is turned.
+- **Pinned spaces.** `at` is written in the plate's coordinates, so a plan with pinned spaces keeps its grid square to the x axis under `'auto`. With an angle written in `align`, `at` is measured along the turned grid instead, from the plan's origin.
+- A number is for when most of the walls aren't the ones that matter: an octagon, or a plan where the interior should follow one facade.
+
 ## Plans inside a cut room
 
 A room the outline cuts that has a `plan` (a bedroom's furniture, a kitchen's counter) is solved in its real shape, like the fill's plan. It isn't shared as a typical with other rooms of its type, since its shape is its own.

@@ -179,6 +179,14 @@ compiler turns that into one contract that dispatches on `mode`, so an error is 
 the right variant. Geometry rules JSON Schema can't express (repeated consecutive points,
 self-crossing, zero area) are in `Config::validate` and report the path of the offending point.
 
+A boundary is solved in its own frame (`root_frame` in `solve/mod.rs`): turned so the walls most
+of it runs along (`geometry::wall_directions`) are on the axes, from the start of its longest
+edge that runs that way. A plate whose longest edge is one of those walls (every rectangle) is
+framed as it always was. Pinned spaces keep the plate's axes under `align = 'auto`; a written
+`align` turns the frame to that angle and measures `at` along it. Below the root, `turn_of` turns
+a level whose slot runs at an angle (a fill's shape, or a plan with `align` written) before the
+grid engine sees it, and `turn_level` turns the result back.
+
 ## Two-way editing
 
 Every value Nickel produces keeps the position of the text it came from. After evaluation,

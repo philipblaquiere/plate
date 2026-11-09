@@ -48,10 +48,10 @@ pub const EXAMPLES: &[Example] = &[
     Example {
         name: "home",
         title: "Home",
-        blurb: "Start here: a studio, a furnished apartment, a condo with angled walls, a villa on its plot",
+        blurb: "Start here: a studio, an apartment, a condo and a cottage at angles, a villa on its plot",
         main: "studio.ncl",
         files: example_files!("home":
-            "apartment.ncl", "condo.ncl", "studio.ncl", "villa.ncl",
+            "apartment.ncl", "condo.ncl", "cottage.ncl", "studio.ncl", "villa.ncl",
             "plans/bathroom.ncl", "plans/bedroom.ncl", "plans/house.ncl", "plans/kitchen.ncl",
             "plans/living.ncl",
         ),

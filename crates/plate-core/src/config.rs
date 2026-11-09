@@ -43,6 +43,10 @@ pub struct Config {
     #[serde(default)]
     pub grid: Option<LengthSer>,
 
+    /// Which way the grid runs (`'auto`: square to the outline's walls).
+    #[serde(default)]
+    pub align: Option<crate::plan::Align>,
+
     /// The root plan's fields (a plan can also sit inside any space).
     #[serde(default)]
     pub engine: Option<Engine>,
@@ -219,6 +223,7 @@ impl Config {
         Plan {
             engine: self.engine,
             grid: self.grid,
+            align: self.align,
             needs: self.needs.clone(),
             spaces: self.spaces.clone(),
             rules: self.rules.clone(),

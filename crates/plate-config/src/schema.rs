@@ -76,7 +76,7 @@ const PRELUDE: &str = r#"{
           result |> match { 'Ok _ => result, _ => 'Error { message = msg } }
       ),
     service_fields = ["parts", "place", "connect", "claims", "scope", "params", "media", "feeds"],
-    plan_fields = ["start", "spaces", "rules", "needs", "preview", "goals", "engine", "grid", "assemblies", "services"],
+    plan_fields = ["start", "spaces", "rules", "needs", "preview", "goals", "engine", "grid", "align", "assemblies", "services"],
     is_library = fun v =>
       std.is_record v && !(std.array.any (fun f => std.record.has_field f v) plan_fields),
     is_service = fun v => is_library v && std.array.any (fun f => std.record.has_field f v) service_fields,
@@ -155,8 +155,19 @@ pub enum FileKind {
 }
 
 const SERVICE_FIELDS: &[&str] = &["parts", "place", "connect", "claims", "scope", "params", "media", "feeds"];
-const PLAN_FIELDS: &[&str] =
-    &["start", "spaces", "rules", "needs", "preview", "goals", "engine", "grid", "assemblies", "services"];
+const PLAN_FIELDS: &[&str] = &[
+    "start",
+    "spaces",
+    "rules",
+    "needs",
+    "preview",
+    "goals",
+    "engine",
+    "grid",
+    "align",
+    "assemblies",
+    "services",
+];
 
 impl FileKind {
     pub fn of(value: &Value) -> FileKind {
