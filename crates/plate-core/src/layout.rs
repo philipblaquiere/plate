@@ -210,6 +210,10 @@ pub struct SpaceInfo {
     /// The region it's in, when it's joined to others by open edges (see `region` elements).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub region: Option<String>,
+    /// The rectangle it was placed as (width, depth), when the outline cut it (`shape = 'fit`):
+    /// its sizes are this rectangle's, its area the floor it kept.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extent: Option<[f64; 2]>,
 }
 
 /// What a wall is built as.

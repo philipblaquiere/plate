@@ -73,6 +73,9 @@ export interface SpaceInfo {
   /** The region it's in, when it's joined to others by open edges (a "region" element's id
    * without its `region:` prefix). */
   region?: string;
+  /** The rectangle it was placed as (width, depth), when the outline cut it: its sizes are this
+   * rectangle's, its area the floor it kept. */
+  extent?: [number, number];
 }
 
 /** What a wall is built as (elements of kind "wall"). */

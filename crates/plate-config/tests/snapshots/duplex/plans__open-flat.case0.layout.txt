@@ -1,20 +1,20 @@
 status perfect · unmet 0 · preferences 0 · leftover 0.00 · spaces 15
-space bath room 51.42 [21.15, 15.13 → 28.70, 21.94]
-space bath.basin fixture 3.00 [26.55, 20.44 → 28.55, 21.94]
-space bath.shower fixture 9.00 [22.60, 18.94 → 25.60, 21.94]
-space bath.toilet fixture 3.11 [27.21, 15.13 → 28.55, 17.46]
+space bath room 66.85 [21.90, 12.10 → 28.70, 21.94]
+space bath.basin fixture 3.00 [21.90, 12.25 → 23.40, 14.25]
+space bath.shower fixture 9.00 [25.70, 17.49 → 28.70, 20.49]
+space bath.toilet fixture 3.11 [21.90, 15.21 → 24.24, 16.54]
 space bedroom_1 room 119.99 [0.00, 0.00 → 11.33, 10.59]
-space bedroom_2 room 135.99 [15.86, 0.00 → 28.70, 10.59]
-space dining zone 111.42 [0.00, 10.59 → 11.33, 20.43]
+space bedroom_2 room 137.13 [17.37, 0.00 → 28.70, 12.10]
+space dining zone 119.99 [0.00, 10.59 → 11.33, 21.18]
 space kitchen zone 145.70 [17.37, 21.94 → 28.70, 34.80]
-space kitchen.counter fixture 14.29 [26.53, 21.94 → 28.70, 28.53]
-space kitchen.fridge fixture 5.83 [23.78, 21.94 → 26.28, 24.27]
-space kitchen.range fixture 5.42 [26.53, 28.60 → 28.70, 31.10]
-space living zone 249.69 [0.00, 20.43 → 17.37, 34.80]
-space utility room 34.28 [21.15, 10.59 → 28.70, 15.13]
-space utility.dryer fixture 5.25 [26.37, 11.57 → 28.70, 13.82]
-space hall circulation 150.27 [11.33, 0.00 → 21.15, 21.94]
-region:living+kitchen+dining 506.81
+space kitchen.counter fixture 21.43 [26.53, 21.94 → 28.70, 31.83]
+space kitchen.fridge fixture 5.83 [26.37, 31.90 → 28.70, 34.40]
+space kitchen.range fixture 5.42 [23.78, 21.94 → 26.28, 24.11]
+space living zone 236.55 [0.00, 21.18 → 17.37, 34.80]
+space utility room 36.00 [15.11, 12.10 → 21.90, 17.40]
+space utility.dryer fixture 5.25 [15.11, 12.14 → 17.44, 14.39]
+space hall circulation 136.56 [11.33, 0.00 → 21.90, 21.94]
+region:living+kitchen+dining 502.24
 Door door:bath|hall
 Door door:bedroom_1|hall
 Door door:bedroom_2|hall

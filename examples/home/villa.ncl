@@ -12,7 +12,7 @@ let villa = import "plans/house.ncl" in
   name = "Beach villa",
   system = 'metric,
   units = 'm,
-  seed = 4,
+  seed = 46,
 
   start = {
     mode = 'boundary,
